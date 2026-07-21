@@ -1,23 +1,27 @@
 import React, { useState } from 'react';
 import { drawFromPool, generateDeck, AI_NAMES, CardTemplate } from '../lib/cards';
-import { Player, GameMode, MatchType, generateId } from '../store/gameStore';
+import { Player, GameMode, MatchType, AiDifficulty, generateId } from '../store/gameStore';
 
-export type Difficulty = 'Novice' | 'Easy' | 'Normal' | 'Hard' | 'Expert' | 'Nightmare';
+export type Difficulty = AiDifficulty;
 
-interface DifficultyConfig {
+export interface DifficultyConfig {
   hp: number;
   aetherBonus: number;
-  deckStrength: number; // higher = more rares/legendaries in AI deck
+  deckStrength: number;
   label: string;
+  /** How aggressively the AI targets field characters vs hero */
+  aggression: 'passive' | 'balanced' | 'aggressive';
+  /** Whether AI uses spells intelligently */
+  smartSpells: boolean;
 }
 
-const DIFFICULTY_CFG: Record<Difficulty, DifficultyConfig> = {
-  Novice:    { hp: 15, aetherBonus: -1, deckStrength: 0,   label: 'Very easy — for new players.' },
-  Easy:      { hp: 20, aetherBonus: 0,  deckStrength: 0.5, label: 'Relaxed challenge.' },
-  Normal:    { hp: 30, aetherBonus: 0,  deckStrength: 1,   label: 'Balanced — recommended.' },
-  Hard:      { hp: 40, aetherBonus: 1,  deckStrength: 1.5, label: 'Tougher AI with bonus Aether.' },
-  Expert:    { hp: 50, aetherBonus: 2,  deckStrength: 2,   label: 'Relentless — very difficult.' },
-  Nightmare: { hp: 60, aetherBonus: 3,  deckStrength: 3,   label: 'Merciless. You will suffer.' },
+export const DIFFICULTY_CFG: Record<Difficulty, DifficultyConfig> = {
+  Novice:    { hp: 15, aetherBonus: -1, deckStrength: 0,   label: 'Very easy — for new players. AI often hesitates.', aggression: 'passive', smartSpells: false },
+  Easy:      { hp: 20, aetherBonus: 0,  deckStrength: 0.5, label: 'Relaxed challenge. AI plays randomly.', aggression: 'passive', smartSpells: false },
+  Normal:    { hp: 30, aetherBonus: 0,  deckStrength: 1,   label: 'Balanced — recommended.', aggression: 'balanced', smartSpells: false },
+  Hard:      { hp: 40, aetherBonus: 1,  deckStrength: 1.5, label: 'Tougher AI. Attacks smartly and uses Taunt rules.', aggression: 'balanced', smartSpells: true },
+  Expert:    { hp: 50, aetherBonus: 2,  deckStrength: 2,   label: 'Relentless — removes threats, attacks efficiently.', aggression: 'aggressive', smartSpells: true },
+  Nightmare: { hp: 60, aetherBonus: 3,  deckStrength: 3,   label: 'Merciless. Optimal play. You will suffer.', aggression: 'aggressive', smartSpells: true },
 };
 
 interface LobbyContextType {
@@ -55,7 +59,6 @@ export function LobbyProvider({ children }: { children: React.ReactNode }) {
 
   const [aiPlayers, setAiPlayers] = useState([
     { id: 2, name: AI_NAMES[0] },
-    { id: 3, name: AI_NAMES[1] },
   ]);
 
   const addAi = () => {
@@ -76,15 +79,8 @@ export function LobbyProvider({ children }: { children: React.ReactNode }) {
 
     const makeCardInstance = (tpl: CardTemplate) => ({ ...tpl, instanceId: `card_${generateId()}` });
 
-    const makeHand = () => {
-      if (mode === '8card') {
-        // Give 8 pool-drawn cards as the starting hand
-        return drawFromPool(8).map(makeCardInstance);
-      }
-      // Draft mode: start with empty hand, cards come from draft
-      return [];
-    };
-
+    // No default starting hand — cards come from the draw phase
+    const makeHand = () => [];
     const makeDeck = () => generateDeck().map(makeCardInstance);
 
     const startingGold = 10;
@@ -144,6 +140,3 @@ export function useLobby() {
   if (!context) throw new Error('useLobby must be used within a LobbyProvider');
   return context;
 }
-
-export { DIFFICULTY_CFG };
-export type { DifficultyConfig };

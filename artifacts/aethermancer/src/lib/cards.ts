@@ -101,6 +101,41 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     keywords: ['poison_on_hit'],
     rarity: 'common', artTheme: 'poison',
   },
+  {
+    templateId: 'c12', name: 'Cinder Hound', type: 'character', cost: 2,
+    atk: 3, def: 2,
+    description: 'A blazing beast. Its attacks leave a burning trail.',
+    keywords: ['flame_aura'],
+    rarity: 'common', artTheme: 'fire',
+  },
+  {
+    templateId: 'c13', name: 'Swamp Stalker', type: 'character', cost: 2,
+    atk: 2, def: 3,
+    description: 'Lurks in fetid bogs. Poisons with every strike.',
+    keywords: ['poison_on_hit'],
+    rarity: 'common', artTheme: 'poison',
+  },
+  {
+    templateId: 'c14', name: 'Granite Sentinel', type: 'character', cost: 3,
+    atk: 2, def: 5,
+    description: 'A living wall of stone. Enemies must attack it first.',
+    keywords: ['taunt'],
+    rarity: 'common', artTheme: 'earth',
+  },
+  {
+    templateId: 'c15', name: 'Hollow Knight', type: 'character', cost: 2,
+    atk: 3, def: 2,
+    description: 'A spectral warrior that strikes from the shadows.',
+    keywords: ['stealth'],
+    rarity: 'common', artTheme: 'shadow',
+  },
+  {
+    templateId: 'c16', name: 'Crystal Wisp', type: 'character', cost: 1,
+    atk: 1, def: 3,
+    description: 'A delicate aetheric wisp. Grows stronger over time.',
+    rarity: 'common', artTheme: 'aether',
+    evolvesTo: 'ev_c1', evolveCondition: { turnsOnField: 4 },
+  },
 
   // ── Common Spells ─────────────────────────────────────────────────────────
   {
@@ -127,6 +162,16 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     templateId: 's10', name: 'Thunder Clap', type: 'spell', cost: 3,
     description: 'Stun a target character for 1 turn.',
     effect: 'stun_target', rarity: 'common',
+  },
+  {
+    templateId: 's13', name: 'Cinder Blast', type: 'spell', cost: 3,
+    description: 'Deal 4 damage to any target.',
+    effect: 'dmg_4_target', rarity: 'common',
+  },
+  {
+    templateId: 's14', name: 'Mend', type: 'spell', cost: 2,
+    description: 'Restore 6 life to your hero.',
+    effect: 'heal_6_hero', rarity: 'common',
   },
 
   // ── Common Artifacts ──────────────────────────────────────────────────────
@@ -188,7 +233,7 @@ export const CARD_TEMPLATES: CardTemplate[] = [
   {
     templateId: 'h2', name: 'Zip', type: 'character', cost: 2,
     atk: 3, def: 2,
-    description: 'Electric hero. Attacks first. Stuns enemies on hit.',
+    description: 'Electric character. Attacks first. Stuns enemies on hit.',
     keywords: ['haste', 'stun_on_hit', 'electric'],
     rarity: 'rare', artTheme: 'electric',
   },
@@ -212,6 +257,48 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     keywords: ['heal_on_kill', 'taunt'],
     rarity: 'rare', artTheme: 'celestial',
   },
+  {
+    templateId: 'h13', name: 'Emberwing', type: 'character', cost: 4,
+    atk: 5, def: 3,
+    description: 'A blazing phoenix-hawk. Strikes immediately. Leaves fire in its wake.',
+    keywords: ['haste', 'flame_aura'],
+    rarity: 'rare', artTheme: 'fire',
+  },
+  {
+    templateId: 'h14', name: 'Galeclaw', type: 'character', cost: 3,
+    atk: 4, def: 2,
+    description: 'Wind-born predator. Acts first and strikes before guards.',
+    keywords: ['haste', 'stealth'],
+    rarity: 'rare', artTheme: 'aether',
+  },
+  {
+    templateId: 'h15', name: 'Thornback', type: 'character', cost: 4,
+    atk: 3, def: 5,
+    description: 'A thorned tank. Forces enemies to attack it and poisons them when struck.',
+    keywords: ['taunt', 'poison_on_hit'],
+    rarity: 'rare', artTheme: 'poison',
+  },
+  {
+    templateId: 'h16', name: 'Frostbound Drake', type: 'character', cost: 5,
+    atk: 4, def: 4,
+    description: 'A cold-blooded drake. Freezes any enemy it attacks.',
+    keywords: ['stun_on_hit'],
+    rarity: 'rare', artTheme: 'frost',
+  },
+  {
+    templateId: 'h17', name: 'The Warden', type: 'character', cost: 4,
+    atk: 3, def: 7,
+    description: 'An iron-clad guardian. Taunt. Heavy armor reduces incoming damage.',
+    keywords: ['taunt', 'heavy_armor'],
+    rarity: 'rare', artTheme: 'iron',
+  },
+  {
+    templateId: 'h20', name: 'Ash Phantom', type: 'character', cost: 4,
+    atk: 5, def: 3,
+    description: 'A specter born from ruin. Bypasses defenders entirely.',
+    keywords: ['stealth'],
+    rarity: 'rare', artTheme: 'void',
+  },
 
   // ── Rare Spells ───────────────────────────────────────────────────────────
   {
@@ -233,6 +320,16 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     templateId: 's12', name: 'Chain Lightning', type: 'spell', cost: 4,
     description: 'Stun all enemy characters for 1 turn.',
     effect: 'stun_all_enemies', rarity: 'rare',
+  },
+  {
+    templateId: 's15', name: 'Inferno Wave', type: 'spell', cost: 4,
+    description: 'Deal 3 damage to all enemies and apply 2 poison stacks.',
+    effect: 'dmg_3_all_and_poison', rarity: 'rare',
+  },
+  {
+    templateId: 's16', name: 'Arcane Volley', type: 'spell', cost: 4,
+    description: 'Draw 3 cards from the pool.',
+    effect: 'draw_3', rarity: 'rare',
   },
 
   // ── Rare Artifacts ────────────────────────────────────────────────────────
@@ -280,7 +377,7 @@ export const CARD_TEMPLATES: CardTemplate[] = [
   {
     templateId: 'h3', name: 'JoBoorn', type: 'character', cost: 5,
     atk: 7, def: 2,
-    description: 'Legendary warrior. High Attack, Heavy Armor (blocks 3 dmg), but very low Vitality.',
+    description: 'Legendary warrior. High Attack and Heavy Armor (blocks 3 dmg), but very low Vitality. Fearless and unstoppable in the right hands.',
     keywords: ['heavy_armor'],
     rarity: 'legendary', artTheme: 'iron',
   },
@@ -290,6 +387,20 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     description: 'Electric colossus. All your characters deal +1 damage.',
     keywords: ['electric', 'electric_aura'],
     rarity: 'legendary', artTheme: 'electric',
+  },
+  {
+    templateId: 'h18', name: 'Dawnbringer', type: 'character', cost: 6,
+    atk: 5, def: 6,
+    description: 'A divine warrior of light. Heals your hero for 2 on kill. Forces enemies to attack it first.',
+    keywords: ['heal_on_kill', 'taunt'],
+    rarity: 'legendary', artTheme: 'celestial',
+  },
+  {
+    templateId: 'h19', name: 'Blazing Titan', type: 'character', cost: 7,
+    atk: 7, def: 5,
+    description: 'A colossal inferno given form. Strikes first. Burns all it touches.',
+    keywords: ['haste', 'flame_aura', 'taunt'],
+    rarity: 'legendary', artTheme: 'fire',
   },
 
   // ── Legendary Spells ──────────────────────────────────────────────────────
@@ -410,6 +521,12 @@ export const SHOP_ITEMS: ShopItemTemplate[] = [
   { id: 'i11',  name: 'War Horn',            type: 'item', cost: 650,  description: 'All your characters get +2 ATK this turn.', effectKey: 'temp_atk_all_2' },
   { id: 'i12',  name: 'Shield Rune',         type: 'item', cost: 600,  description: 'Give any character Heavy Armor for 2 turns (-3 dmg received).', effectKey: 'temp_armor' },
   { id: 'st1',  name: 'Ironheart Crystal',   type: 'item', cost: 900,  description: 'Permanently increase max HP by 20 and restore that much HP.', effectKey: 'ironheart' },
+  { id: 'i13',  name: 'Wound Salve',         type: 'item', cost: 350,  description: 'Restore 3 DEF to a friendly character.', effectKey: 'heal_char_3', stackable: true },
+  { id: 'i14',  name: 'Arcane Concentrate',  type: 'item', cost: 500,  description: 'Draw 3 cards from the pool.', effectKey: 'draw_3', stackable: true },
+  { id: 'i15',  name: 'Greater Shard',       type: 'item', cost: 550,  description: 'Give any character +3 ATK permanently.', effectKey: 'perm_atk_3' },
+  { id: 'i16',  name: 'Smoke Pellet',        type: 'item', cost: 350,  description: 'Stun an enemy character for 1 turn.', effectKey: 'stun_1_turn', stackable: true },
+  { id: 'i17',  name: 'Cure-All Tonic',      type: 'item', cost: 400,  description: 'Remove all stun from a friendly character.', effectKey: 'cure_stun', stackable: true },
+  { id: 'i18',  name: 'Grand Elixir',        type: 'item', cost: 800,  description: 'Restore 35 HP to your hero.', effectKey: 'heal_35_hero', stackable: true },
 
   // ── Stat items ────────────────────────────────────────────────────────────
   { id: 'st2',  name: 'Tempest Sigil',       type: 'stat', cost: 700,  description: 'Your characters deal +1 bonus damage on first attack each turn.', effectKey: 'stormrazor' },
@@ -418,6 +535,8 @@ export const SHOP_ITEMS: ShopItemTemplate[] = [
   { id: 'st5',  name: "Archmage's Diadem",   type: 'stat', cost: 1100, description: 'Spell damage is permanently increased by 2.', effectKey: 'rabadon' },
   { id: 'st6',  name: 'Thornweave Plate',    type: 'stat', cost: 850,  description: 'When a character takes damage, the attacker takes 1 damage.', effectKey: 'thornmail' },
   { id: 'st7',  name: 'Plague Standard',     type: 'stat', cost: 950,  description: 'Your characters apply 1 poison on every hit.', effectKey: 'plague_standard' },
+  { id: 'st8',  name: 'Frost Mantle',        type: 'stat', cost: 900,  description: 'All your characters deal Stun on Hit.', effectKey: 'frost_mantle' },
+  { id: 'st9',  name: 'Bloodrite Banner',    type: 'stat', cost: 1050, description: 'Each kill restores 1 HP to your hero.', effectKey: 'bloodrite' },
 
   // ── Perks ─────────────────────────────────────────────────────────────────
   { id: 'p1', name: 'Soul Anchor',       type: 'perk', cost: 1000, description: 'Your max life is increased by 10.', effectKey: 'perk_hp_10' },
@@ -427,6 +546,8 @@ export const SHOP_ITEMS: ShopItemTemplate[] = [
   { id: 'p5', name: 'Void Resistance',   type: 'perk', cost: 1400, description: 'Reduce all damage taken by 1.', effectKey: 'perk_resist_1' },
   { id: 'p6', name: 'Venomblood',        type: 'perk', cost: 1200, description: 'Your hero is immune to poison.', effectKey: 'perk_poison_immune' },
   { id: 'p7', name: 'Iron Will',         type: 'perk', cost: 1300, description: 'Characters you deploy cannot be stunned.', effectKey: 'perk_stun_immune' },
+  { id: 'p8', name: 'Battle Hardened',   type: 'perk', cost: 1400, description: 'All your characters start with +1 ATK and +1 DEF.', effectKey: 'perk_deploy_bonus' },
+  { id: 'p9', name: 'Undying Resolve',   type: 'perk', cost: 1600, description: 'Once per game, survive a lethal blow with 1 HP.', effectKey: 'perk_undying' },
 
   // ── Cards ─────────────────────────────────────────────────────────────────
   { id: 'c10_shop',  name: 'Void Colossus',   type: 'card', cost: 900,  description: '8/8 Character, costs 8 Aether.', cardTemplateId: 'c10', stackable: true },
@@ -439,6 +560,9 @@ export const SHOP_ITEMS: ShopItemTemplate[] = [
   { id: 'h1_shop',   name: 'Huntress',         type: 'card', cost: 700,  description: '4/4 Rare — Stealth, attacks heroes directly.', cardTemplateId: 'h1', stackable: true },
   { id: 'h2_shop',   name: 'Zip',              type: 'card', cost: 600,  description: '3/2 Rare — Electric, Haste, Stun on Hit.', cardTemplateId: 'h2', stackable: true },
   { id: 'h9_shop',   name: 'Thunder Titan',    type: 'card', cost: 950,  description: '6/6 Legendary — Electric Aura: +1 ATK all.', cardTemplateId: 'h9', stackable: true },
+  { id: 'h18_shop',  name: 'Dawnbringer',      type: 'card', cost: 1100, description: '5/6 Legendary — Taunt, Heal on Kill.', cardTemplateId: 'h18', stackable: true },
+  { id: 'h19_shop',  name: 'Blazing Titan',    type: 'card', cost: 1050, description: '7/5 Legendary — Haste, Flame Aura, Taunt.', cardTemplateId: 'h19', stackable: true },
+  { id: 'h17_shop',  name: 'The Warden',       type: 'card', cost: 750,  description: '3/7 Rare — Taunt, Heavy Armor.', cardTemplateId: 'h17', stackable: true },
 ];
 
 export function getCardTemplate(id: string): CardTemplate | undefined {
@@ -466,4 +590,5 @@ export function generateShopRotation(): string[] {
 export const AI_NAMES = [
   'Arcane Apprentice', 'Shadow Weaver', 'Storm Sage',
   'Iron Golem', 'Void Entity', 'Blood Hexer', 'Ash Prophet', 'Dusk Herald',
+  'Bone Caster', 'The Unseen', 'Plague Doctor', 'Null Warden',
 ];

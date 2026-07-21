@@ -1,22 +1,36 @@
 ---
-name: Aethermancer feature batch 1
-description: What was implemented in the large feature session for Aethermancer TCG
+name: Aethermancer feature batch 1 & 2
+description: All major game features added — cards, AI, sounds, art, no-starting-hand draw model
 ---
 
-## Key architectural decisions
+## Draw model
+- Neither 8-card nor draft mode gives a starting hand — `makeHand()` always returns `[]`
+- 8-card mode draws 2 cards per turn from `drawFromPool()`
+- Draft mode auto-generates 3 options; human picks 1, AI picks highest-cost
 
-**CardType rename**: `'creature'` → `'character'` everywhere. If you see type errors referencing `creature`, search for remaining `'creature'` references.
+## Difficulty system
+- `AiDifficulty` type lives in `gameStore.ts`; `difficulty` field on `GameState`
+- `DIFFICULTY_CFG` record lives in `LobbyContext.tsx` and is exported
+- `START_GAME` payload must include `difficulty`
+- AI aggression/targeting and card selection logic all branch on `state.difficulty`
 
-**CardRarity**: Now `'common' | 'rare' | 'legendary' | 'secret'`. Secret is highest rarity, extremely rare in pool draws.
+## Element sounds
+- `ELEMENT_SOUNDS` map in `sounds.ts` maps artTheme string → SoundName
+- All sounds are procedural Web Audio API — no files needed
+- Element sound plays 120ms after the character deploy sound in `GameContext.playCard()`
 
-**GIVE_CARDS reducer side effect**: Hardcodes `phase: 'buy'` on every dispatch. Intentional — after draft pick or pool draw, always lands in buy phase. AI auto-advances from buy in their loop (800ms timeout in GameContext).
+## Card art
+- `CardArt.tsx` has named `CharacterSilhouette` variants for all new heroes and new characters
+- Theme lookup is by `templateId` first, then `artTheme` fallback, then `THEMES.aether` default
+- CSS keyframes `cardArtPulse`, `cardArtRotate`, `cardArtShimmer` must exist in `index.css`
 
-**Draft mode flow**: Draw phase → `SET_DRAFT_OPTIONS` (sets phase to 'draft') → human picks via `pickDraftCard()` → `GIVE_CARDS` (phase → 'buy'). AI auto-picks best card (highest cost) in draw phase timeout.
+## Status keyword system
+- `poison_on_hit`, `stun_on_hit`, `electric`, `heal_on_kill` keywords on character cards
+- Stat buffs `frost_mantle` (all attacks apply stun) and `bloodrite` (kill heals hero 1) live in `player.statBuffs[]`
+- `plague_standard` stat buff also applies poison on hit
 
-**Status effects**: `poisonStacks: number` (ticked down each turn, deals damage = stacks before decrement), `stunned: boolean` + `stunTurnsLeft: number`. Processed by `PROCESS_STATUS_EFFECTS` at start of each player's draw phase.
-
-**Multiplayer death**: When `me.hp <= 0 && matchType === 'multiplayer' && phase !== 'gameover'`, show spectate/quit overlay instead of forcing out. Gameover only triggers when 1 alive player remains.
-
-**Account / ELO**: `src/store/account.ts` — localStorage only, starts at 1000 ELO, K=50, win +40-50, loss -min 40.
-
-**Why** GIVE_CARDS sets phase to 'buy': ensures human always gets buy phase interaction after receiving cards; AI is handled by the buy-phase setTimeout block.
+## Key IDs
+- New characters: c12–c16, h13–h20
+- New spells: s13–s16
+- New items: i13–i18
+- New perks: `perk_deploy_bonus`, `perk_undying`

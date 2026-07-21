@@ -3,6 +3,7 @@ import { CardTemplate, CardType, CardRarity } from '../lib/cards';
 export type GamePhase = 'countdown' | 'draw' | 'draft' | 'buy' | 'main' | 'combat' | 'end' | 'gameover';
 export type GameMode = '8card' | 'draft';
 export type MatchType = 'singleplayer' | 'multiplayer';
+export type AiDifficulty = 'Novice' | 'Easy' | 'Normal' | 'Hard' | 'Expert' | 'Nightmare';
 
 export interface CardInstance extends CardTemplate {
   instanceId: string;
@@ -68,6 +69,7 @@ export interface Player {
   creaturesKilledThisGame?: number;
   shopItemsBoughtThisGame?: number;
   isDead?: boolean;
+  undyingUsed?: boolean;
 }
 
 export interface GameState {
@@ -86,10 +88,11 @@ export interface GameState {
   matchType: MatchType;
   ranked: boolean;
   draftOptions: CardTemplate[];
+  difficulty: AiDifficulty;
 }
 
 export type GameAction =
-  | { type: 'START_GAME'; payload: { players: Player[]; gameMode: GameMode; matchType: MatchType; ranked: boolean } }
+  | { type: 'START_GAME'; payload: { players: Player[]; gameMode: GameMode; matchType: MatchType; ranked: boolean; difficulty: AiDifficulty } }
   | { type: 'SET_PHASE'; payload: GamePhase }
   | { type: 'ADVANCE_PHASE' }
   | { type: 'END_TURN' }
@@ -120,6 +123,7 @@ export type GameAction =
   | { type: 'APPLY_STUN'; payload: { playerId: number; instanceId: string; turns: number } }
   | { type: 'PROCESS_STATUS_EFFECTS'; payload: { playerId: number } }
   | { type: 'REMOVE_POISON'; payload: { playerId: number; instanceId: string } }
+  | { type: 'REMOVE_STUN'; payload: { playerId: number; instanceId: string } }
   | { type: 'MARK_DEAD'; payload: { playerId: number } };
 
 export const initialGameState: GameState = {
@@ -138,6 +142,7 @@ export const initialGameState: GameState = {
   matchType: 'singleplayer',
   ranked: false,
   draftOptions: [],
+  difficulty: 'Normal',
 };
 
 export function generateId() {
@@ -170,6 +175,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         gameMode: action.payload.gameMode,
         matchType: action.payload.matchType,
         ranked: action.payload.ranked,
+        difficulty: action.payload.difficulty,
         log: [{ id: generateId(), msg: 'Game started. The arcane battle begins!', type: 'other' }],
       };
 
@@ -342,6 +348,22 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
 
+    case 'REMOVE_STUN': {
+      const { playerId, instanceId } = action.payload;
+      return {
+        ...state,
+        players: state.players.map(p => {
+          if (p.id !== playerId) return p;
+          return {
+            ...p,
+            field: p.field.map(c =>
+              c.instanceId === instanceId ? { ...c, stunned: false, stunTurnsLeft: 0 } : c
+            ),
+          };
+        }),
+      };
+    }
+
     case 'PROCESS_STATUS_EFFECTS': {
       const { playerId } = action.payload;
       let newPlayers = state.players.map(p => {
@@ -459,6 +481,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           if (p.field.length >= 4) return p;
           let bonusAtk = 0, bonusDef = 0;
           if (p.statBuffs.includes('jaksho')) { bonusAtk += 2; bonusDef += 2; }
+          if (p.perks.includes('perk_deploy_bonus')) { bonusAtk += 1; bonusDef += 1; }
           if (p.artifactSlot?.effect === 'aura_atk_1') bonusAtk += 1;
           if (p.artifactSlot?.effect === 'aura_def_1') bonusDef += 1;
           // Electric aura from Thunder Titan
@@ -565,7 +588,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             };
           } else {
             const resist = p.perks.includes('perk_resist_1') ? 1 : 0;
-            const finalDmg = Math.max(0, attackerAtk - resist);
+            let finalDmg = Math.max(0, attackerAtk - resist);
+            // Undying perk: survive lethal with 1 HP
+            if (finalDmg >= p.hp && p.perks.includes('perk_undying') && !p.undyingUsed) {
+              finalDmg = p.hp - 1;
+            }
             return { ...p, hp: Math.max(0, p.hp - finalDmg), damageTakenThisGame: true };
           }
         }
@@ -609,7 +636,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             }).filter(c => c.currentDef > 0),
           };
         } else {
-          return { ...p, hp: Math.max(0, p.hp - actualAmount), damageTakenThisGame: true };
+          let finalDmg = Math.max(0, actualAmount);
+          // Undying perk
+          if (finalDmg >= p.hp && p.perks.includes('perk_undying') && !p.undyingUsed) {
+            finalDmg = p.hp - 1;
+          }
+          return { ...p, hp: Math.max(0, p.hp - finalDmg), damageTakenThisGame: true };
         }
       });
 
@@ -644,14 +676,21 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           let newMaxHp = p.maxHp;
           if (item.effectKey === 'perm_atk_2' && targetId)
             newField = newField.map(c => c.instanceId === targetId ? { ...c, currentAtk: c.currentAtk + 2 } : c);
+          else if (item.effectKey === 'perm_atk_3' && targetId)
+            newField = newField.map(c => c.instanceId === targetId ? { ...c, currentAtk: c.currentAtk + 3 } : c);
           else if (item.effectKey === 'perm_def_4' && targetId)
             newField = newField.map(c => c.instanceId === targetId ? { ...c, currentDef: c.currentDef + 4 } : c);
           else if (item.effectKey === 'perm_stats_1_1' && targetId)
             newField = newField.map(c => c.instanceId === targetId ? { ...c, currentAtk: c.currentAtk + 1, currentDef: c.currentDef + 1 } : c);
+          else if (item.effectKey === 'heal_char_3' && targetId)
+            newField = newField.map(c => c.instanceId === targetId ? { ...c, currentDef: c.currentDef + 3 } : c);
           else if (item.effectKey === 'heal_8_hero') newHp = Math.min(p.maxHp, p.hp + 8);
           else if (item.effectKey === 'heal_20_hero') newHp = Math.min(p.maxHp, p.hp + 20);
+          else if (item.effectKey === 'heal_35_hero') newHp = Math.min(p.maxHp, p.hp + 35);
           else if (item.effectKey === 'cure_poison' && targetId)
             newField = newField.map(c => c.instanceId === targetId ? { ...c, poisonStacks: 0 } : c);
+          else if (item.effectKey === 'cure_stun' && targetId)
+            newField = newField.map(c => c.instanceId === targetId ? { ...c, stunned: false, stunTurnsLeft: 0 } : c);
           else if (item.effectKey === 'temp_armor' && targetId)
             newField = newField.map(c => c.instanceId === targetId ? { ...c, tempArmorTurns: 2 } : c);
           return {

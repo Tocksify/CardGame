@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useReducer, useEffect, useRef, useState } from 'react';
-import { GameState, GameAction, gameReducer, initialGameState, Player, StagedSpell, generateId } from '../store/gameStore';
+import { GameState, GameAction, gameReducer, initialGameState, Player, StagedSpell, generateId, AiDifficulty } from '../store/gameStore';
 import { getSettings } from '../store/settings';
-import { sounds } from '../lib/sounds';
+import { sounds, SoundName, ELEMENT_SOUNDS } from '../lib/sounds';
 import { SHOP_ITEMS, getCardTemplate, generateShopRotation, generateDraftOptions, drawFromPool, CardTemplate } from '../lib/cards';
 import { loadAchievements, saveAchievements, Achievement } from '../store/achievements';
+import { DIFFICULTY_CFG } from './LobbyContext';
 
 const SHOP_ROTATION_SECONDS = 180;
 const BUY_PHASE_SECONDS = 30;
@@ -116,9 +117,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (!card || card.type === 'spell') return;
     if (player.cardsPlayedByType[card.type]) return;
 
-    // Per-type sound
-    const soundKey = `cardPlay_${card.type}` as any;
-    sounds.play(soundKey in sounds ? soundKey : 'cardPlay');
+    // Base card-type sound
+    const soundKey = `cardPlay_${card.type}` as SoundName;
+    sounds.play(soundKey);
+
+    // Element-specific sound for characters, delayed slightly
+    if (card.type === 'character' && card.artTheme) {
+      const elemSound = ELEMENT_SOUNDS[card.artTheme];
+      if (elemSound) setTimeout(() => sounds.play(elemSound), 120);
+    }
 
     dispatch({ type: 'PLAY_CARD', payload: { playerId: player.id, cardInstanceId, targetId } });
     dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} played ${card.name}.`, type: 'card' } });
@@ -162,27 +169,37 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   // ── Spell effects ─────────────────────────────────────────────────────────
   const handleSpellEffect = (sourcePlayerId: number, effect: string, targetId: string | undefined, spellBonus: number) => {
-    const src = gameState.players.find(p => p.id === sourcePlayerId);
     const isImmuneToPoison = (p: Player) => p.perks.includes('perk_poison_immune');
     const isImmuneToStun = (p: Player) => p.perks.includes('perk_stun_immune');
 
-    if (effect === 'dmg_3_target' && targetId) {
-      let targetOwner = gameState.players.find(p => p.field.some(c => c.instanceId === targetId));
+    const dmgTarget = (tId: string, amount: number) => {
+      let targetOwner = gameState.players.find(p => p.field.some(c => c.instanceId === tId));
       if (targetOwner) {
-        dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, targetInstanceId: targetId, amount: 3 + spellBonus } });
-        setCombatAnim({ targetId, damage: 3 + spellBonus });
+        dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, targetInstanceId: tId, amount } });
+        setCombatAnim({ targetId: tId, damage: amount });
         setTimeout(() => setCombatAnim(null), 600);
       } else {
-        targetOwner = gameState.players.find(p => p.id.toString() === targetId);
+        targetOwner = gameState.players.find(p => p.id.toString() === tId);
         if (targetOwner) {
-          dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, amount: 3 + spellBonus } });
-          setCombatAnim({ targetId: targetOwner.id.toString(), damage: 3 + spellBonus });
+          dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, amount } });
+          setCombatAnim({ targetId: tId, damage: amount });
           setTimeout(() => setCombatAnim(null), 600);
         }
       }
+    };
+
+    if (effect === 'dmg_3_target' && targetId) {
+      dmgTarget(targetId, 3 + spellBonus);
+      sounds.play('damage');
+    } else if (effect === 'dmg_4_target' && targetId) {
+      dmgTarget(targetId, 4 + spellBonus);
       sounds.play('damage');
     } else if (effect === 'draw_2') {
       const cards = drawFromPool(2).map(t => ({ ...t, instanceId: `card_${generateId()}` }));
+      dispatch({ type: 'GIVE_CARDS', payload: { playerId: sourcePlayerId, cards } });
+      sounds.play('draw');
+    } else if (effect === 'draw_3') {
+      const cards = drawFromPool(3).map(t => ({ ...t, instanceId: `card_${generateId()}` }));
       dispatch({ type: 'GIVE_CARDS', payload: { playerId: sourcePlayerId, cards } });
       sounds.play('draw');
     } else if (effect === 'destroy_small_gain_gold' && targetId) {
@@ -204,6 +221,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       sounds.play('damage');
     } else if (effect === 'heal_4_hero') {
       dispatch({ type: 'HEAL', payload: { targetPlayerId: sourcePlayerId, amount: 4 } });
+    } else if (effect === 'heal_6_hero') {
+      dispatch({ type: 'HEAL', payload: { targetPlayerId: sourcePlayerId, amount: 6 } });
     } else if (effect === 'dmg_6_enemy_hero') {
       const enemy = gameState.players.find(p => p.id !== sourcePlayerId);
       if (enemy) {
@@ -262,23 +281,38 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
         sounds.play('poison');
       }
+    } else if (effect === 'dmg_3_all_and_poison') {
+      gameState.players.forEach(p => {
+        if (p.id !== sourcePlayerId) {
+          p.field.forEach(c => {
+            dispatch({ type: 'DAMAGE', payload: { targetPlayerId: p.id, targetInstanceId: c.instanceId, amount: 3 + spellBonus } });
+            if (!isImmuneToPoison(p)) {
+              dispatch({ type: 'APPLY_POISON', payload: { playerId: p.id, instanceId: c.instanceId, stacks: 2 } });
+            }
+          });
+        }
+      });
+      sounds.play('poison');
     }
   };
 
   const applyStatusOnHit = (
     attackerPlayer: Player,
-    attacker: { keywords?: string[] },
+    attacker: { keywords?: string[]; artTheme?: string },
     targetPlayer: Player,
     targetInstanceId: string,
   ) => {
+    const isImmuneToPoison = targetPlayer.perks.includes('perk_poison_immune');
+    const isImmuneToStun = targetPlayer.perks.includes('perk_stun_immune');
+
     if (attacker.keywords?.includes('poison_on_hit') || attackerPlayer.statBuffs.includes('plague_standard')) {
-      if (!targetPlayer.perks.includes('perk_poison_immune')) {
+      if (!isImmuneToPoison) {
         dispatchRef.current({ type: 'APPLY_POISON', payload: { playerId: targetPlayer.id, instanceId: targetInstanceId, stacks: 2 } });
         sounds.play('poison');
       }
     }
-    if (attacker.keywords?.includes('stun_on_hit')) {
-      if (!targetPlayer.perks.includes('perk_stun_immune')) {
+    if (attacker.keywords?.includes('stun_on_hit') || attackerPlayer.statBuffs.includes('frost_mantle')) {
+      if (!isImmuneToStun) {
         dispatchRef.current({ type: 'APPLY_STUN', payload: { playerId: targetPlayer.id, instanceId: targetInstanceId, turns: 1 } });
         sounds.play('stun');
       }
@@ -295,8 +329,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (target) {
         dispatch({ type: 'DAMAGE', payload: { targetPlayerId: player.id, targetInstanceId: targetId, amount: -2 } });
       }
-    } else if (effect === 'add_poison_keyword') {
-      // The keyword is applied via the card being played — no immediate action needed
     }
   };
 
@@ -342,20 +374,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (targetOwner && targetInstanceId) {
       const targetCreature = targetOwner.field.find(c => c.instanceId === targetInstanceId);
       if (targetCreature) {
-        // Apply status effects on hit
         applyStatusOnHit(player, attacker, targetOwner, targetInstanceId);
-        // Kill bonus
-        const armor = attacker.keywords?.includes('heavy_armor') ? 3 : 0;
-        const effectiveDmg = Math.max(1, dmg - armor);
         const resist = targetOwner.perks.includes('perk_resist_1') ? 1 : 0;
         if (targetCreature.currentDef <= (dmg - resist)) {
           dispatch({ type: 'ADD_GOLD', payload: { playerId: player.id, amount: 50 } });
           dispatch({ type: 'RECORD_KILL', payload: { playerId: player.id } });
           sounds.play('gold');
           if (player.isHuman) triggerAchievement('kill_5_creatures', 1);
-          // Heal on kill perk
           if (attacker.keywords?.includes('heal_on_kill')) {
             dispatch({ type: 'HEAL', payload: { targetPlayerId: player.id, amount: 2 } });
+          }
+          // Bloodrite stat buff: kill heals hero
+          if (player.statBuffs.includes('bloodrite')) {
+            dispatch({ type: 'HEAL', payload: { targetPlayerId: player.id, amount: 1 } });
           }
         }
       }
@@ -403,7 +434,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (!item) return;
     if (item.effectKey === 'ironheart') return;
 
-    const needsTarget = ['perm_atk_2', 'perm_def_4', 'perm_stats_1_1', 'destroy_target_creature', 'cure_poison', 'temp_armor', 'apply_poison_5', 'stun_2_turns'].includes(item.effectKey || '');
+    const needsTarget = [
+      'perm_atk_2', 'perm_atk_3', 'perm_def_4', 'perm_stats_1_1',
+      'destroy_target_creature', 'cure_poison', 'cure_stun', 'temp_armor',
+      'apply_poison_5', 'stun_2_turns', 'stun_1_turn', 'heal_char_3',
+    ].includes(item.effectKey || '');
     if (!targetId && needsTarget) {
       dispatch({ type: 'SET_TARGETING', payload: { mode: 'item', sourceId: inventoryInstanceId, pendingAction: null } });
       return;
@@ -427,15 +462,24 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'APPLY_STUN', payload: { playerId: targetOwner.id, instanceId: targetId, turns: 2 } });
         sounds.play('stun');
       }
+    } else if (item.effectKey === 'stun_1_turn' && targetId) {
+      const targetOwner = gameState.players.find(p => p.field.some(c => c.instanceId === targetId));
+      if (targetOwner && !targetOwner.perks.includes('perk_stun_immune')) {
+        dispatch({ type: 'APPLY_STUN', payload: { playerId: targetOwner.id, instanceId: targetId, turns: 1 } });
+        sounds.play('stun');
+      }
     } else if (item.effectKey === 'draw_2') {
       const cards = drawFromPool(2).map(t => ({ ...t, instanceId: `card_${generateId()}` }));
       dispatch({ type: 'GIVE_CARDS', payload: { playerId: player.id, cards } });
       sounds.play('draw');
+      return; // GIVE_CARDS transitions phase, so skip USE_INVENTORY
+    } else if (item.effectKey === 'draw_3') {
+      const cards = drawFromPool(3).map(t => ({ ...t, instanceId: `card_${generateId()}` }));
+      dispatch({ type: 'GIVE_CARDS', payload: { playerId: player.id, cards } });
+      sounds.play('draw');
+      return;
     } else if (item.effectKey === 'temp_atk_all_2') {
-      // Handled by buff — apply to all field cards
-      player.field.forEach(c => {
-        dispatch({ type: 'APPLY_POISON', payload: { playerId: player.id, instanceId: c.instanceId, stacks: 0 } });
-      });
+      // Handled via game store buff
     }
 
     dispatch({ type: 'USE_INVENTORY', payload: { playerId: player.id, instanceId: inventoryInstanceId, targetId } });
@@ -468,6 +512,111 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  // ── AI helpers ────────────────────────────────────────────────────────────
+  /**
+   * Choose an attack target based on difficulty.
+   * Returns { targetPlayerId, targetInstanceId? }
+   */
+  function chooseAiAttackTarget(
+    cp: typeof gameState.players[0],
+    difficulty: AiDifficulty,
+    players: typeof gameState.players,
+  ) {
+    const targetHuman = players.find(p => p.isHuman && p.hp > 0);
+    if (!targetHuman) return null;
+
+    switch (difficulty) {
+      case 'Novice':
+      case 'Easy':
+        // Always attack hero directly (simple)
+        return { targetPlayerId: targetHuman.id, targetInstanceId: undefined };
+
+      case 'Normal':
+        // Respect taunt; otherwise hero
+        const tauntNormal = targetHuman.field.find(c => c.keywords?.includes('taunt') && !c.stunned);
+        if (tauntNormal) return { targetPlayerId: targetHuman.id, targetInstanceId: tauntNormal.instanceId };
+        return { targetPlayerId: targetHuman.id, targetInstanceId: undefined };
+
+      case 'Hard': {
+        // Respect taunt; if no taunt, attack weakest character if killable this turn
+        const tauntHard = targetHuman.field.find(c => c.keywords?.includes('taunt') && !c.stunned);
+        if (tauntHard) return { targetPlayerId: targetHuman.id, targetInstanceId: tauntHard.instanceId };
+        const untapped = cp.field.filter(c => !c.tapped && !c.hasAttackedThisTurn && !c.stunned);
+        const totalAtk = untapped.reduce((s, c) => s + c.currentAtk + c.tempAtkBonus, 0);
+        const killable = targetHuman.field.filter(c => c.currentDef <= totalAtk).sort((a, b) => b.currentAtk - a.currentAtk)[0];
+        if (killable) return { targetPlayerId: targetHuman.id, targetInstanceId: killable.instanceId };
+        return { targetPlayerId: targetHuman.id, targetInstanceId: undefined };
+      }
+
+      case 'Expert':
+      case 'Nightmare': {
+        // Respect taunt
+        const tauntEx = targetHuman.field.find(c => c.keywords?.includes('taunt') && !c.stunned);
+        if (tauntEx) return { targetPlayerId: targetHuman.id, targetInstanceId: tauntEx.instanceId };
+        // Kill highest-threat character if possible
+        const untappedEx = cp.field.filter(c => !c.tapped && !c.hasAttackedThisTurn && !c.stunned);
+        const singleAtk = untappedEx[0] ? untappedEx[0].currentAtk + untappedEx[0].tempAtkBonus : 0;
+        const killableEx = targetHuman.field.filter(c => c.currentDef <= singleAtk).sort((a, b) => b.currentAtk - a.currentAtk)[0];
+        if (killableEx) return { targetPlayerId: targetHuman.id, targetInstanceId: killableEx.instanceId };
+        // Remove any character that threatens (highest atk)
+        const biggestThreat = [...targetHuman.field].sort((a, b) => b.currentAtk - a.currentAtk)[0];
+        if (biggestThreat && singleAtk > 0) return { targetPlayerId: targetHuman.id, targetInstanceId: biggestThreat.instanceId };
+        return { targetPlayerId: targetHuman.id, targetInstanceId: undefined };
+      }
+    }
+  }
+
+  /** Choose which card the AI plays based on difficulty */
+  function chooseAiCard(
+    cp: typeof gameState.players[0],
+    difficulty: AiDifficulty,
+    players: typeof gameState.players,
+  ) {
+    const affordable = cp.hand
+      .filter(c => c.cost <= cp.aether && !cp.cardsPlayedByType[c.type]);
+
+    if (affordable.length === 0) return null;
+
+    switch (difficulty) {
+      case 'Novice':
+        // 40% chance to play nothing
+        if (Math.random() < 0.4) return null;
+        return affordable[Math.floor(Math.random() * affordable.length)];
+
+      case 'Easy':
+        // Random card
+        return affordable[Math.floor(Math.random() * affordable.length)];
+
+      case 'Normal':
+      case 'Hard':
+      case 'Expert':
+      case 'Nightmare':
+        // Highest cost card
+        return [...affordable].sort((a, b) => b.cost - a.cost)[0];
+    }
+  }
+
+  /** Choose spell target based on difficulty */
+  function chooseAiSpellTarget(
+    effect: string,
+    difficulty: AiDifficulty,
+    players: typeof gameState.players,
+    cpId: number,
+  ): string | undefined {
+    const human = players.find(p => p.isHuman);
+    if (!human) return undefined;
+
+    if (effect.includes('target')) {
+      if (difficulty === 'Hard' || difficulty === 'Expert' || difficulty === 'Nightmare') {
+        // Target highest-ATK human field card, else hero
+        const best = [...human.field].sort((a, b) => b.currentAtk - a.currentAtk)[0];
+        return best ? best.instanceId : human.id.toString();
+      }
+      return human.id.toString();
+    }
+    return undefined;
+  }
+
   // ── Game loop ─────────────────────────────────────────────────────────────
   const gameLoopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stateRef = useRef(gameState);
@@ -499,8 +648,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         if (!cp) return;
 
         dispatchRef.current({ type: 'REPLENISH_AETHER', payload: { playerId: cp.id } });
-
-        // Process status effects on this player's field
         dispatchRef.current({ type: 'PROCESS_STATUS_EFFECTS', payload: { playerId: cp.id } });
 
         const goldGain = 100 + cp.goldPerTurn;
@@ -531,10 +678,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           if (cp.isHuman) {
             sounds.play('draft');
             dispatchRef.current({ type: 'SET_DRAFT_OPTIONS', payload: options });
-            // Don't advance — wait for player to pick
           } else {
-            // AI: pick highest cost card
-            const best = options.sort((a, b) => (b.cost || 0) - (a.cost || 0))[0];
+            // AI pick: based on difficulty
+            let best: CardTemplate;
+            if (state.difficulty === 'Novice' || state.difficulty === 'Easy') {
+              best = options[Math.floor(Math.random() * options.length)];
+            } else {
+              best = options.sort((a, b) => (b.cost || 0) - (a.cost || 0))[0];
+            }
             if (best) {
               const cardInst = { ...best, instanceId: `card_${generateId()}` };
               dispatchRef.current({ type: 'GIVE_CARDS', payload: { playerId: cp.id, cards: [cardInst] } });
@@ -543,11 +694,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             }
           }
         } else {
-          // 8-card mode: draw 1 card per turn (after initial hand)
-          const drawCount = 1 + (cp.perks.includes('perk_draw_1') ? 1 : 0) +
+          // 8-card mode: draw 2 cards per turn from pool (no starting hand)
+          const drawCount = 2 + (cp.perks.includes('perk_draw_1') ? 1 : 0) +
             (cp.artifactSlot?.effect === 'aura_draw_1' ? 1 : 0);
           const drawn = drawFromPool(drawCount).map(t => ({ ...t, instanceId: `card_${generateId()}` }));
-          // GIVE_CARDS already sets phase to 'buy'; AI auto-advances in their buy handler
           dispatchRef.current({ type: 'GIVE_CARDS', payload: { playerId: cp.id, cards: drawn } });
           sounds.play('draw');
         }
@@ -557,8 +707,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     // ── Draft phase: human interacts, AI handled above ────────────────────
     if (gameState.phase === 'draft') {
-      // Human picks via pickDraftCard(); don't auto-advance.
-      // AI was handled in the draw setTimeout above.
       return;
     }
 
@@ -593,20 +741,57 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           const state = stateRef.current;
           const cp = state.players[state.currentPlayerIndex];
           if (!cp) return;
+          const diff = state.difficulty;
+
+          // Novice: sometimes skip combat entirely
+          if (diff === 'Novice' && Math.random() < 0.3) {
+            dispatchRef.current({ type: 'ADVANCE_PHASE' });
+            return;
+          }
+
           const untapped = cp.field.filter(c => !c.tapped && !c.hasAttackedThisTurn && !c.stunned);
           if (untapped.length > 0) {
             const targetHuman = state.players.find(p => p.isHuman && p.hp > 0);
             if (targetHuman) {
               const attacker = untapped[0];
+              const target = chooseAiAttackTarget(cp, diff, state.players);
+              if (!target) { dispatchRef.current({ type: 'ADVANCE_PHASE' }); return; }
+
               const dmg = attacker.currentAtk + attacker.tempAtkBonus;
               dispatchRef.current({
                 type: 'ATTACK',
-                payload: { attackerPlayerId: cp.id, attackerInstanceId: attacker.instanceId, targetPlayerId: targetHuman.id, damageOverride: dmg },
+                payload: {
+                  attackerPlayerId: cp.id,
+                  attackerInstanceId: attacker.instanceId,
+                  targetPlayerId: target.targetPlayerId,
+                  targetInstanceId: target.targetInstanceId,
+                  damageOverride: dmg,
+                },
               });
-              // Apply status on hit for AI
-              if (attacker.keywords?.includes('poison_on_hit') || cp.statBuffs.includes('plague_standard')) {
-                // No field target — hero hit, no character to poison
+
+              // AI status on hit
+              if (target.targetInstanceId) {
+                if (attacker.keywords?.includes('poison_on_hit') || cp.statBuffs.includes('plague_standard')) {
+                  if (!targetHuman.perks.includes('perk_poison_immune')) {
+                    dispatchRef.current({ type: 'APPLY_POISON', payload: { playerId: targetHuman.id, instanceId: target.targetInstanceId, stacks: 2 } });
+                  }
+                }
+                if (attacker.keywords?.includes('stun_on_hit') || cp.statBuffs.includes('frost_mantle')) {
+                  if (!targetHuman.perks.includes('perk_stun_immune')) {
+                    dispatchRef.current({ type: 'APPLY_STUN', payload: { playerId: targetHuman.id, instanceId: target.targetInstanceId, turns: 1 } });
+                  }
+                }
+                // AI kill bonus
+                const tgtCreature = targetHuman.field.find(c => c.instanceId === target.targetInstanceId);
+                if (tgtCreature && tgtCreature.currentDef <= dmg) {
+                  dispatchRef.current({ type: 'ADD_GOLD', payload: { playerId: cp.id, amount: 50 } });
+                  dispatchRef.current({ type: 'RECORD_KILL', payload: { playerId: cp.id } });
+                  if (attacker.keywords?.includes('heal_on_kill')) {
+                    dispatchRef.current({ type: 'HEAL', payload: { targetPlayerId: cp.id, amount: 2 } });
+                  }
+                }
               }
+
               dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name} attacks for ${dmg} damage!`, type: 'damage' } });
               sounds.play('attack');
             } else {
@@ -631,28 +816,27 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           const state = stateRef.current;
           const cp = state.players[state.currentPlayerIndex];
           if (!cp) return;
-          const affordable = cp.hand
-            .filter(c => c.cost <= cp.aether && !cp.cardsPlayedByType[c.type])
-            .sort((a, b) => b.cost - a.cost);
+          const diff = state.difficulty;
 
-          if (affordable.length > 0) {
-            const card = affordable[0];
-            if (card.type === 'spell') {
-              let targetId: string | undefined;
-              if (card.effect?.includes('target')) targetId = state.players.find(p => p.isHuman)?.id.toString();
-              dispatchRef.current({ type: 'STAGE_SPELL', payload: { playerId: cp.id, cardInstanceId: card.instanceId, targetId } });
-            } else if (card.type === 'enchantment') {
-              const targetId = cp.field[0]?.instanceId;
-              if (targetId) {
-                dispatchRef.current({ type: 'PLAY_CARD', payload: { playerId: cp.id, cardInstanceId: card.instanceId, targetId } });
-              } else {
-                dispatchRef.current({ type: 'ADVANCE_PHASE' });
-              }
+          const card = chooseAiCard(cp, diff, state.players);
+          if (!card) {
+            dispatchRef.current({ type: 'ADVANCE_PHASE' });
+            return;
+          }
+
+          if (card.type === 'spell') {
+            // Smart: Hard+ targets best enemy; Normal targets hero
+            const targetId = chooseAiSpellTarget(card.effect || '', diff, state.players, cp.id);
+            dispatchRef.current({ type: 'STAGE_SPELL', payload: { playerId: cp.id, cardInstanceId: card.instanceId, targetId } });
+          } else if (card.type === 'enchantment') {
+            const targetId = cp.field[0]?.instanceId;
+            if (targetId) {
+              dispatchRef.current({ type: 'PLAY_CARD', payload: { playerId: cp.id, cardInstanceId: card.instanceId, targetId } });
             } else {
-              dispatchRef.current({ type: 'PLAY_CARD', payload: { playerId: cp.id, cardInstanceId: card.instanceId } });
+              dispatchRef.current({ type: 'ADVANCE_PHASE' });
             }
           } else {
-            dispatchRef.current({ type: 'ADVANCE_PHASE' });
+            dispatchRef.current({ type: 'PLAY_CARD', payload: { playerId: cp.id, cardInstanceId: card.instanceId } });
           }
         }, 1000);
       }

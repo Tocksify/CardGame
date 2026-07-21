@@ -30,7 +30,7 @@ export default function LobbyPage() {
   const handleStart = () => {
     sounds.play('uiClick');
     const players = generatePlayers({ gameMode, matchType: 'singleplayer', ranked: false });
-    dispatch({ type: 'START_GAME', payload: { players, gameMode, matchType: 'singleplayer', ranked: false } });
+    dispatch({ type: 'START_GAME', payload: { players, gameMode, matchType: 'singleplayer', ranked: false, difficulty } });
     setLocation('/game');
   };
 
