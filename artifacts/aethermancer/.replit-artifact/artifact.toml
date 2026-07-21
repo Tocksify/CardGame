@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "Aethermancer"
+version = "1.0.0"
+id = "artifacts/aethermancer"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24564
+
+[services.development]
+run = "pnpm --filter @workspace/aethermancer run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/aethermancer", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/aethermancer/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24564"
+BASE_PATH = "/"
