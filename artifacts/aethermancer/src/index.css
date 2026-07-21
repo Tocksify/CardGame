@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Exo+2:wght@300;400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Cinzel+Decorative:wght@700&family=IM+Fell+English:ital@0;1&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
@@ -45,30 +45,45 @@
 }
 
 :root, .dark {
-  --background: 220 27% 6%;
-  --foreground: 210 40% 92%;
-  --card: 220 26% 14%;
-  --card-foreground: 210 40% 92%;
-  --border: 217 32% 20%;
-  --primary: 210 100% 56%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 217 28% 18%;
-  --secondary-foreground: 210 40% 80%;
-  --muted: 217 28% 13%;
-  --muted-foreground: 215 25% 65%;
-  --accent: 210 100% 56%;
-  --accent-foreground: 0 0% 100%;
-  --destructive: 0 72% 51%;
+  /* Deep stone darkness */
+  --background: 24 28% 5%;
+  --foreground: 43 55% 88%;
+
+  /* Aged parchment card surfaces */
+  --card: 24 32% 9%;
+  --card-foreground: 43 50% 86%;
+
+  /* Borders: tarnished gold */
+  --border: 38 42% 22%;
+
+  /* Gold as primary accent */
+  --primary: 43 78% 44%;
+  --primary-foreground: 24 30% 8%;
+
+  /* Stone secondary */
+  --secondary: 24 22% 13%;
+  --secondary-foreground: 43 35% 68%;
+
+  --muted: 24 20% 10%;
+  --muted-foreground: 38 22% 52%;
+
+  /* Crimson accent */
+  --accent: 0 68% 38%;
+  --accent-foreground: 43 60% 92%;
+
+  --destructive: 0 72% 44%;
   --destructive-foreground: 0 0% 100%;
-  --ring: 210 100% 56%;
-  --input: 217 32% 22%;
-  --popover: 220 25% 11%;
-  --popover-foreground: 210 40% 92%;
-  
+
+  --ring: 43 78% 44%;
+  --input: 24 28% 14%;
+  --popover: 24 28% 8%;
+  --popover-foreground: 43 55% 88%;
+
   --radius: 0px;
-  
-  --app-font-sans: 'Exo 2', sans-serif;
-  --app-font-display: 'Rajdhani', sans-serif;
+
+  /* Fonts: Cinzel for fantasy display, IM Fell for body */
+  --app-font-sans: 'IM Fell English', Georgia, serif;
+  --app-font-display: 'Cinzel', 'Times New Roman', serif;
 }
 
 @layer base {
@@ -83,54 +98,123 @@
   }
 }
 
+/* ── Fantasy background ─────────────────────────────────────────────────── */
 .bg-kodi-gradient {
-  background: radial-gradient(ellipse at center, #152038 0%, #0d1117 60%, #050810 100%);
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(60,30,5,0.35) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 50%, rgba(40,10,5,0.35) 0%, transparent 60%),
+    radial-gradient(ellipse at 50% 100%, rgba(80,40,0,0.2) 0%, transparent 50%),
+    linear-gradient(160deg, #0d0806 0%, #110b07 40%, #0e0907 70%, #0a0806 100%);
 }
 
-.text-gold {
-  color: #f5c518;
+/* ── Card type color variables ──────────────────────────────────────────── */
+.card-frame-creature   { --frame-color: #1a3a6e; --frame-glow: rgba(60,100,200,0.5); }
+.card-frame-spell      { --frame-color: #6e1a1a; --frame-glow: rgba(200,60,60,0.5); }
+.card-frame-artifact   { --frame-color: #6e4e1a; --frame-glow: rgba(200,140,60,0.5); }
+.card-frame-enchantment{ --frame-color: #1a5a2e; --frame-glow: rgba(60,180,100,0.5); }
+
+/* ── Water ripple ───────────────────────────────────────────────────────── */
+@keyframes ripple-out {
+  0%   { transform: scale(1); opacity: 0.5; }
+  100% { transform: scale(2.2); opacity: 0; }
 }
 
+@keyframes water-shimmer {
+  0%, 100% { opacity: 0.6; }
+  50%       { opacity: 1; }
+}
+
+@keyframes water-rotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Flash damage ───────────────────────────────────────────────────────── */
 @keyframes flash-red {
-  0% { background-color: rgba(220, 38, 38, 0.7); }
+  0%   { background-color: rgba(220,38,38,0.7); }
   100% { background-color: transparent; }
 }
 
+@keyframes flash-gold {
+  0%   { box-shadow: 0 0 0 3px rgba(201,162,39,0.8); }
+  100% { box-shadow: none; }
+}
+
+/* ── Particle float (animated battlefield) ──────────────────────────────── */
 @keyframes float {
-  0% { transform: translateY(100vh) scale(0); opacity: 0; }
-  10% { opacity: 0.5; }
-  90% { opacity: 0.5; }
+  0%   { transform: translateY(100vh) scale(0); opacity: 0; }
+  10%  { opacity: 0.6; }
+  90%  { opacity: 0.6; }
   100% { transform: translateY(-10vh) scale(1); opacity: 0; }
 }
 
 @keyframes slow-rotate {
   from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  to   { transform: rotate(360deg); }
 }
 
-@keyframes cardArtRotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+/* ── Card art animations ────────────────────────────────────────────────── */
+@keyframes cardArtRotate  { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes cardArtPulse   { 0%,100% { transform: scale(0.9); opacity:0.8; } 50% { transform: scale(1.1); opacity:1; } }
+@keyframes cardArtShimmer { 0% { background-position: -100% 0; } 100% { background-position: 200% 0; } }
+@keyframes cardArtSpin    { from { transform: rotate(0deg) scale(1); } 50% { transform: rotate(180deg) scale(1.2); } to { transform: rotate(360deg) scale(1); } }
+@keyframes float-up       { 0% { transform: translateY(0); opacity:1; } 100% { transform: translateY(-40px); opacity:0; } }
+
+/* ── Evolve pulse ───────────────────────────────────────────────────────── */
+@keyframes evolve-glow {
+  0%, 100% { box-shadow: 0 0 6px 2px rgba(245,197,24,0.4); }
+  50%       { box-shadow: 0 0 18px 6px rgba(245,197,24,0.9); }
 }
 
-@keyframes cardArtPulse {
-  0% { transform: scale(0.9); opacity: 0.8; }
-  50% { transform: scale(1.1); opacity: 1; }
-  100% { transform: scale(0.9); opacity: 0.8; }
+/* ── Fantasy ornament scroll ────────────────────────────────────────────── */
+@keyframes ornament-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 0.8; }
 }
 
-@keyframes cardArtShimmer {
-  0% { background-position: -100% 0; }
-  100% { background-position: 200% 0; }
+/* ── Phase pip ──────────────────────────────────────────────────────────── */
+.phase-pip {
+  @apply px-2 py-0.5 text-[9px] font-display font-bold uppercase tracking-widest border transition-all;
+  color: hsl(38 22% 40%);
+  border-color: hsl(38 42% 16%);
+  background: hsl(24 28% 7%);
+}
+.phase-pip.active {
+  color: hsl(43 78% 60%);
+  border-color: hsl(43 78% 35%);
+  background: hsl(38 50% 12%);
+  box-shadow: 0 0 8px rgba(201,162,39,0.35), inset 0 0 4px rgba(201,162,39,0.1);
+  text-shadow: 0 0 6px rgba(201,162,39,0.5);
 }
 
-@keyframes cardArtSpin {
-  from { transform: rotate(0deg) scale(1); }
-  50% { transform: rotate(180deg) scale(1.2); }
-  to { transform: rotate(360deg) scale(1); }
+/* ── Fantasy button ─────────────────────────────────────────────────────── */
+.btn-fantasy {
+  @apply font-display font-bold tracking-widest uppercase border transition-all cursor-pointer;
+  background: linear-gradient(180deg, hsl(38 35% 16%) 0%, hsl(24 30% 10%) 100%);
+  border-color: hsl(38 55% 28%);
+  color: hsl(43 70% 65%);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,220,80,0.07);
 }
-
-@keyframes float-up {
-  0% { transform: translateY(0); opacity: 1; }
-  100% { transform: translateY(-40px); opacity: 0; }
+.btn-fantasy:hover {
+  background: linear-gradient(180deg, hsl(38 40% 20%) 0%, hsl(24 35% 14%) 100%);
+  border-color: hsl(43 65% 40%);
+  color: hsl(43 90% 78%);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.5), 0 0 10px rgba(201,162,39,0.2), inset 0 1px 0 rgba(255,220,80,0.1);
+}
+.btn-fantasy:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.btn-fantasy-primary {
+  background: linear-gradient(180deg, hsl(0 55% 26%) 0%, hsl(0 50% 18%) 100%);
+  border-color: hsl(0 60% 38%);
+  color: hsl(43 80% 80%);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.6), 0 0 8px rgba(180,50,50,0.3), inset 0 1px 0 rgba(255,100,100,0.08);
+}
+.btn-fantasy-primary:hover {
+  background: linear-gradient(180deg, hsl(0 60% 32%) 0%, hsl(0 55% 24%) 100%);
+  border-color: hsl(0 65% 48%);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.6), 0 0 16px rgba(200,60,60,0.4), inset 0 1px 0 rgba(255,120,120,0.1);
 }

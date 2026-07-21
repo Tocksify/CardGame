@@ -4,104 +4,162 @@ import { useGame } from '../context/GameContext';
 import { useLobby } from '../context/LobbyContext';
 import { CardInstance, FieldCard, Player } from '../store/gameStore';
 import { sounds } from '../lib/sounds';
-import { ShoppingCart, Package, Info, ShieldAlert, Swords, Heart, Activity, User, ScrollText, Zap, Clock, RefreshCw } from 'lucide-react';
+import {
+  ShoppingCart, Package, Info, ShieldAlert, Swords, Heart,
+  Activity, User, ScrollText, Zap, Clock, RefreshCw, Sparkles,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SHOP_ITEMS, ShopItemTemplate } from '../lib/cards';
+import { SHOP_ITEMS, ShopItemTemplate, CARD_TEMPLATES } from '../lib/cards';
 import { CardArt } from '../components/game/CardArt';
 
-// ── Tab → type mapping (fixes the filter bug) ────────────────────────────────
+// ── Tab → type mapping ────────────────────────────────────────────────────
 const TAB_TYPE_MAP: Record<string, ShopItemTemplate['type']> = {
-  items:  'item',
-  stat:   'stat',
-  perks:  'perk',
-  cards:  'card',
+  items: 'item', stat: 'stat', perks: 'perk', cards: 'card',
 };
 
-// ── Compact field card ────────────────────────────────────────────────────────
-const FieldCardUI = ({
+// ── Card type colors (MTG-style) ──────────────────────────────────────────
+const TYPE_FRAME: Record<string, { bg: string; bar: string; glow: string; icon: React.ReactNode }> = {
+  creature:    { bg: '#0e1f3d', bar: '#1a3a6e', glow: 'rgba(60,100,200,0.6)',  icon: <Swords size={7} /> },
+  spell:       { bg: '#2a0a0a', bar: '#6e1a1a', glow: 'rgba(200,60,60,0.6)',   icon: <Zap size={7} /> },
+  artifact:    { bg: '#241600', bar: '#6e4e1a', glow: 'rgba(200,140,60,0.6)',  icon: <Package size={7} /> },
+  enchantment: { bg: '#072210', bar: '#1a5a2e', glow: 'rgba(60,180,100,0.6)', icon: <Sparkles size={7} /> },
+};
+
+// ── Rarity border / shadow ────────────────────────────────────────────────
+function rarityBorder(rarity?: string, evolved?: boolean): string {
+  if (evolved) return 'border-amber-300 shadow-[0_0_14px_rgba(245,197,24,1)]';
+  if (rarity === 'legendary') return 'border-amber-400 shadow-[0_0_10px_rgba(255,180,0,0.9)]';
+  if (rarity === 'rare')      return 'border-purple-400 shadow-[0_0_7px_rgba(160,80,220,0.8)]';
+  return 'border-[#4a3000]/80';
+}
+
+// ── Evolution progress bar ────────────────────────────────────────────────
+const EvoProgress = ({ card }: { card: FieldCard }) => {
+  if (!card.evolvesTo || card.evolved) return null;
+  const tpl = CARD_TEMPLATES.find(t => t.templateId === card.templateId);
+  const cond = tpl?.evolveCondition;
+  if (!cond) return null;
+
+  let current = 0, target = 0, label = '';
+  if (cond.turnsOnField !== undefined) {
+    current = card.turnsOnField; target = cond.turnsOnField; label = `⏳ ${current}/${target}`;
+  } else if (cond.damageDealt !== undefined) {
+    current = card.damageDealt; target = cond.damageDealt; label = `⚔ ${current}/${target}`;
+  }
+  if (target === 0) return null;
+
+  const pct = Math.min(100, (current / target) * 100);
+  return (
+    <div className="w-full px-0.5 mt-0.5">
+      <div className="w-full h-1 bg-black/60 border border-amber-900/40 overflow-hidden">
+        <div
+          className="h-full transition-all duration-500"
+          style={{
+            width: `${pct}%`,
+            background: pct >= 80
+              ? 'linear-gradient(90deg, #c9a227, #ffe066)'
+              : 'linear-gradient(90deg, #4a7a2e, #7ac95a)',
+          }}
+        />
+      </div>
+      <div className="text-[5px] text-center text-amber-500/80 leading-none mt-0.5 font-display">{label} EVO</div>
+    </div>
+  );
+};
+
+// ── Field / Arena card (MTG-style frame) ──────────────────────────────────
+const ArenaCardUI = ({
   card,
-  playable,
   onClick,
   tapped = false,
+  targetable = false,
   combatAnim = null,
+  size = 'md',
 }: {
   card: CardInstance | FieldCard;
-  playable?: boolean;
   onClick?: () => void;
   tapped?: boolean;
+  targetable?: boolean;
   combatAnim?: { targetId: string; damage: number } | null;
+  size?: 'sm' | 'md';
 }) => {
-  const isCreature = card.type === 'creature';
+  const frame = TYPE_FRAME[card.type] || TYPE_FRAME.creature;
   const fc = card as FieldCard;
   const displayAtk = fc.currentAtk ?? card.atk ?? 0;
   const displayDef = fc.currentDef ?? card.def ?? 1;
   const isEvolved = fc.evolved;
-
-  let borderCls = 'border-border/60';
-  if (card.rarity === 'rare')      borderCls = 'border-purple-500 shadow-[0_0_6px_rgba(147,112,219,0.7)]';
-  if (card.rarity === 'legendary') borderCls = 'border-amber-400 shadow-[0_0_10px_rgba(255,165,0,0.8)]';
-  if (isEvolved)                   borderCls = 'border-amber-300 shadow-[0_0_14px_rgba(245,197,24,1)]';
-
-  const typeStripe: Record<string, string> = {
-    creature: 'bg-blue-700', spell: 'bg-purple-700',
-    artifact: 'bg-amber-700', enchantment: 'bg-emerald-700',
-  };
-
   const isHit = combatAnim?.targetId === (card as any).instanceId;
+  const borderCls = rarityBorder(card.rarity, isEvolved);
+
+  const w = size === 'sm' ? 'w-14' : 'w-[68px]';
+  const h = size === 'sm' ? 'h-20' : 'h-[100px]';
 
   return (
     <motion.div
-      whileHover={{ scale: 1.08, y: -4, zIndex: 50 }}
+      whileHover={{ scale: 1.12, y: -6, zIndex: 60 }}
       onClick={onClick}
-      className={`relative w-20 h-28 flex-shrink-0 bg-card border-2 cursor-pointer transition-colors duration-200
-        ${playable ? 'border-red-500 shadow-[0_0_10px_rgba(220,38,38,0.7)]' : borderCls}
-        ${tapped ? 'opacity-60 rotate-[6deg]' : ''}
+      title={card.name}
+      className={`relative ${w} ${h} flex-shrink-0 border-2 cursor-pointer transition-colors duration-200 overflow-hidden
+        ${targetable ? 'border-amber-400 shadow-[0_0_12px_rgba(201,162,39,0.8)] animate-pulse' : borderCls}
+        ${tapped ? 'opacity-55 rotate-[8deg]' : ''}
         ${isHit ? 'animate-[flash-red_0.3s_ease]' : ''}
       `}
+      style={{ background: frame.bg }}
     >
-      <div className="absolute inset-0 flex flex-col pointer-events-none">
-        {/* Name + cost */}
-        <div className="h-[18%] flex items-center justify-between px-1 bg-gradient-to-b from-secondary to-transparent">
-          <span className="text-[7px] font-display font-bold leading-tight truncate">{card.name}</span>
-          <div className="w-4 h-4 flex items-center justify-center bg-card border border-primary text-primary text-[8px] font-bold transform rotate-45 shrink-0">
-            <span className="-rotate-45">{card.cost}</span>
-          </div>
-        </div>
-        {/* Art */}
-        <div className="h-[38%] w-full">
-          <CardArt templateId={card.templateId} type={card.type} />
-        </div>
-        {/* Type stripe */}
-        <div className={`h-[8%] w-full ${typeStripe[card.type]} flex items-center px-1`}>
-          <span className="text-[6px] font-bold text-white uppercase tracking-widest leading-none">{card.type}</span>
-        </div>
-        {/* Description */}
-        <div className="h-[22%] p-0.5 bg-black/40 text-[6px] leading-tight text-secondary-foreground overflow-hidden">
-          {card.description}
-          {isEvolved && <div className="text-amber-400 font-bold">✦ EVOLVED</div>}
-        </div>
-        {/* Stats */}
-        <div className="h-[14%] flex justify-between items-center px-1 border-t border-white/10 bg-black/60">
-          {isCreature ? (
-            <>
-              <div className="flex items-center gap-0.5 text-amber-500 font-bold text-[9px]">
-                <Swords size={7} /> {displayAtk}
-              </div>
-              <div className="flex items-center gap-0.5 text-emerald-500 font-bold text-[9px]">
-                <ShieldAlert size={7} /> {displayDef}
-              </div>
-            </>
-          ) : (
-            <div className="flex w-full justify-center text-muted-foreground"><Zap size={8} /></div>
-          )}
+      {/* Top: name + mana cost */}
+      <div className="h-[19%] flex items-center justify-between px-0.5 relative"
+           style={{ background: `linear-gradient(90deg, ${frame.bar}dd, ${frame.bar}88)` }}>
+        <span className="text-[6px] font-display font-bold text-amber-100 leading-tight truncate pr-0.5">{card.name}</span>
+        <div className="w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0 font-bold text-[7px] text-white"
+             style={{ background: 'radial-gradient(circle, #2a1a00, #1a0d00)', border: '1px solid #c9a227', boxShadow: '0 0 4px rgba(201,162,39,0.6)' }}>
+          {card.cost}
         </div>
       </div>
 
+      {/* Art */}
+      <div className="h-[35%] w-full">
+        <CardArt templateId={card.templateId} type={card.type} />
+      </div>
+
+      {/* Type bar */}
+      <div className="h-[7%] w-full flex items-center px-0.5"
+           style={{ background: `${frame.bar}99` }}>
+        <span className="text-[5px] text-amber-200/80 font-display uppercase tracking-widest truncate leading-none">{card.type}</span>
+      </div>
+
+      {/* Description */}
+      <div className="flex-1 px-0.5 py-0.5 text-[5px] leading-tight overflow-hidden"
+           style={{ background: 'linear-gradient(180deg, #1a1208 0%, #120e06 100%)', color: '#c8b888' }}>
+        {card.description}
+        {isEvolved && <div className="text-amber-400 font-bold text-[6px] mt-0.5">✦ EVOLVED</div>}
+        {/* Evolution progress */}
+        <EvoProgress card={fc} />
+      </div>
+
+      {/* Stats footer (MTG-style P/T box) */}
+      <div className="h-[14%] flex items-center justify-between px-0.5"
+           style={{ background: 'linear-gradient(180deg, #0e0a05, #080603)', borderTop: '1px solid rgba(74,48,0,0.5)' }}>
+        {card.type === 'creature' ? (
+          <>
+            <div className="flex items-center gap-0.5 font-bold text-[9px]" style={{ color: '#e8a030' }}>
+              <Swords size={7} />{displayAtk}
+            </div>
+            <div className="text-[5px]" style={{ color: 'rgba(201,162,39,0.4)' }}>◆</div>
+            <div className="flex items-center gap-0.5 font-bold text-[9px]" style={{ color: '#5db860' }}>
+              <ShieldAlert size={7} />{displayDef}
+            </div>
+          </>
+        ) : (
+          <div className="flex w-full justify-center" style={{ color: frame.bar }}>{frame.icon}</div>
+        )}
+      </div>
+
+      {/* Hit damage float */}
       <AnimatePresence>
         {isHit && (
           <motion.div
-            initial={{ opacity: 1, y: 0 }} animate={{ opacity: 0, y: -30 }} transition={{ duration: 0.6 }}
-            className="absolute inset-0 flex items-center justify-center text-2xl font-display font-bold text-red-500 drop-shadow-[0_0_4px_black] z-50 pointer-events-none"
+            initial={{ opacity: 1, y: 0, scale: 1 }} animate={{ opacity: 0, y: -35, scale: 1.4 }} transition={{ duration: 0.65 }}
+            className="absolute inset-0 flex items-center justify-center text-2xl font-display font-black text-red-400 drop-shadow-[0_0_6px_black] z-50 pointer-events-none"
           >
             -{combatAnim!.damage}
           </motion.div>
@@ -111,7 +169,7 @@ const FieldCardUI = ({
   );
 };
 
-// ── Hand card (slightly larger) ───────────────────────────────────────────────
+// ── Hand card (large, MTG-style) ──────────────────────────────────────────
 const HandCardUI = ({
   card,
   playable,
@@ -121,60 +179,344 @@ const HandCardUI = ({
   playable?: boolean;
   onClick?: () => void;
 }) => {
-  let borderCls = 'border-border shadow-none';
-  if (card.rarity === 'rare')      borderCls = 'border-purple-500 shadow-[0_0_8px_rgba(147,112,219,0.7)]';
-  if (card.rarity === 'legendary') borderCls = 'border-amber-400 shadow-[0_0_12px_rgba(255,165,0,0.8)]';
-
-  const typeStripe: Record<string, string> = {
-    creature: 'bg-blue-700', spell: 'bg-purple-700',
-    artifact: 'bg-amber-700', enchantment: 'bg-emerald-700',
-  };
+  const frame = TYPE_FRAME[card.type] || TYPE_FRAME.creature;
+  const borderCls = rarityBorder(card.rarity);
 
   return (
     <motion.div
-      whileHover={{ scale: 1.3, y: -20, zIndex: 50 }}
+      whileHover={{ scale: 1.28, y: -22, zIndex: 60 }}
       onClick={onClick}
-      className={`relative w-24 h-36 flex-shrink-0 bg-card border-[2px] cursor-pointer transition-colors duration-200
-        ${playable ? 'border-primary shadow-[0_0_14px_rgba(30,144,255,0.8)]' : borderCls}
-      `}
       onMouseEnter={() => playable && sounds.play('cardHover')}
+      className={`relative w-24 h-36 flex-shrink-0 border-[2px] cursor-pointer transition-all duration-200 overflow-hidden
+        ${playable
+          ? 'border-amber-400 shadow-[0_0_18px_rgba(201,162,39,0.8),0_0_6px_rgba(201,162,39,0.4)]'
+          : borderCls}
+      `}
+      style={{ background: frame.bg }}
     >
-      <div className="absolute inset-0 flex flex-col pointer-events-none">
-        <div className="h-[20%] flex items-center justify-between px-1 bg-gradient-to-b from-secondary to-transparent">
-          <span className="text-[9px] font-display font-bold leading-tight truncate">{card.name}</span>
-          <div className="w-5 h-5 flex items-center justify-center bg-card border border-primary text-primary text-[9px] font-bold transform rotate-45 shrink-0">
-            <span className="-rotate-45">{card.cost}</span>
-          </div>
+      {/* Title bar */}
+      <div className="h-[18%] flex items-center justify-between px-1"
+           style={{ background: `linear-gradient(90deg, ${frame.bar}ff, ${frame.bar}99)` }}>
+        <span className="text-[8px] font-display font-bold text-amber-100 leading-tight truncate">{card.name}</span>
+        <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-display font-black text-[9px] text-amber-100"
+             style={{ background: 'radial-gradient(circle, #2a1a00, #120d00)', border: '1px solid #c9a227', boxShadow: '0 0 5px rgba(201,162,39,0.7)' }}>
+          {card.cost}
         </div>
-        <div className="h-[35%] w-full">
-          <CardArt templateId={card.templateId} type={card.type} />
-        </div>
-        <div className={`h-[8%] w-full ${typeStripe[card.type]} flex items-center px-1`}>
-          <span className="text-[7px] font-bold text-white uppercase tracking-widest">{card.type}</span>
-        </div>
-        <div className="h-[25%] p-1 bg-black/40 text-[7px] leading-tight text-secondary-foreground overflow-hidden">
-          {card.description}
-        </div>
-        <div className="h-[12%] flex justify-between items-center px-1 border-t border-white/10 bg-black/60">
-          {card.type === 'creature' ? (
-            <>
-              <div className="flex items-center gap-0.5 text-amber-500 font-bold text-[10px]">
-                <Swords size={9} /> {card.atk}
-              </div>
-              <div className="flex items-center gap-0.5 text-emerald-500 font-bold text-[10px]">
-                <ShieldAlert size={9} /> {card.def}
-              </div>
-            </>
-          ) : (
-            <div className="flex w-full justify-center text-muted-foreground"><Zap size={10} /></div>
-          )}
-        </div>
+      </div>
+
+      {/* Art */}
+      <div className="h-[33%] w-full">
+        <CardArt templateId={card.templateId} type={card.type} />
+      </div>
+
+      {/* Type line */}
+      <div className="h-[7%] flex items-center px-1"
+           style={{ background: `${frame.bar}bb` }}>
+        <span className="text-[6px] text-amber-100/80 font-display uppercase tracking-widest">{card.type}</span>
+      </div>
+
+      {/* Text box */}
+      <div className="flex-1 p-1 text-[6.5px] leading-tight overflow-hidden"
+           style={{ background: 'linear-gradient(180deg, #1c1508 0%, #120e06 100%)', color: '#cbb888' }}>
+        {card.description}
+      </div>
+
+      {/* P/T footer */}
+      <div className="h-[12%] flex items-center justify-between px-1"
+           style={{ background: 'linear-gradient(180deg, #0e0a05, #070503)', borderTop: '1px solid rgba(74,48,0,0.5)' }}>
+        {card.type === 'creature' ? (
+          <>
+            <div className="flex items-center gap-0.5 font-display font-bold text-[10px]" style={{ color: '#e8a030' }}>
+              <Swords size={8} />{card.atk}
+            </div>
+            <div className="flex items-center gap-0.5 font-display font-bold text-[10px]" style={{ color: '#5db860' }}>
+              <ShieldAlert size={8} />{card.def}
+            </div>
+          </>
+        ) : (
+          <div className="flex w-full justify-center" style={{ color: frame.bar }}>{frame.icon}</div>
+        )}
       </div>
     </motion.div>
   );
 };
 
-// ── Main Game Page ────────────────────────────────────────────────────────────
+// ── Arena positions ───────────────────────────────────────────────────────
+type PositionId = 'left' | 'right' | 'top' | 'bottom' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+const POSITION_CFG: Record<PositionId, {
+  wrapperCls: string;
+  inner: string;
+  cardArea: string;
+}> = {
+  left:         { wrapperCls: 'left-0 top-1/2 -translate-y-1/2', inner: 'flex-row',         cardArea: 'flex-col gap-1' },
+  right:        { wrapperCls: 'right-0 top-1/2 -translate-y-1/2', inner: 'flex-row-reverse', cardArea: 'flex-col gap-1' },
+  top:          { wrapperCls: 'top-0 left-1/2 -translate-x-1/2', inner: 'flex-col',          cardArea: 'flex-row gap-1' },
+  bottom:       { wrapperCls: 'bottom-0 left-1/2 -translate-x-1/2', inner: 'flex-col-reverse', cardArea: 'flex-row gap-1' },
+  'top-left':   { wrapperCls: 'top-0 left-0',   inner: 'flex-col',         cardArea: 'flex-row gap-1' },
+  'top-right':  { wrapperCls: 'top-0 right-0',  inner: 'flex-col',         cardArea: 'flex-row-reverse gap-1' },
+  'bottom-left':  { wrapperCls: 'bottom-0 left-0',  inner: 'flex-col-reverse', cardArea: 'flex-row gap-1' },
+  'bottom-right': { wrapperCls: 'bottom-0 right-0', inner: 'flex-col-reverse', cardArea: 'flex-row-reverse gap-1' },
+};
+
+function getPositions(count: number): PositionId[] {
+  switch (count) {
+    case 2: return ['left', 'right'];
+    case 3: return ['left', 'top', 'right'];
+    case 4: return ['left', 'top', 'right', 'bottom'];
+    case 5: return ['top-right', 'top', 'top-left', 'bottom-left', 'bottom'];
+    case 6: return ['top-right', 'top', 'top-left', 'bottom-left', 'bottom', 'bottom-right'];
+    default: return ['left', 'right'];
+  }
+}
+
+// ── Player Zone (in arena) ────────────────────────────────────────────────
+const PlayerZone = ({
+  player,
+  posId,
+  isMe,
+  targetingMode,
+  onHeroClick,
+  onCardClick,
+  combatAnim,
+  aether,
+  maxAether,
+}: {
+  player: Player;
+  posId: PositionId;
+  isMe: boolean;
+  targetingMode: string;
+  onHeroClick: () => void;
+  onCardClick: (card: FieldCard) => void;
+  combatAnim: { targetId: string; damage: number } | null;
+  aether?: number;
+  maxAether?: number;
+}) => {
+  const cfg = POSITION_CFG[posId];
+  const isHeroHit = combatAnim?.targetId === player.id.toString();
+  const isHorizontal = posId === 'left' || posId === 'right';
+  const heroTargetable = targetingMode === 'attack' || targetingMode === 'spell';
+  const hp = player.hp, maxHp = player.maxHp;
+  const hpPct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
+  const hpColor = hpPct > 60 ? '#4ade80' : hpPct > 25 ? '#f59e0b' : '#ef4444';
+
+  // Ornate stone crest color per player
+  const crests = ['#c9a227', '#e05050', '#50a0e0', '#50c878', '#c050e0', '#e08030'];
+  const crestColor = isMe ? '#c9a227' : crests[(player.id % crests.length)];
+
+  return (
+    <div className={`absolute z-10 ${cfg.wrapperCls}`}>
+      <div className={`flex ${cfg.inner} items-center gap-1 p-1`}>
+
+        {/* Portrait block */}
+        <div
+          onClick={onHeroClick}
+          className={`flex flex-col items-center gap-0.5 relative
+            ${heroTargetable && !isMe ? 'cursor-crosshair hover:scale-105 transition-transform' : ''}
+          `}
+        >
+          {/* Hex portrait */}
+          <div
+            className={`relative flex items-center justify-center transition-all duration-200
+              ${isHeroHit ? 'animate-[flash-red_0.3s_ease]' : ''}
+              ${heroTargetable && !isMe ? 'drop-shadow-[0_0_10px_rgba(201,162,39,0.8)]' : ''}
+            `}
+            style={{
+              width: 52, height: 52,
+              clipPath: 'polygon(50% 0%, 95% 25%, 95% 75%, 50% 100%, 5% 75%, 5% 25%)',
+              background: `radial-gradient(ellipse at 30% 30%, ${crestColor}22, #080503)`,
+              border: `2px solid ${crestColor}60`,
+            }}
+          >
+            {isMe
+              ? <User size={22} style={{ color: crestColor }} />
+              : <Activity size={22} style={{ color: crestColor }} />}
+            {/* Evolved glow ring if any creature is evolved */}
+            {player.field.some(c => c.evolved) && (
+              <div className="absolute inset-0" style={{ animation: 'evolve-glow 2s ease-in-out infinite' }} />
+            )}
+          </div>
+
+          {/* Name */}
+          <div className="text-[8px] font-display font-bold text-center leading-tight max-w-[60px] truncate"
+               style={{ color: isMe ? '#c9a227' : '#c8b888', textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>
+            {player.name}
+          </div>
+
+          {/* HP bar */}
+          <div className="w-14 h-3 border relative overflow-hidden"
+               style={{ background: '#0a0604', borderColor: 'rgba(74,48,0,0.6)' }}>
+            <div className="absolute top-0 left-0 h-full transition-all duration-500"
+                 style={{ width: `${hpPct}%`, background: `linear-gradient(90deg, ${hpColor}99, ${hpColor})` }}>
+              <div className="absolute top-0 left-0 w-full h-1/2 bg-white/10" />
+            </div>
+            <span className="absolute inset-0 flex items-center justify-center text-[7px] font-display font-bold text-white"
+                  style={{ textShadow: '0 0 3px rgba(0,0,0,1)' }}>
+              {hp}/{maxHp}
+            </span>
+          </div>
+
+          {/* Aether crystals (me only) */}
+          {isMe && aether !== undefined && maxAether !== undefined && (
+            <div className="flex flex-wrap gap-0.5 justify-center max-w-[60px]">
+              {Array.from({ length: maxAether }).map((_, i) => (
+                <div key={i}
+                     className="w-2 h-2 border"
+                     style={{
+                       transform: 'rotate(45deg)',
+                       background: i < aether ? '#c9a227' : 'transparent',
+                       borderColor: i < aether ? '#f0cc55' : 'rgba(74,48,0,0.4)',
+                       boxShadow: i < aether ? '0 0 4px rgba(201,162,39,0.7)' : 'none',
+                     }} />
+              ))}
+            </div>
+          )}
+
+          {/* Hero hit float */}
+          <AnimatePresence>
+            {isHeroHit && (
+              <motion.div
+                initial={{ opacity: 1, y: 0, scale: 1 }} animate={{ opacity: 0, y: -30, scale: 1.5 }} transition={{ duration: 0.7 }}
+                className="absolute -top-2 left-1/2 -translate-x-1/2 text-3xl font-display font-black text-red-400 drop-shadow-[0_0_6px_black] z-50 pointer-events-none whitespace-nowrap"
+              >
+                -{combatAnim!.damage}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Field cards area */}
+        {player.field.length > 0 && (
+          <div className={`flex ${cfg.cardArea} flex-wrap max-w-[160px] max-h-[160px] overflow-hidden`}>
+            {player.field.slice(0, 6).map(card => {
+              const isTargetable = targetingMode !== 'none' && !isMe;
+              const canAttack = isMe && targetingMode !== 'attack';
+              return (
+                <ArenaCardUI
+                  key={card.instanceId}
+                  card={card}
+                  size="sm"
+                  tapped={card.tapped}
+                  targetable={isTargetable}
+                  onClick={() => onCardClick(card)}
+                  combatAnim={combatAnim}
+                />
+              );
+            })}
+          </div>
+        )}
+
+        {/* Empty field indicator */}
+        {player.field.length === 0 && (
+          <div className="w-16 h-20 border border-dashed flex items-center justify-center text-center"
+               style={{ borderColor: `${crestColor}20`, background: `${crestColor}05` }}>
+            <span className="text-[7px] font-display uppercase" style={{ color: `${crestColor}30` }}>
+              Empty
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ── Water center effect ───────────────────────────────────────────────────
+const WaterCenter = ({ animated }: { animated: boolean }) => (
+  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+    {/* Stone floor backdrop */}
+    <div className="absolute inset-0"
+         style={{
+           background: 'radial-gradient(ellipse at center, rgba(20,12,4,0) 0%, rgba(8,5,2,0.5) 100%)',
+         }} />
+
+    {/* Outer ambient glow */}
+    <div className="absolute w-80 h-80 rounded-full"
+         style={{ background: 'radial-gradient(ellipse at center, rgba(0,80,140,0.08) 0%, transparent 70%)' }} />
+
+    {/* Main pool */}
+    <div className="relative w-48 h-48">
+      <div className="absolute inset-0 rounded-full"
+           style={{
+             background: 'radial-gradient(ellipse at 40% 35%, rgba(0,120,200,0.35) 0%, rgba(0,60,120,0.5) 40%, rgba(0,30,80,0.7) 75%, rgba(0,15,40,0.9) 100%)',
+             border: '2px solid rgba(0,100,160,0.35)',
+             boxShadow: 'inset 0 0 40px rgba(0,80,140,0.4), inset 0 0 80px rgba(0,40,100,0.3), 0 0 30px rgba(0,60,120,0.2)',
+           }} />
+
+      {/* Inner highlight shimmer */}
+      <div className="absolute inset-[15%] rounded-full"
+           style={{
+             background: 'radial-gradient(ellipse at 35% 30%, rgba(100,200,255,0.15) 0%, transparent 65%)',
+             animation: animated ? 'water-shimmer 3s ease-in-out infinite' : 'none',
+           }} />
+
+      {/* Rune circle */}
+      <div className="absolute inset-[20%] rounded-full border"
+           style={{
+             borderColor: 'rgba(0,150,220,0.15)',
+             animation: animated ? 'water-rotate 20s linear infinite' : 'none',
+           }}>
+        {[0,60,120,180,240,300].map(deg => (
+          <div key={deg}
+               className="absolute w-1 h-1 rounded-full"
+               style={{
+                 background: 'rgba(0,180,255,0.4)',
+                 top: '50%', left: '50%',
+                 transform: `rotate(${deg}deg) translateY(-200%) translate(-50%,-50%)`,
+               }} />
+        ))}
+      </div>
+
+      {/* Ripple rings */}
+      {animated && [1, 2, 3].map(i => (
+        <div key={i}
+             className="absolute rounded-full border"
+             style={{
+               inset: `${-i * 18}px`,
+               borderColor: `rgba(0,140,220,${0.25 - i * 0.06})`,
+               animation: `ripple-out ${2.5 + i * 0.8}s ease-out infinite`,
+               animationDelay: `${i * 0.7}s`,
+             }} />
+      ))}
+
+      {/* Center rune */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="text-[28px] font-display select-none"
+             style={{
+               color: 'rgba(0,160,255,0.2)',
+               textShadow: '0 0 12px rgba(0,120,200,0.4)',
+               animation: animated ? 'water-rotate 8s linear infinite reverse' : 'none',
+               lineHeight: 1,
+             }}>
+          ✦
+        </div>
+      </div>
+    </div>
+
+    {/* "vs" labels at cardinal points */}
+    {['top','bottom','left','right'].map(side => (
+      <div key={side}
+           className="absolute font-display text-[8px] uppercase tracking-[0.3em] select-none"
+           style={{
+             color: 'rgba(100,140,180,0.15)',
+             ...(side==='top'    ? { top: '12%',    left:'50%', transform:'translateX(-50%)' } : {}),
+             ...(side==='bottom' ? { bottom: '12%', left:'50%', transform:'translateX(-50%)' } : {}),
+             ...(side==='left'   ? { left: '12%',   top:'50%',  transform:'translateY(-50%)' } : {}),
+             ...(side==='right'  ? { right: '12%',  top:'50%',  transform:'translateY(-50%)' } : {}),
+           }}>
+        ⬥
+      </div>
+    ))}
+  </div>
+);
+
+// ── Floating particles ────────────────────────────────────────────────────
+const PARTICLES = [...Array(18)].map(() => ({
+  left: `${Math.random() * 100}%`,
+  dur: 12 + Math.random() * 18,
+  delay: Math.random() * 12,
+}));
+
+// ── Main Game Page ────────────────────────────────────────────────────────
 export default function GamePage() {
   const [, setLocation] = useLocation();
   const {
@@ -188,49 +530,48 @@ export default function GamePage() {
   const [shopTab, setShopTab] = useState<'items' | 'stat' | 'perks' | 'cards'>('items');
   const [logOpen, setLogOpen] = useState(false);
 
-  // Stable particle positions — generated once via useRef to fix animated battlefield
-  const particles = useRef(
-    [...Array(20)].map(() => ({
-      left: `${Math.random() * 100}%`,
-      duration: 10 + Math.random() * 15,
-      delay: Math.random() * 10,
-    }))
-  ).current;
-
   useEffect(() => {
     if (gameState.phase === 'countdown') {
-       const timers: NodeJS.Timeout[] = [];
-       timers.push(setTimeout(() => setCountdown(2), 1000));
-       timers.push(setTimeout(() => setCountdown(1), 2000));
-       timers.push(setTimeout(() => {
-         setCountdown(null);
-         dispatch({ type: 'SET_PHASE', payload: 'draw' });
-       }, 3000));
-       return () => timers.forEach(clearTimeout);
+      const timers: NodeJS.Timeout[] = [];
+      timers.push(setTimeout(() => setCountdown(2), 1000));
+      timers.push(setTimeout(() => setCountdown(1), 2000));
+      timers.push(setTimeout(() => {
+        setCountdown(null);
+        dispatch({ type: 'SET_PHASE', payload: 'draw' });
+      }, 3000));
+      return () => timers.forEach(clearTimeout);
     }
     return undefined;
   }, [gameState.phase, dispatch]);
 
   if (gameState.players.length === 0) {
-    return <div className="p-8">No game active. <button onClick={() => setLocation('/')} className="text-primary underline">Go Home</button></div>;
+    return (
+      <div className="p-8 font-display text-amber-300">
+        No game active.{' '}
+        <button onClick={() => setLocation('/')} className="text-amber-400 underline">Go Home</button>
+      </div>
+    );
   }
 
   const me = gameState.players.find(p => p.isHuman) || gameState.players[0];
   const enemies = gameState.players.filter(p => p.id !== me.id);
+  const allPlayers = [me, ...enemies];
+  const positions = getPositions(allPlayers.length);
+
   const currentPlayer = gameState.players[gameState.currentPlayerIndex];
   const isMyTurn = currentPlayer.id === me.id;
   const isDefeated = gameState.phase === 'gameover' && gameState.winner !== me.id;
 
-  // ── Interaction handlers ──────────────────────────────────────────────────
+  // ── Interaction handlers ────────────────────────────────────────────────
   const handleCardClick = (card: CardInstance) => {
     if (!isMyTurn || gameState.phase !== 'main') return;
     if (me.aether >= card.cost) {
       if (card.type === 'spell' && card.effect?.includes('target')) {
-         dispatch({ type: 'SET_TARGETING', payload: { mode: 'spell', sourceId: card.instanceId, pendingAction: null } });
+        dispatch({ type: 'SET_TARGETING', payload: { mode: 'spell', sourceId: card.instanceId, pendingAction: null } });
       } else if (card.type === 'enchantment') {
-         dispatch({ type: 'SET_TARGETING', payload: { mode: 'enchantment', sourceId: card.instanceId, pendingAction: null } });
+        dispatch({ type: 'SET_TARGETING', payload: { mode: 'enchantment', sourceId: card.instanceId, pendingAction: null } });
       } else {
-         playCard(card.instanceId);
+        playCard(card.instanceId);
       }
     }
   };
@@ -239,333 +580,262 @@ export default function GamePage() {
     if (!isMyTurn) return;
 
     if (gameState.targetingMode === 'spell' || gameState.targetingMode === 'item') {
-       if (gameState.targetingMode === 'item') {
-          dispatch({ type: 'USE_INVENTORY', payload: { playerId: me.id, instanceId: gameState.sourceId!, targetId: fieldCard.instanceId } });
-       } else {
-          playCard(gameState.sourceId!, fieldCard.instanceId);
-       }
-       dispatch({ type: 'CLEAR_TARGETING' });
-       return;
+      if (gameState.targetingMode === 'item') {
+        dispatch({ type: 'USE_INVENTORY', payload: { playerId: me.id, instanceId: gameState.sourceId!, targetId: fieldCard.instanceId } });
+      } else {
+        playCard(gameState.sourceId!, fieldCard.instanceId);
+      }
+      dispatch({ type: 'CLEAR_TARGETING' });
+      return;
     }
-    
+
     if (gameState.targetingMode === 'enchantment' && player.id === me.id) {
-       playCard(gameState.sourceId!, fieldCard.instanceId);
-       dispatch({ type: 'CLEAR_TARGETING' });
-       return;
+      playCard(gameState.sourceId!, fieldCard.instanceId);
+      dispatch({ type: 'CLEAR_TARGETING' });
+      return;
     }
 
     if (gameState.targetingMode === 'attack') {
-       if (player.id !== me.id) {
-          attackWith(gameState.sourceId!, player.id, fieldCard.instanceId);
-          dispatch({ type: 'CLEAR_TARGETING' });
-       }
-       return;
+      if (player.id !== me.id) {
+        attackWith(gameState.sourceId!, player.id, fieldCard.instanceId);
+        dispatch({ type: 'CLEAR_TARGETING' });
+      }
+      return;
     }
 
     if (gameState.phase === 'combat' && player.id === me.id && !fieldCard.tapped) {
-       dispatch({ type: 'SET_TARGETING', payload: { mode: 'attack', sourceId: fieldCard.instanceId, pendingAction: null } });
+      dispatch({ type: 'SET_TARGETING', payload: { mode: 'attack', sourceId: fieldCard.instanceId, pendingAction: null } });
     }
   };
 
   const handleHeroClick = (player: Player) => {
     if (!isMyTurn) return;
     if (gameState.targetingMode === 'spell') {
-       playCard(gameState.sourceId!, player.id.toString());
-       dispatch({ type: 'CLEAR_TARGETING' });
-       return;
+      playCard(gameState.sourceId!, player.id.toString());
+      dispatch({ type: 'CLEAR_TARGETING' });
+      return;
     }
     if (gameState.targetingMode === 'attack' && player.id !== me.id) {
-       attackWith(gameState.sourceId!, player.id);
-       dispatch({ type: 'CLEAR_TARGETING' });
-       return;
+      attackWith(gameState.sourceId!, player.id);
+      dispatch({ type: 'CLEAR_TARGETING' });
+      return;
     }
   };
 
-  const handleInventoryClick = (item: { instanceId: string; effectKey?: string; type?: string }) => {
+  const handleInventoryClick = (item: { instanceId: string; effectKey?: string }) => {
     if (!isMyTurn || gameState.phase !== 'main') return;
-    if (item.effectKey === 'ironheart') return; // passive
+    if (item.effectKey === 'ironheart') return;
     useInventoryItem(item.instanceId);
   };
 
-  const renderAetherCrystals = (current: number, max: number) => {
-    const crystals = [];
-    for (let i = 0; i < max; i++) {
-      crystals.push(
-        <div
-          key={i}
-          className={`w-2.5 h-2.5 transform rotate-45 border ${i < current ? 'bg-primary border-white shadow-[0_0_4px_rgba(30,144,255,0.8)]' : 'bg-transparent border-primary/30'}`}
-        />
-      );
-    }
-    return <div className="flex flex-wrap gap-1 justify-center max-w-[80px]">{crystals}</div>;
-  };
-
-  // ── Shop item helpers ─────────────────────────────────────────────────────
+  // ── Shop helpers ──────────────────────────────────────────────────────
   const isOwnedItem = (item: ShopItemTemplate): boolean => {
-    if (item.stackable) return false;
-    if (item.type === 'card') return false;
-    const alreadyInInv = me.inventory.some(i => i.itemId === item.id);
-    const alreadyPerk = item.effectKey ? me.perks.includes(item.effectKey) : false;
-    const alreadyStat = item.effectKey ? me.statBuffs.includes(item.effectKey) : false;
-    return alreadyInInv || alreadyPerk || alreadyStat;
+    if (item.stackable || item.type === 'card') return false;
+    return (
+      me.inventory.some(i => i.itemId === item.id) ||
+      (item.effectKey ? me.perks.includes(item.effectKey) : false) ||
+      (item.effectKey ? me.statBuffs.includes(item.effectKey) : false)
+    );
   };
 
-  const visibleShopItems = SHOP_ITEMS.filter(i => {
-    const matchesTab = i.type === TAB_TYPE_MAP[shopTab];
-    const inRotation = shopRotationIds.includes(i.id);
-    return matchesTab && inRotation;
-  });
+  const visibleShopItems = SHOP_ITEMS.filter(i =>
+    i.type === TAB_TYPE_MAP[shopTab] && shopRotationIds.includes(i.id)
+  );
 
-  const formatTime = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
+  const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+
+  // ── Targeting mode label ────────────────────────────────────────────────
+  const targetingLabel: Record<string, string> = {
+    spell:       'Select a target for your spell',
+    attack:      'Select an enemy to attack',
+    enchantment: 'Select your creature to enchant',
+    item:        'Select a target for this item',
   };
 
   return (
-    <div className="h-[100dvh] w-full bg-kodi-gradient text-foreground flex flex-col overflow-hidden relative font-sans select-none">
+    <div className="h-[100dvh] w-full bg-kodi-gradient text-foreground flex flex-col overflow-hidden relative select-none"
+         style={{ fontFamily: "'IM Fell English', Georgia, serif" }}>
 
-      {/* ── Animated Battlefield ──────────────────────────────────────────── */}
+      {/* ── Ambient particles ────────────────────────────────────────────── */}
       {animatedBattlefield && (
         <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(30,144,255,0.08)_0%,transparent_70%)] animate-[slow-rotate_30s_linear_infinite]" />
-          {particles.map((p, i) => (
-            <div
-              key={i}
-              className="absolute w-1 h-1 bg-primary rounded-full shadow-[0_0_5px_#1e90ff]"
-              style={{
-                left: p.left,
-                top: '100%',
-                animation: `float ${p.duration}s linear infinite`,
-                animationDelay: `${p.delay}s`,
-              }}
-            />
+          {PARTICLES.map((p, i) => (
+            <div key={i}
+                 className="absolute w-0.5 h-0.5 rounded-full"
+                 style={{
+                   left: p.left, top: '100%',
+                   background: i % 3 === 0 ? '#c9a227' : i % 3 === 1 ? 'rgba(0,140,220,0.7)' : 'rgba(180,80,80,0.6)',
+                   boxShadow: `0 0 4px currentColor`,
+                   animation: `float ${p.dur}s linear infinite`,
+                   animationDelay: `${p.delay}s`,
+                 }} />
           ))}
         </div>
       )}
 
-      {/* ── Top HUD ───────────────────────────────────────────────────────── */}
-      <div className="h-12 bg-[#0a0e14]/95 border-b-2 border-amber-900/40 flex items-center justify-between px-4 z-20 shadow-[0_2px_20px_rgba(0,0,0,0.6)] backdrop-blur-sm">
-        {/* Phase indicators */}
-        <div className="flex items-center gap-0.5 bg-black/60 p-0.5 rounded-sm border border-amber-900/20">
-          {['draw', 'buy', 'main', 'combat', 'end'].map(p => (
-            <div
-              key={p}
-              className={`px-2 py-0.5 text-[10px] font-display font-bold uppercase tracking-wider border border-transparent transition-all
-                ${gameState.phase === p ? 'bg-primary text-white border-primary/50 shadow-[0_0_8px_rgba(30,144,255,0.4)]' : 'text-muted-foreground/60'}
-              `}
-            >
+      {/* ── Top HUD ─────────────────────────────────────────────────────── */}
+      <div className="h-14 z-20 flex items-center justify-between px-4 shrink-0 relative"
+           style={{
+             background: 'linear-gradient(180deg, #100b06 0%, #0d0906 100%)',
+             borderBottom: '2px solid #3a2800',
+             boxShadow: '0 2px 20px rgba(0,0,0,0.8), 0 1px 0 rgba(201,162,39,0.15)',
+           }}>
+
+        {/* Left ornament */}
+        <div className="absolute left-0 top-0 w-24 h-full pointer-events-none"
+             style={{ background: 'linear-gradient(90deg, rgba(201,162,39,0.04), transparent)' }} />
+
+        {/* Phase pips */}
+        <div className="flex items-center gap-0.5 relative">
+          <div className="absolute -left-3 top-1/2 -translate-y-1/2 text-amber-800/40 text-xs select-none">❧</div>
+          {['draw','buy','main','combat','end'].map(p => (
+            <div key={p} className={`phase-pip ${gameState.phase === p ? 'active' : ''}`}>
               {p}
             </div>
           ))}
         </div>
 
-        {/* Turn + timer */}
-        <div className="flex flex-col items-center">
-          <span className="font-display text-lg font-bold tracking-widest text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.4)]">
-            TURN {gameState.turn}
-          </span>
-          <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-wider">
+        {/* Center: Turn + player name */}
+        <div className="flex flex-col items-center absolute left-1/2 -translate-x-1/2">
+          <div className="text-[10px] font-display uppercase tracking-[0.4em] text-amber-700/70 leading-none">— Turn —</div>
+          <div className="text-2xl font-display font-black leading-tight"
+               style={{ color: '#c9a227', textShadow: '0 0 12px rgba(201,162,39,0.4)' }}>
+            {gameState.turn}
+          </div>
+          <div className="text-[9px] font-display uppercase tracking-widest leading-none"
+               style={{ color: isMyTurn ? '#c9a227' : '#7a6040' }}>
             {isMyTurn ? (
-              <span className="text-primary">
-                YOUR TURN
+              <span>
+                Your Turn
                 {gameState.phase === 'buy' && buyPhaseTimeLeft !== null && (
-                  <span className={`ml-1 font-mono ${buyPhaseTimeLeft <= 10 ? 'text-red-400 animate-pulse' : 'text-primary'}`}>
+                  <span className={`ml-1 font-mono ${buyPhaseTimeLeft <= 10 ? 'text-red-400 animate-pulse' : ''}`}>
                     [{buyPhaseTimeLeft}s]
                   </span>
                 )}
               </span>
             ) : `${currentPlayer.name}'s Turn`}
-          </span>
+          </div>
         </div>
 
-        {/* Player stats + buttons */}
+        {/* Right: gold + inventory */}
         <div className="flex items-center gap-3">
-          <div className="flex flex-col items-end">
-            <span className="font-bold text-xs text-foreground">{me.name}</span>
-            <div className="flex items-center gap-1 text-amber-400 font-bold text-xs">
-              <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_4px_#f5c518]" />
+          <div className="flex flex-col items-end gap-0">
+            <span className="text-[10px] font-display text-amber-600 uppercase tracking-wider">{me.name}</span>
+            <div className="flex items-center gap-1 text-sm font-display font-bold"
+                 style={{ color: '#c9a227', textShadow: '0 0 6px rgba(201,162,39,0.5)' }}>
+              <span className="w-2.5 h-2.5 rounded-full"
+                    style={{ background: '#c9a227', boxShadow: '0 0 5px rgba(201,162,39,0.8)' }} />
               {me.gold.toLocaleString()}g
             </div>
           </div>
+
+          {/* Inventory button */}
           <button
             onClick={() => dispatch({ type: 'TOGGLE_INVENTORY', payload: !gameState.inventoryOpen })}
-            className={`p-1.5 border transition-colors ${gameState.inventoryOpen ? 'bg-primary/20 border-primary text-primary' : 'bg-secondary border-border hover:border-primary text-muted-foreground hover:text-primary'}`}
+            className="btn-fantasy p-1.5 text-xs"
+            style={{ minWidth: 32 }}
           >
-            <Package size={16} />
+            <Package size={14} />
           </button>
         </div>
+
+        {/* Right ornament */}
+        <div className="absolute right-0 top-0 w-24 h-full pointer-events-none"
+             style={{ background: 'linear-gradient(270deg, rgba(201,162,39,0.04), transparent)' }} />
       </div>
 
-      {/* ── Main Board ────────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col relative z-10 overflow-hidden min-h-0">
+      {/* ── Arena ───────────────────────────────────────────────────────── */}
+      <div className="flex-1 relative overflow-hidden min-h-0 z-10">
 
-        {/* Fantasy divider line */}
-        <div className="absolute inset-x-0 top-1/2 h-px z-0 bg-gradient-to-r from-transparent via-amber-800/30 to-transparent pointer-events-none" />
-        <div className="absolute inset-x-0 top-1/2 flex justify-center z-0 pointer-events-none -translate-y-1/2">
-          <div className="text-amber-700/30 font-display text-xs tracking-[0.5em] uppercase select-none">⬥ vs ⬥</div>
-        </div>
+        {/* Stone texture overlay */}
+        <div className="absolute inset-0 pointer-events-none"
+             style={{
+               background: `
+                 repeating-linear-gradient(0deg, transparent, transparent 32px, rgba(201,162,39,0.015) 32px, rgba(201,162,39,0.015) 33px),
+                 repeating-linear-gradient(90deg, transparent, transparent 32px, rgba(201,162,39,0.015) 32px, rgba(201,162,39,0.015) 33px)
+               `,
+             }} />
 
-        {/* Enemy Zone */}
-        <div className="flex-1 flex flex-col bg-[#130808]/40 border-b border-red-900/20 overflow-y-auto min-h-0">
-          {enemies.map((enemy) => {
-            const isHeroHit = combatAnim?.targetId === enemy.id.toString();
-            return (
-              <div key={enemy.id} className="flex-1 flex min-h-[140px] relative p-1">
-                {/* Enemy portrait */}
-                <div
-                  onClick={() => handleHeroClick(enemy)}
-                  className={`w-36 p-2 flex flex-col items-center justify-center gap-1.5 cursor-pointer relative z-10 transition-all
-                    ${gameState.targetingMode === 'attack' || gameState.targetingMode === 'spell' ? 'hover:scale-105 drop-shadow-[0_0_12px_rgba(220,38,38,0.5)]' : ''}
-                  `}
-                >
-                  <div
-                    className={`relative w-16 h-16 bg-black flex items-center justify-center border-2 transition-colors
-                      ${isHeroHit ? 'border-red-500 animate-[flash-red_0.3s_ease]' : 'border-red-900/50'}
-                    `}
-                    style={{ clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)' }}
-                  >
-                    <div className="absolute inset-0 bg-red-900/20" />
-                    <Activity size={28} className="text-red-500/80 relative z-10" />
-                  </div>
-                  <div className="text-xs font-display font-bold text-center text-red-200 truncate w-full text-center">{enemy.name}</div>
-                  <div className="w-full bg-[#0a0a0a] h-4 border border-[#333] relative overflow-hidden">
-                    <div
-                      className="absolute top-0 left-0 h-full bg-gradient-to-b from-red-500 to-red-800 transition-all duration-300"
-                      style={{ width: `${(enemy.hp / enemy.maxHp) * 100}%` }}
-                    >
-                      <div className="absolute top-0 left-0 w-full h-0.5 bg-white/20" />
-                    </div>
-                    <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-white z-10">{enemy.hp}/{enemy.maxHp}</span>
-                  </div>
-                  <AnimatePresence>
-                    {isHeroHit && (
-                      <motion.div
-                        initial={{ opacity: 1, y: 0 }} animate={{ opacity: 0, y: -30 }} transition={{ duration: 0.6 }}
-                        className="absolute top-0 text-3xl font-display font-bold text-red-500 drop-shadow-[0_0_6px_black] z-50 pointer-events-none"
-                      >
-                        -{combatAnim!.damage}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
+        {/* Cardinal divider lines (decorative) */}
+        <div className="absolute inset-x-0 top-1/2 h-px pointer-events-none"
+             style={{ background: 'linear-gradient(90deg, transparent, rgba(74,48,0,0.25) 20%, rgba(74,48,0,0.25) 80%, transparent)' }} />
+        <div className="absolute inset-y-0 left-1/2 w-px pointer-events-none"
+             style={{ background: 'linear-gradient(180deg, transparent, rgba(74,48,0,0.25) 20%, rgba(74,48,0,0.25) 80%, transparent)' }} />
 
-                {/* Enemy field */}
-                <div className={`flex-1 p-2 flex items-center gap-2 overflow-x-auto`}>
-                  {enemy.field.map(card => (
-                    <FieldCardUI
-                      key={card.instanceId}
-                      card={card}
-                      tapped={card.tapped}
-                      playable={gameState.targetingMode !== 'none'}
-                      onClick={() => handleFieldClick(enemy, card)}
-                      combatAnim={combatAnim}
-                    />
-                  ))}
-                  {enemy.field.length === 0 && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10">
-                      <span className="font-display text-3xl font-bold tracking-widest text-red-500">ENEMY FIELD</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        {/* Water pool center */}
+        <WaterCenter animated={animatedBattlefield} />
 
-        {/* Player Zone */}
-        <div className={`flex-1 flex bg-[#05090f]/80 relative p-1 min-h-0
-          ${isMyTurn && gameState.phase === 'main' ? 'shadow-[inset_0_0_30px_rgba(30,144,255,0.07)]' : ''}
-        `}>
-          {/* Fantasy corner ornaments */}
-          <div className="absolute top-0 left-0 w-6 h-6 border-t border-l border-amber-700/40 pointer-events-none" />
-          <div className="absolute top-0 right-0 w-6 h-6 border-t border-r border-amber-700/40 pointer-events-none" />
-          <div className="absolute bottom-0 left-0 w-6 h-6 border-b border-l border-amber-700/40 pointer-events-none" />
-          <div className="absolute bottom-0 right-0 w-6 h-6 border-b border-r border-amber-700/40 pointer-events-none" />
+        {/* Player zones */}
+        {allPlayers.map((player, idx) => {
+          const posId = positions[idx] ?? 'right';
+          return (
+            <PlayerZone
+              key={player.id}
+              player={player}
+              posId={posId}
+              isMe={player.isHuman}
+              targetingMode={gameState.targetingMode}
+              onHeroClick={() => handleHeroClick(player)}
+              onCardClick={(card) => handleFieldClick(player, card)}
+              combatAnim={combatAnim}
+              aether={player.isHuman ? me.aether : undefined}
+              maxAether={player.isHuman ? me.maxAether : undefined}
+            />
+          );
+        })}
 
-          {/* Targeting overlay */}
+        {/* ── Targeting notification toast (non-blocking) ──────────────── */}
+        <AnimatePresence>
           {gameState.targetingMode !== 'none' && (
-            <div className="absolute inset-0 bg-black/60 z-20 flex items-center justify-center pointer-events-none backdrop-blur-sm">
-              <div className="bg-card border-2 border-primary px-6 py-3 text-primary font-display text-xl font-bold tracking-widest uppercase animate-pulse shadow-[0_0_20px_rgba(30,144,255,0.5)]">
-                Select Target for {gameState.targetingMode}
-              </div>
-            </div>
-          )}
-
-          {/* Player portrait */}
-          <div
-            onClick={() => handleHeroClick(me)}
-            className={`w-36 p-2 flex flex-col items-center justify-center gap-1.5 relative z-10 transition-all
-              ${gameState.targetingMode === 'spell' ? 'hover:scale-105 drop-shadow-[0_0_12px_rgba(30,144,255,0.5)] cursor-pointer' : ''}
-            `}
-          >
-            <div
-              className={`relative w-16 h-16 bg-black flex items-center justify-center border-2 transition-colors
-                ${combatAnim?.targetId === me.id.toString() ? 'border-red-500 animate-[flash-red_0.3s_ease]' : 'border-primary/70'}
-              `}
-              style={{ clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)' }}
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="absolute top-2 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2 pointer-events-auto"
+              style={{
+                background: 'linear-gradient(180deg, rgba(30,18,4,0.97) 0%, rgba(20,12,2,0.97) 100%)',
+                border: '1px solid rgba(201,162,39,0.5)',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.8), 0 0 12px rgba(201,162,39,0.15)',
+              }}
             >
-              <div className="absolute inset-0 bg-primary/10" />
-              <User size={28} className="text-primary relative z-10" />
-            </div>
-            <div className="text-xs font-display font-bold text-center text-primary drop-shadow-md truncate w-full text-center">{me.name}</div>
-            <div className="w-full bg-[#0a0a0a] h-4 border border-[#333] relative overflow-hidden">
-              <div
-                className="absolute top-0 left-0 h-full bg-gradient-to-b from-green-500 to-green-800 transition-all duration-300"
-                style={{ width: `${(me.hp / me.maxHp) * 100}%` }}
+              {/* Targeting cursor icon */}
+              <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#c9a227', boxShadow: '0 0 6px rgba(201,162,39,0.8)' }} />
+              <span className="font-display text-xs font-bold uppercase tracking-widest" style={{ color: '#c9a227' }}>
+                {targetingLabel[gameState.targetingMode] ?? 'Select target'}
+              </span>
+              <button
+                onClick={() => dispatch({ type: 'CLEAR_TARGETING' })}
+                className="ml-2 text-[10px] font-display uppercase tracking-widest px-2 py-0.5 border transition-colors hover:opacity-80"
+                style={{ borderColor: 'rgba(180,50,50,0.6)', color: '#e05050', background: 'rgba(60,10,10,0.5)' }}
               >
-                <div className="absolute top-0 left-0 w-full h-0.5 bg-white/20" />
-              </div>
-              <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-white z-10">{me.hp}/{me.maxHp}</span>
-            </div>
-            <div className="w-full">
-              <div className="text-[8px] font-bold text-primary mb-0.5 uppercase tracking-widest text-center">Aether</div>
-              {renderAetherCrystals(me.aether, me.maxAether)}
-            </div>
-            <AnimatePresence>
-              {combatAnim?.targetId === me.id.toString() && (
-                <motion.div
-                  initial={{ opacity: 1, y: 0 }} animate={{ opacity: 0, y: -30 }} transition={{ duration: 0.6 }}
-                  className="absolute top-0 text-3xl font-display font-bold text-red-500 drop-shadow-[0_0_6px_black] z-50 pointer-events-none"
-                >
-                  -{combatAnim.damage}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+                Cancel
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-          {/* Player field */}
-          <div className="flex-1 p-2 flex items-center gap-2 overflow-x-auto relative z-10">
-            {me.field.map(card => {
-              const canAttack = isMyTurn && gameState.phase === 'combat' && !card.tapped && !card.hasAttackedThisTurn;
-              return (
-                <FieldCardUI
-                  key={card.instanceId}
-                  card={card}
-                  tapped={card.tapped}
-                  playable={canAttack || gameState.targetingMode !== 'none'}
-                  onClick={() => handleFieldClick(me, card)}
-                  combatAnim={combatAnim}
-                />
-              );
-            })}
-            {me.field.length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10">
-                <span className="font-display text-3xl font-bold tracking-widest text-primary">YOUR FIELD</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Announcement Banner */}
+        {/* ── Announcement banner ──────────────────────────────────────── */}
         <AnimatePresence>
           {announcement && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.1 }}
-              className="absolute inset-x-0 top-1/3 z-50 flex justify-center pointer-events-none"
+              initial={{ opacity: 0, scale: 0.8, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 1.1, y: -10 }}
+              className="absolute inset-x-0 flex justify-center z-50 pointer-events-none"
+              style={{ top: '42%' }}
             >
-              <div className="bg-black/80 border-y-4 border-amber-700/60 px-10 py-4 shadow-[0_0_40px_rgba(0,0,0,0.8)] backdrop-blur-md">
-                <h2 className="text-4xl font-display font-bold text-amber-300 tracking-widest drop-shadow-[0_0_8px_rgba(245,197,24,0.6)]">
+              <div className="px-10 py-4 text-center relative"
+                   style={{
+                     background: 'linear-gradient(180deg, rgba(20,10,0,0.95) 0%, rgba(12,6,0,0.95) 100%)',
+                     borderTop: '3px solid rgba(201,162,39,0.7)',
+                     borderBottom: '3px solid rgba(201,162,39,0.7)',
+                     boxShadow: '0 0 50px rgba(0,0,0,0.9), 0 0 20px rgba(201,162,39,0.15)',
+                   }}>
+                {/* ornament */}
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-700/50 font-display text-lg">❧</div>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-amber-700/50 font-display text-lg">❧</div>
+                <h2 className="text-4xl font-display font-black tracking-widest"
+                    style={{ color: '#c9a227', textShadow: '0 0 20px rgba(201,162,39,0.6), 0 2px 4px rgba(0,0,0,0.9)' }}>
                   {announcement}
                 </h2>
               </div>
@@ -574,55 +844,64 @@ export default function GamePage() {
         </AnimatePresence>
       </div>
 
-      {/* ── Action + Hand Bar ─────────────────────────────────────────────── */}
-      <div className="h-56 bg-[#070b10]/95 border-t-2 border-amber-900/30 flex flex-col z-30 relative shadow-[0_-8px_24px_rgba(0,0,0,0.5)]">
+      {/* ── Action + Hand Bar ─────────────────────────────────────────── */}
+      <div className="shrink-0 z-20 relative flex flex-col"
+           style={{
+             height: 220,
+             background: 'linear-gradient(0deg, #080504 0%, #0d0906 100%)',
+             borderTop: '2px solid #3a2800',
+             boxShadow: '0 -4px 24px rgba(0,0,0,0.7), 0 -1px 0 rgba(201,162,39,0.12)',
+           }}>
 
-        {/* Action buttons */}
-        <div className="absolute -top-5 left-1/2 -translate-x-1/2 flex items-center gap-2">
+        {/* Top ornament strip */}
+        <div className="h-px w-full" style={{ background: 'linear-gradient(90deg, transparent, rgba(201,162,39,0.35) 20%, rgba(201,162,39,0.35) 80%, transparent)' }} />
+
+        {/* Action buttons row */}
+        <div className="h-9 flex items-center justify-center gap-2 px-4 shrink-0">
           {gameState.targetingMode !== 'none' && (
             <button
               onClick={() => dispatch({ type: 'CLEAR_TARGETING' })}
-              className="px-4 py-1.5 bg-destructive border border-red-400 text-white font-bold tracking-widest text-xs shadow-lg hover:bg-red-700 transition-colors"
+              className="btn-fantasy px-3 py-1 text-[10px]"
+              style={{ borderColor: 'rgba(180,50,50,0.7)', color: '#e05050' }}
             >
-              CANCEL TARGET
+              ✕ Cancel Target
             </button>
           )}
           {isMyTurn && gameState.phase === 'buy' && (
             <button
               onClick={() => dispatch({ type: 'TOGGLE_SHOP', payload: !gameState.shopOpen })}
-              className="px-4 py-1.5 bg-[#1a2333] border border-amber-700/60 text-amber-400 font-bold tracking-widest text-xs shadow-lg hover:bg-amber-900/20 transition-colors flex items-center gap-1.5"
+              className="btn-fantasy px-3 py-1 text-[10px] flex items-center gap-1.5"
             >
-              <ShoppingCart size={13} /> SHOP
+              <ShoppingCart size={11} />
+              The Shop
               {buyPhaseTimeLeft !== null && (
-                <span className={`font-mono text-xs ml-1 ${buyPhaseTimeLeft <= 10 ? 'text-red-400' : 'text-amber-400'}`}>
-                  {buyPhaseTimeLeft}s
+                <span className={`font-mono text-[10px] ${buyPhaseTimeLeft <= 10 ? 'text-red-400 animate-pulse' : ''}`}>
+                  [{buyPhaseTimeLeft}s]
                 </span>
               )}
             </button>
           )}
-          {isMyTurn && ['buy', 'main', 'combat'].includes(gameState.phase) && (
+          {isMyTurn && ['buy','main','combat'].includes(gameState.phase) && (
             <button
               onClick={endPhase}
-              className="px-6 py-2 bg-primary border border-white/30 text-white font-display text-sm font-bold tracking-widest shadow-[0_0_12px_rgba(30,144,255,0.4)] hover:shadow-[0_0_20px_rgba(30,144,255,0.7)] transition-all"
+              className="btn-fantasy btn-fantasy-primary px-5 py-1 text-[11px]"
             >
-              END {gameState.phase.toUpperCase()} →
+              End {gameState.phase} ›
             </button>
           )}
         </div>
 
-        {/* Hand */}
-        <div className="w-full flex-1 overflow-x-auto overflow-y-visible mt-2">
-          <div className="flex justify-center items-end min-w-max h-full px-8 pb-2 pt-10 gap-1.5">
+        {/* Hand area */}
+        <div className="flex-1 overflow-x-auto overflow-y-visible min-h-0">
+          <div className="flex justify-center items-end min-w-max h-full px-6 pb-2 pt-2 gap-1">
             {me.hand.map((card, index) => {
               const offset = index - (me.hand.length - 1) / 2;
               const rotation = me.hand.length > 5 ? offset * 3 : 0;
-              const translateY = me.hand.length > 5 ? Math.abs(offset) * 3 : 0;
+              const translateY = me.hand.length > 5 ? Math.abs(offset) * 4 : 0;
               return (
-                <div
-                  key={card.instanceId}
-                  style={{ transform: `rotate(${rotation}deg) translateY(${translateY}px)` }}
-                  className="transition-transform duration-300"
-                >
+                <div key={card.instanceId}
+                     style={{ transform: `rotate(${rotation}deg) translateY(${translateY}px)` }}
+                     className="transition-transform duration-200">
                   <HandCardUI
                     card={card}
                     playable={isMyTurn && gameState.phase === 'main' && me.aether >= card.cost}
@@ -632,122 +911,149 @@ export default function GamePage() {
               );
             })}
             {me.hand.length === 0 && (
-              <div className="w-full flex justify-center text-muted-foreground/20 font-display text-xl tracking-widest mb-8">
-                HAND EMPTY
+              <div className="font-display text-lg tracking-[0.4em] uppercase select-none mb-4"
+                   style={{ color: 'rgba(74,48,0,0.4)' }}>
+                — Hand Empty —
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* ── Game Log ──────────────────────────────────────────────────────── */}
-      <div className={`absolute bottom-56 right-3 z-40 flex flex-col items-end transition-transform duration-300 ${logOpen ? 'translate-x-0' : 'translate-x-[calc(100%-36px)]'}`}>
+      {/* ── Game Log ────────────────────────────────────────────────────── */}
+      <div className={`absolute bottom-56 right-3 z-40 flex flex-col items-end transition-transform duration-300 ${logOpen ? 'translate-x-0' : 'translate-x-[calc(100%-36px)]'}`}
+           style={{ bottom: 230 }}>
         <div className="flex items-start">
           <button
             onClick={() => { sounds.play('uiClick'); setLogOpen(!logOpen); }}
-            className="w-9 h-9 bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-white"
+            className="w-9 h-9 btn-fantasy flex items-center justify-center"
           >
-            <ScrollText size={16} />
+            <ScrollText size={15} />
           </button>
-          <div className="w-56 bg-black/85 border border-border p-2 backdrop-blur-sm max-h-52 overflow-y-auto flex flex-col gap-1.5">
-            <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest border-b border-border/50 pb-1 mb-0.5">Game Log</h4>
+          <div className="w-56 max-h-52 overflow-y-auto flex flex-col gap-1 p-2"
+               style={{ background: 'rgba(8,5,2,0.93)', border: '1px solid #3a2800', borderLeft: 'none' }}>
+            <h4 className="text-[9px] font-display uppercase tracking-widest pb-1 mb-0.5"
+                style={{ borderBottom: '1px solid rgba(74,48,0,0.4)', color: '#7a6040' }}>
+              Chronicle
+            </h4>
             {gameState.log.map(entry => (
-              <div key={entry.id} className="text-[10px] flex gap-1.5 items-start leading-tight">
+              <div key={entry.id} className="text-[9px] flex gap-1.5 items-start leading-tight">
                 <span className={`w-1.5 h-1.5 rounded-full mt-0.5 shrink-0
-                  ${entry.type === 'damage' ? 'bg-red-500' : ''}
-                  ${entry.type === 'card' ? 'bg-primary' : ''}
-                  ${entry.type === 'gold' ? 'bg-amber-400' : ''}
-                  ${entry.type === 'other' ? 'bg-gray-500' : ''}
+                  ${entry.type==='damage' ? 'bg-red-600' : ''}
+                  ${entry.type==='card'   ? 'bg-amber-500' : ''}
+                  ${entry.type==='gold'   ? 'bg-yellow-500' : ''}
+                  ${entry.type==='other'  ? 'bg-stone-500' : ''}
                 `} />
-                <span className="text-gray-300">{entry.msg}</span>
+                <span style={{ color: '#a89060' }}>{entry.msg}</span>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* ── Achievement Toast ─────────────────────────────────────────────── */}
+      {/* ── Achievement Toast ────────────────────────────────────────────── */}
       <AnimatePresence>
         {achievementToast && (
           <motion.div
-            initial={{ opacity: 0, y: 40, x: 40 }}
-            animate={{ opacity: 1, y: 0, x: 0 }}
-            exit={{ opacity: 0, y: 40, x: 40 }}
-            className="absolute bottom-60 left-3 z-50 bg-card border-2 border-amber-400/60 p-3 flex items-center gap-3 shadow-[0_0_16px_rgba(245,197,24,0.3)]"
+            initial={{ opacity: 0, x: -40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }}
+            className="absolute left-3 z-50 flex items-center gap-3 p-3"
+            style={{
+              bottom: 240,
+              background: 'linear-gradient(135deg, rgba(20,12,2,0.97), rgba(14,8,2,0.97))',
+              border: '2px solid rgba(201,162,39,0.5)',
+              boxShadow: '0 0 20px rgba(201,162,39,0.2)',
+            }}
           >
-            <div className="w-8 h-8 bg-amber-900/30 flex items-center justify-center text-amber-400 border border-amber-400/50">
-              <Info size={18} />
+            <div className="w-8 h-8 flex items-center justify-center border"
+                 style={{ background: 'rgba(201,162,39,0.1)', borderColor: 'rgba(201,162,39,0.4)', color: '#c9a227' }}>
+              <Info size={16} />
             </div>
             <div>
-              <div className="text-amber-400 font-bold text-[10px] uppercase tracking-widest">Achievement Unlocked</div>
-              <div className="text-white font-display text-sm font-bold">{achievementToast.split(': ')[1]}</div>
+              <div className="text-[9px] font-display uppercase tracking-widest" style={{ color: '#c9a227' }}>
+                Achievement Unlocked
+              </div>
+              <div className="text-sm font-display font-bold" style={{ color: '#f0d888' }}>
+                {achievementToast.split(': ')[1]}
+              </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ── Shop Panel ────────────────────────────────────────────────────── */}
+      {/* ── Shop Panel ──────────────────────────────────────────────────── */}
       <AnimatePresence>
         {gameState.shopOpen && (
           <motion.div
             initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-            transition={{ type: 'tween', duration: 0.25 }}
-            className="absolute top-12 right-0 bottom-56 w-72 bg-[#0d1117]/97 border-l-2 border-amber-800/40 flex flex-col shadow-2xl z-40"
+            transition={{ type: 'tween', duration: 0.22 }}
+            className="absolute top-14 right-0 bottom-0 w-72 flex flex-col z-40"
+            style={{
+              background: 'linear-gradient(180deg, #0d0906 0%, #090604 100%)',
+              borderLeft: '2px solid #3a2800',
+              boxShadow: '-8px 0 24px rgba(0,0,0,0.8)',
+              bottom: 220,
+            }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-3 py-2 border-b border-amber-800/30 bg-[#090c12]">
+            <div className="flex items-center justify-between px-3 py-2 shrink-0"
+                 style={{ background: 'linear-gradient(180deg, #110d07, #0d0906)', borderBottom: '1px solid #3a2800' }}>
               <div className="flex items-center gap-2">
-                <ShoppingCart size={16} className="text-amber-400" />
-                <h3 className="font-display text-base font-bold text-amber-300">THE SHOP</h3>
+                <ShoppingCart size={14} style={{ color: '#c9a227' }} />
+                <h3 className="font-display text-sm font-bold" style={{ color: '#c9a227', letterSpacing: '0.15em' }}>
+                  The Arcanist's Market
+                </h3>
               </div>
-              <div className="flex items-center gap-3">
-                {/* Rotation timer */}
-                <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                  <RefreshCw size={10} />
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 text-[9px]" style={{ color: '#7a6040' }}>
+                  <RefreshCw size={9} />
                   <span className={shopRotationTimeLeft <= 30 ? 'text-amber-400 animate-pulse' : ''}>
                     {formatTime(shopRotationTimeLeft)}
                   </span>
                 </div>
-                <button onClick={() => dispatch({ type: 'TOGGLE_SHOP', payload: false })} className="text-muted-foreground hover:text-white text-sm">✕</button>
+                <button onClick={() => dispatch({ type: 'TOGGLE_SHOP', payload: false })}
+                        className="text-sm hover:opacity-70 transition-opacity"
+                        style={{ color: '#7a6040' }}>✕</button>
               </div>
             </div>
 
-            {/* Buy phase timer bar */}
+            {/* Buy phase progress bar */}
             {buyPhaseTimeLeft !== null && (
-              <div className="h-1 bg-border/30 relative">
-                <div
-                  className={`h-full transition-all duration-1000 ${buyPhaseTimeLeft <= 10 ? 'bg-red-500' : 'bg-primary'}`}
-                  style={{ width: `${(buyPhaseTimeLeft / 30) * 100}%` }}
-                />
+              <div className="h-0.5 shrink-0" style={{ background: 'rgba(74,48,0,0.3)' }}>
+                <div className="h-full transition-all duration-1000"
+                     style={{
+                       width: `${(buyPhaseTimeLeft / 30) * 100}%`,
+                       background: buyPhaseTimeLeft <= 10
+                         ? 'linear-gradient(90deg, #dc2626, #ef4444)'
+                         : 'linear-gradient(90deg, #92701a, #c9a227)',
+                     }} />
               </div>
             )}
 
             {/* Tabs */}
-            <div className="flex border-b border-amber-800/20 bg-[#090c12]">
-              {(['items', 'stat', 'perks', 'cards'] as const).map(tab => (
+            <div className="flex shrink-0" style={{ borderBottom: '1px solid #2a1e0a' }}>
+              {(['items','stat','perks','cards'] as const).map(tab => (
                 <button
                   key={tab}
                   onClick={() => { sounds.play('uiClick'); setShopTab(tab); }}
-                  className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors border-b-2
-                    ${shopTab === tab ? 'bg-amber-900/20 text-amber-300 border-amber-600' : 'text-muted-foreground border-transparent hover:bg-secondary/50'}
-                  `}
+                  className="flex-1 py-1.5 text-[9px] font-display uppercase tracking-wider transition-all border-b-2"
+                  style={{
+                    borderColor: shopTab === tab ? '#c9a227' : 'transparent',
+                    background: shopTab === tab ? 'rgba(201,162,39,0.08)' : 'transparent',
+                    color: shopTab === tab ? '#c9a227' : '#5a4020',
+                  }}
                 >
                   {tab === 'stat' ? 'Stats' : tab}
                 </button>
               ))}
             </div>
 
-            {/* Rotation notice */}
-            <div className="px-3 py-1 bg-amber-900/10 border-b border-amber-800/20 flex items-center gap-1 text-[10px] text-amber-500/80">
-              <RefreshCw size={9} />
-              <span>Shop rotates in {formatTime(shopRotationTimeLeft)}</span>
-            </div>
-
-            {/* Items list */}
+            {/* Items */}
             <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-2">
               {visibleShopItems.length === 0 && (
-                <div className="text-center text-muted-foreground text-xs py-8 opacity-50">
-                  No items this rotation.<br />Next rotation in {formatTime(shopRotationTimeLeft)}.
+                <div className="text-center py-8 font-display text-xs italic"
+                     style={{ color: '#5a4020' }}>
+                  No wares this rotation.<br />
+                  Refreshes in {formatTime(shopRotationTimeLeft)}.
                 </div>
               )}
               {visibleShopItems.map(item => {
@@ -755,37 +1061,34 @@ export default function GamePage() {
                 const owned = isOwnedItem(item);
                 const disabled = !canAfford || owned || gameState.phase !== 'buy';
                 return (
-                  <div
-                    key={item.id}
-                    className={`border p-2 flex flex-col gap-1.5 relative group transition-colors
-                      ${owned ? 'border-amber-700/30 bg-amber-900/10 opacity-70' : canAfford ? 'border-border bg-background/60 hover:border-amber-700/50' : 'border-border/20 bg-background/30 opacity-50'}
-                    `}
-                  >
+                  <div key={item.id}
+                       className="flex flex-col gap-1.5 relative p-2"
+                       style={{
+                         background: owned ? 'rgba(74,48,0,0.08)' : canAfford ? 'rgba(20,14,6,0.6)' : 'rgba(12,8,4,0.4)',
+                         border: `1px solid ${owned ? 'rgba(201,162,39,0.25)' : canAfford ? 'rgba(74,48,0,0.5)' : 'rgba(40,28,10,0.3)'}`,
+                         opacity: canAfford || owned ? 1 : 0.5,
+                       }}>
                     <div className="flex justify-between items-start gap-2">
-                      <span className="font-bold text-xs text-foreground leading-tight">{item.name}</span>
+                      <span className="font-display font-bold text-xs leading-tight" style={{ color: '#d4b870' }}>
+                        {item.name}
+                      </span>
                       <div className="flex flex-col items-end shrink-0 gap-0.5">
-                        <span className="flex items-center gap-0.5 text-amber-400 text-xs font-bold bg-amber-900/30 px-1.5 py-0.5 border border-amber-800/40">
+                        <span className="text-xs font-display font-bold px-1.5 py-0.5"
+                              style={{ color: '#c9a227', background: 'rgba(74,48,0,0.4)', border: '1px solid rgba(74,48,0,0.5)' }}>
                           {item.cost.toLocaleString()}g
                         </span>
-                        {item.stackable && (
-                          <span className="text-[8px] text-emerald-400 font-bold">STACKABLE</span>
-                        )}
-                        {owned && (
-                          <span className="text-[8px] text-amber-500 font-bold">OWNED</span>
-                        )}
+                        {item.stackable && <span className="text-[7px] font-display" style={{ color: '#5db860' }}>STACKABLE</span>}
+                        {owned && <span className="text-[7px] font-display" style={{ color: '#c9a227' }}>OWNED</span>}
                       </div>
                     </div>
-                    <p className="text-[10px] text-muted-foreground leading-tight">{item.description}</p>
+                    <p className="text-[9px] leading-tight italic" style={{ color: '#8a7050' }}>{item.description}</p>
                     <button
                       disabled={disabled}
                       onClick={() => buyItem(item.id)}
-                      className={`py-1 text-[10px] font-bold border transition-colors
-                        ${owned ? 'bg-amber-900/20 text-amber-600 border-amber-800/30 cursor-not-allowed' :
-                          !disabled ? 'bg-secondary hover:bg-amber-900/30 text-white border-border hover:border-amber-700 cursor-pointer' :
-                          'bg-background text-muted-foreground border-border cursor-not-allowed'}
-                      `}
+                      className="btn-fantasy py-1 text-[9px] w-full"
+                      style={owned ? { borderColor: 'rgba(74,48,0,0.3)', color: '#5a4020', cursor: 'not-allowed' } : {}}
                     >
-                      {owned ? 'ALREADY OWNED' : gameState.phase !== 'buy' ? 'BUY PHASE ONLY' : !canAfford ? 'NOT ENOUGH GOLD' : 'PURCHASE'}
+                      {owned ? 'Already Owned' : gameState.phase !== 'buy' ? 'Buy Phase Only' : !canAfford ? 'Insufficient Gold' : 'Purchase'}
                     </button>
                   </div>
                 );
@@ -795,19 +1098,28 @@ export default function GamePage() {
         )}
       </AnimatePresence>
 
-      {/* ── Inventory Panel ───────────────────────────────────────────────── */}
+      {/* ── Inventory Panel ──────────────────────────────────────────────── */}
       <AnimatePresence>
         {gameState.inventoryOpen && (
           <motion.div
             initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
-            transition={{ type: 'tween', duration: 0.25 }}
-            className="absolute top-12 left-0 bottom-56 w-64 bg-[#0d1117]/97 border-r-2 border-amber-800/40 flex flex-col shadow-2xl z-40"
+            transition={{ type: 'tween', duration: 0.22 }}
+            className="absolute top-14 left-0 w-64 flex flex-col z-40"
+            style={{
+              bottom: 220,
+              background: 'linear-gradient(180deg, #0d0906 0%, #090604 100%)',
+              borderRight: '2px solid #3a2800',
+              boxShadow: '8px 0 24px rgba(0,0,0,0.8)',
+            }}
           >
-            <div className="flex items-center justify-between px-3 py-2 border-b border-amber-800/30 bg-[#090c12] shrink-0">
-              <h3 className="font-display text-base font-bold text-amber-300 flex items-center gap-2">
-                <Package size={16} className="text-amber-400" /> INVENTORY
+            <div className="flex items-center justify-between px-3 py-2 shrink-0"
+                 style={{ background: 'linear-gradient(180deg, #110d07, #0d0906)', borderBottom: '1px solid #3a2800' }}>
+              <h3 className="font-display text-sm font-bold flex items-center gap-2" style={{ color: '#c9a227', letterSpacing: '0.12em' }}>
+                <Package size={14} style={{ color: '#c9a227' }} /> Satchel
               </h3>
-              <button onClick={() => dispatch({ type: 'TOGGLE_INVENTORY', payload: false })} className="text-muted-foreground hover:text-white text-sm">✕</button>
+              <button onClick={() => dispatch({ type: 'TOGGLE_INVENTORY', payload: false })}
+                      className="hover:opacity-70 transition-opacity text-sm"
+                      style={{ color: '#5a4020' }}>✕</button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-2">
@@ -817,27 +1129,29 @@ export default function GamePage() {
                   const isPassive = item?.effectKey === 'ironheart';
                   const isClickable = item && isMyTurn && gameState.phase === 'main' && !isPassive;
                   return (
-                    <div
-                      key={i}
-                      onClick={() => item && handleInventoryClick(item)}
-                      className={`h-20 border flex flex-col items-center justify-center p-1.5 text-center transition-colors
-                        ${!item ? 'border-border/20 bg-black/20' :
-                          isPassive ? 'border-amber-700/40 bg-amber-900/10 cursor-default' :
-                          isClickable ? 'border-primary/60 bg-secondary/30 hover:border-primary hover:bg-secondary/50 cursor-pointer' :
-                          'border-border/40 bg-secondary/20 cursor-default opacity-60'}
-                      `}
-                    >
+                    <div key={i}
+                         onClick={() => item && handleInventoryClick(item)}
+                         className="h-20 flex flex-col items-center justify-center p-1.5 text-center transition-all"
+                         style={{
+                           border: `1px solid ${!item ? 'rgba(40,28,10,0.3)' : isPassive ? 'rgba(201,162,39,0.3)' : isClickable ? 'rgba(201,162,39,0.5)' : 'rgba(74,48,0,0.4)'}`,
+                           background: !item ? 'rgba(8,5,2,0.3)' : isPassive ? 'rgba(74,48,0,0.12)' : isClickable ? 'rgba(74,48,0,0.2)' : 'rgba(14,10,4,0.4)',
+                           cursor: isClickable ? 'pointer' : 'default',
+                         }}>
                       {item ? (
                         <>
-                          <Package size={18} className={isPassive ? 'text-amber-400 mb-1' : 'text-primary mb-1'} />
-                          <span className="text-[9px] font-bold leading-tight text-center">{item.name}</span>
-                          {isPassive && <span className="text-[8px] text-amber-500 mt-0.5">PASSIVE</span>}
+                          <Package size={16} style={{ color: isPassive ? '#c9a227' : '#c9a227', marginBottom: 4 }} />
+                          <span className="text-[8px] font-display font-bold leading-tight text-center" style={{ color: '#d4b870' }}>
+                            {item.name}
+                          </span>
+                          {isPassive && (
+                            <span className="text-[7px] font-display mt-0.5" style={{ color: '#c9a227' }}>PASSIVE</span>
+                          )}
                           {!isPassive && isMyTurn && gameState.phase === 'main' && (
-                            <span className="text-[8px] text-primary mt-0.5">CLICK TO USE</span>
+                            <span className="text-[7px] font-display mt-0.5" style={{ color: '#9aaa60' }}>USE</span>
                           )}
                         </>
                       ) : (
-                        <span className="text-muted-foreground/25 text-[10px] font-bold">EMPTY</span>
+                        <span className="text-[9px] font-display" style={{ color: 'rgba(74,48,0,0.25)' }}>—</span>
                       )}
                     </div>
                   );
@@ -845,25 +1159,38 @@ export default function GamePage() {
               </div>
             </div>
 
-            <div className="px-3 py-2 text-[10px] text-muted-foreground border-t border-amber-800/20 bg-[#090c12] shrink-0">
-              Click an item during your <span className="text-primary font-bold">Main Phase</span> to use it.
+            <div className="px-3 py-2 shrink-0 text-[9px] italic"
+                 style={{ color: '#5a4020', borderTop: '1px solid rgba(74,48,0,0.3)', background: 'rgba(8,5,2,0.5)' }}>
+              Click an item during your <span style={{ color: '#c9a227' }}>Main Phase</span> to invoke it.
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ── Countdown Overlay ─────────────────────────────────────────────── */}
+      {/* ── Countdown Overlay ────────────────────────────────────────────── */}
       <AnimatePresence>
         {countdown !== null && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-background/90 z-50 flex items-center justify-center backdrop-blur-sm"
+            className="absolute inset-0 z-50 flex flex-col items-center justify-center backdrop-blur-sm"
+            style={{ background: 'rgba(8,5,2,0.92)' }}
           >
+            <div className="text-[10px] font-display uppercase tracking-[0.5em] mb-4" style={{ color: '#7a6040' }}>
+              The match begins in
+            </div>
             <motion.div
               key={countdown}
-              initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 1.5, opacity: 0 }}
-              transition={{ duration: 0.5 }}
-              className="text-[10rem] font-display font-bold text-amber-400 drop-shadow-[0_0_40px_rgba(245,197,24,0.6)]"
+              initial={{ scale: 0.3, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 1.6, opacity: 0 }}
+              transition={{ duration: 0.5, type: 'spring' }}
+              className="font-display font-black"
+              style={{
+                fontSize: '10rem',
+                lineHeight: 1,
+                color: '#c9a227',
+                textShadow: '0 0 60px rgba(201,162,39,0.5), 0 4px 8px rgba(0,0,0,0.9)',
+              }}
             >
               {countdown}
             </motion.div>
@@ -871,71 +1198,100 @@ export default function GamePage() {
         )}
       </AnimatePresence>
 
-      {/* ── Game Over Overlay ─────────────────────────────────────────────── */}
+      {/* ── Game Over Overlay ────────────────────────────────────────────── */}
       <AnimatePresence>
         {gameState.phase === 'gameover' && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-            className="absolute inset-0 bg-background/97 z-50 flex items-center justify-center backdrop-blur-md"
+            className="absolute inset-0 z-50 flex items-center justify-center backdrop-blur-md"
+            style={{ background: 'rgba(4,2,1,0.96)' }}
           >
-            <div className="text-center flex flex-col items-center gap-4 p-10 border-2 bg-[#0a0e14] max-w-md w-full shadow-[0_0_50px_rgba(0,0,0,0.9)]"
-              style={{ borderColor: isDefeated ? 'rgba(220,38,38,0.5)' : 'rgba(245,197,24,0.5)' }}
-            >
+            <div className="text-center flex flex-col items-center gap-5 p-10 max-w-md w-full relative"
+                 style={{
+                   background: 'linear-gradient(180deg, #140c04 0%, #0d0804 100%)',
+                   border: `2px solid ${isDefeated ? 'rgba(180,40,40,0.6)' : 'rgba(201,162,39,0.6)'}`,
+                   boxShadow: `0 0 60px rgba(0,0,0,0.95), 0 0 30px ${isDefeated ? 'rgba(180,40,40,0.1)' : 'rgba(201,162,39,0.1)'}`,
+                 }}>
+
+              {/* Corner ornaments */}
+              {['top-left','top-right','bottom-left','bottom-right'].map(corner => (
+                <div key={corner}
+                     className={`absolute w-8 h-8 pointer-events-none
+                       ${corner.includes('top') ? 'top-0' : 'bottom-0'}
+                       ${corner.includes('left') ? 'left-0' : 'right-0'}
+                     `}
+                     style={{
+                       borderTop: corner.includes('top') ? `2px solid ${isDefeated ? 'rgba(180,40,40,0.5)' : 'rgba(201,162,39,0.5)'}` : 'none',
+                       borderBottom: corner.includes('bottom') ? `2px solid ${isDefeated ? 'rgba(180,40,40,0.5)' : 'rgba(201,162,39,0.5)'}` : 'none',
+                       borderLeft: corner.includes('left') ? `2px solid ${isDefeated ? 'rgba(180,40,40,0.5)' : 'rgba(201,162,39,0.5)'}` : 'none',
+                       borderRight: corner.includes('right') ? `2px solid ${isDefeated ? 'rgba(180,40,40,0.5)' : 'rgba(201,162,39,0.5)'}` : 'none',
+                     }} />
+              ))}
+
+              {/* Small rune above title */}
+              <div className="text-2xl select-none" style={{ color: isDefeated ? 'rgba(180,40,40,0.5)' : 'rgba(201,162,39,0.5)' }}>
+                {isDefeated ? '☠' : '✦'}
+              </div>
+
               {/* Title */}
-              <h2 className={`text-6xl font-display font-bold drop-shadow-[0_0_16px_currentColor]
-                ${isDefeated ? 'text-red-500' : 'text-amber-400'}
-              `}>
-                {isDefeated ? 'DEFEATED' : 'VICTORY!'}
+              <h2 className="text-6xl font-display font-black leading-none"
+                  style={{
+                    color: isDefeated ? '#b02828' : '#c9a227',
+                    textShadow: `0 0 30px ${isDefeated ? 'rgba(180,40,40,0.5)' : 'rgba(201,162,39,0.5)'}, 0 4px 8px rgba(0,0,0,0.9)`,
+                    letterSpacing: '0.05em',
+                  }}>
+                {isDefeated ? 'DEFEATED' : 'VICTORY'}
               </h2>
 
-              {/* Fantasy flavour text */}
-              <p className="text-muted-foreground text-sm italic">
+              {/* Divider */}
+              <div className="w-full h-px" style={{ background: `linear-gradient(90deg, transparent, ${isDefeated ? 'rgba(180,40,40,0.4)' : 'rgba(201,162,39,0.4)'}, transparent)` }} />
+
+              {/* Flavour */}
+              <p className="text-sm italic leading-relaxed" style={{ color: '#7a6040', fontFamily: "'IM Fell English', Georgia, serif" }}>
                 {isDefeated
-                  ? '"Even the mightiest arcane warriors fall in battle."'
-                  : '"The realm bows to your arcane mastery!"'}
+                  ? '"Even the mightiest arcane warriors fall in battle. The realm endures."'
+                  : '"The realm bows before your arcane mastery. Songs shall be sung of this victory."'}
               </p>
 
               {/* Stats */}
-              <div className="w-full flex flex-col gap-2 text-left bg-black/50 p-4 border border-white/5 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Turns Survived</span>
-                  <span className="font-bold text-white">{gameState.turn}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Gold Earned</span>
-                  <span className="font-bold text-amber-400">{(me.goldEarnedThisGame || 0).toLocaleString()}g</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Creatures Destroyed</span>
-                  <span className="font-bold text-red-400">{me.creaturesKilledThisGame || 0}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Cards Played</span>
-                  <span className="font-bold text-primary">{me.cardsPlayedThisGame || 0}</span>
-                </div>
+              <div className="w-full flex flex-col gap-2 text-left p-4"
+                   style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(74,48,0,0.25)' }}>
+                {[
+                  { label: 'Turns Survived',       value: gameState.turn,                          color: '#c8b888' },
+                  { label: 'Gold Earned',           value: `${(me.goldEarnedThisGame||0).toLocaleString()}g`, color: '#c9a227' },
+                  { label: 'Creatures Slain',       value: me.creaturesKilledThisGame || 0,         color: '#e05050' },
+                  { label: 'Cards Played',          value: me.cardsPlayedThisGame || 0,             color: '#70a0c0' },
+                ].map(row => (
+                  <div key={row.label} className="flex justify-between items-center">
+                    <span className="text-xs italic" style={{ color: '#5a4020' }}>{row.label}</span>
+                    <span className="font-display font-bold text-sm" style={{ color: row.color }}>{row.value}</span>
+                  </div>
+                ))}
               </div>
 
-              {/* Buttons — defeat: quit only · victory: play again + quit */}
-              <div className="flex gap-3 w-full mt-2">
+              {/* Buttons */}
+              <div className="flex gap-3 w-full">
                 {!isDefeated && (
                   <button
                     onClick={() => setLocation('/lobby')}
-                    className="flex-1 py-3 bg-amber-700 hover:bg-amber-600 text-white font-bold tracking-widest border border-amber-500/50 hover:border-amber-300 transition-colors text-sm"
+                    className="btn-fantasy flex-1 py-3 text-sm"
                   >
-                    PLAY AGAIN
+                    Play Again
                   </button>
                 )}
                 <button
                   onClick={() => setLocation('/')}
-                  className="flex-1 py-3 bg-secondary hover:bg-secondary/80 text-foreground font-bold tracking-widest border border-border text-sm transition-colors"
+                  className="btn-fantasy flex-1 py-3 text-sm"
+                  style={{ borderColor: 'rgba(74,48,0,0.5)' }}
                 >
-                  MAIN MENU
+                  Main Menu
                 </button>
               </div>
 
-              {/* Defeat extra note */}
               {isDefeated && (
-                <p className="text-muted-foreground/60 text-[11px]">Return to main menu to start a new game.</p>
+                <p className="text-[10px] italic" style={{ color: 'rgba(74,48,0,0.6)' }}>
+                  Return to the main hall to start anew.
+                </p>
               )}
             </div>
           </motion.div>
