@@ -31,7 +31,8 @@ export default function LobbyPage() {
     sounds.play('uiClick');
     const players = generatePlayers({ gameMode, matchType: 'singleplayer', ranked: false });
     dispatch({ type: 'START_GAME', payload: { players, gameMode, matchType: 'singleplayer', ranked: false, difficulty } });
-    setLocation('/game');
+    // Draft mode: show pre-game card selection screen first
+    setLocation(gameMode === 'draft' ? '/pre-draft' : '/game');
   };
 
   const cfg = getDifficultyConfig(difficulty);

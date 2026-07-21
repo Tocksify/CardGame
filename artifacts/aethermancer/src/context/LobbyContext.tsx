@@ -79,8 +79,9 @@ export function LobbyProvider({ children }: { children: React.ReactNode }) {
 
     const makeCardInstance = (tpl: CardTemplate) => ({ ...tpl, instanceId: `card_${generateId()}` });
 
-    // No default starting hand — cards come from the draw phase
-    const makeHand = () => [];
+    // 8card: start with 8 cards. Draft: empty hand (cards come via per-turn draft + pre-game draft).
+    const makeHand = () =>
+      mode === '8card' ? drawFromPool(8).map(makeCardInstance) : [];
     const makeDeck = () => generateDeck().map(makeCardInstance);
 
     const startingGold = 10;

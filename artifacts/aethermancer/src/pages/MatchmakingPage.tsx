@@ -73,6 +73,7 @@ export default function MatchmakingPage() {
     if (!ready) return;
 
     const makeCardInstance = (tpl: any) => ({ ...tpl, instanceId: `card_${generateId()}` });
+    // 8card: give 8 starting cards; draft: empty hand (pre-draft screen handles it)
     const makeHand = () => (gameMode === '8card' ? drawFromPool(8).map(makeCardInstance) : []);
     const makeDeck = () => generateDeck().map(makeCardInstance);
 
@@ -88,6 +89,7 @@ export default function MatchmakingPage() {
         gold: 10, inventory: [], goldPerTurn: 0,
         aetherBonus: 0, perks: [], statBuffs: [],
         elo: account?.elo,
+        damageDealtThisTurn: 0, bonusGoldPending: 0,
       },
       ...bots.map((b, i) => ({
         id: i + 2, name: b.name, isHuman: false,
@@ -98,14 +100,16 @@ export default function MatchmakingPage() {
         gold: 10, inventory: [], goldPerTurn: 0,
         aetherBonus: 0, perks: [], statBuffs: [],
         elo: b.elo,
+        damageDealtThisTurn: 0, bonusGoldPending: 0,
       })),
     ];
 
     dispatch({
       type: 'START_GAME',
-      payload: { players, gameMode: gameMode || '8card', matchType: 'multiplayer', ranked: ranked || false },
+      payload: { players, gameMode: gameMode || '8card', matchType: 'multiplayer', ranked: ranked || false, difficulty: 'Normal' as const },
     });
-    setLocation('/game');
+    // Draft mode: show pre-game card selection screen; 8card: go directly to game
+    setLocation(gameMode === 'draft' ? '/pre-draft' : '/game');
   }, [ready]);
 
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;

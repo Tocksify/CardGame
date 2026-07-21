@@ -1,1 +1,2 @@
 - [Aethermancer feature batch 1](aethermancer-features.md) — creature→character rename, draft mode, status effects, new heroes, multiplayer, ELO, matchmaking all implemented in one session.
+- [Aethermancer feature batch 2](aethermancer-features-2.md) — AI stuck fix, 8-card starting hand, pre-draft screen, damage gold bonus, kill gold steal, ELO application on ranked gameover.

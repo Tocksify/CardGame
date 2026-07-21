@@ -11,6 +11,7 @@ import GamePage from './pages/GamePage';
 import AchievementsPage from './pages/AchievementsPage';
 import MultiplayerLobbyPage from './pages/MultiplayerLobbyPage';
 import MatchmakingPage from './pages/MatchmakingPage';
+import PreDraftPage from './pages/PreDraftPage';
 
 import { LobbyProvider } from './context/LobbyContext';
 import { GameProvider } from './context/GameContext';
@@ -25,6 +26,7 @@ function Router() {
       <Route path="/multiplayer" component={MultiplayerLobbyPage} />
       <Route path="/matchmaking" component={MatchmakingPage} />
       <Route path="/options" component={OptionsPage} />
+      <Route path="/pre-draft" component={PreDraftPage} />
       <Route path="/game" component={GamePage} />
       <Route path="/achievements" component={AchievementsPage} />
       <Route component={NotFound} />

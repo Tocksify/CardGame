@@ -5,6 +5,7 @@ import { sounds, SoundName, ELEMENT_SOUNDS } from '../lib/sounds';
 import { SHOP_ITEMS, getCardTemplate, generateShopRotation, generateDraftOptions, drawFromPool, CardTemplate } from '../lib/cards';
 import { loadAchievements, saveAchievements, Achievement } from '../store/achievements';
 import { DIFFICULTY_CFG } from './LobbyContext';
+import { loadAccount, applyEloChange } from '../store/account';
 
 const SHOP_ROTATION_SECONDS = 180;
 const BUY_PHASE_SECONDS = 30;
@@ -367,6 +368,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'DAMAGE', payload: { targetPlayerId: player.id, targetInstanceId: attackerInstanceId, amount: 1 } });
     }
 
+    // Kill-steal: take 40% of a player's gold if this attack would kill them
+    if (targetOwner && !targetInstanceId) {
+      const resist = targetOwner.perks.includes('perk_resist_1') ? 1 : 0;
+      const effectiveDmg = Math.max(0, dmg - resist);
+      const wouldKill = targetOwner.hp - effectiveDmg <= 0 &&
+        !(targetOwner.perks.includes('perk_undying') && !targetOwner.undyingUsed);
+      if (wouldKill && targetOwner.gold > 0) {
+        const stolen = Math.floor(targetOwner.gold * 0.4);
+        if (stolen > 0) {
+          dispatch({ type: 'STEAL_GOLD', payload: { fromPlayerId: targetOwner.id, toPlayerId: player.id, amount: stolen } });
+          dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} plundered ${stolen}g from ${targetOwner.name}!`, type: 'gold' } });
+          sounds.play('gold');
+        }
+      }
+    }
+
     dispatch({ type: 'ATTACK', payload: { attackerPlayerId: player.id, attackerInstanceId, targetPlayerId, targetInstanceId, damageOverride: dmg } });
     setCombatAnim({ targetId: targetInstanceId || targetPlayerId.toString(), damage: dmg });
     setTimeout(() => setCombatAnim(null), 600);
@@ -622,8 +639,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const stateRef = useRef(gameState);
   stateRef.current = gameState;
 
+  const eloAppliedRef = useRef(false);
+
   useEffect(() => {
-    if (gameState.phase === 'gameover') {
+    // Reset ELO guard when a new game starts
+    const phase = gameState.phase as string;
+    if (phase === 'countdown') {
+      eloAppliedRef.current = false;
+      return;
+    }
+    if (phase === 'gameover') {
       const winner = gameState.players.find(p => p.id === gameState.winner);
       if (winner?.isHuman) {
         sounds.play('victory');
@@ -632,6 +657,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         if (!winner.damageTakenThisGame) triggerAchievement('win_no_damage');
       } else {
         sounds.play('defeat');
+      }
+      // Apply ELO for ranked multiplayer
+      if (gameState.ranked && gameState.matchType === 'multiplayer' && !eloAppliedRef.current) {
+        eloAppliedRef.current = true;
+        const acc = loadAccount();
+        if (acc) {
+          const humanPlayer = gameState.players.find(p => p.isHuman);
+          const humanWon = gameState.winner === humanPlayer?.id;
+          const enemies = gameState.players.filter(p => !p.isHuman);
+          const avgElo = enemies.reduce((s, e) => s + (e.elo || 1000), 0) / Math.max(1, enemies.length);
+          applyEloChange(acc, humanWon, avgElo);
+        }
       }
       return;
     }
@@ -652,6 +689,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
         const goldGain = 100 + cp.goldPerTurn;
         dispatchRef.current({ type: 'ADD_GOLD', payload: { playerId: cp.id, amount: goldGain } });
+
+        // Bonus gold from damage dealt last turn
+        if ((cp.bonusGoldPending || 0) > 0) {
+          dispatchRef.current({ type: 'ADD_GOLD', payload: { playerId: cp.id, amount: cp.bonusGoldPending! } });
+          dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name} earned ${cp.bonusGoldPending}g from battle damage!`, type: 'gold' } });
+          dispatchRef.current({ type: 'RESET_BONUS_GOLD', payload: { playerId: cp.id } });
+        }
 
         if (cp.artifactSlot?.effect === 'aura_heal_2') {
           dispatchRef.current({ type: 'HEAL', payload: { targetPlayerId: cp.id, amount: 2 } });
@@ -758,6 +802,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               if (!target) { dispatchRef.current({ type: 'ADVANCE_PHASE' }); return; }
 
               const dmg = attacker.currentAtk + attacker.tempAtkBonus;
+
+              // Kill-steal: if this attack would kill the human hero, take 40% of their gold first
+              if (!target.targetInstanceId) {
+                const resist = targetHuman.perks.includes('perk_resist_1') ? 1 : 0;
+                const effectiveDmg = Math.max(0, dmg - resist);
+                const wouldKill = targetHuman.hp - effectiveDmg <= 0 &&
+                  !(targetHuman.perks.includes('perk_undying') && !targetHuman.undyingUsed);
+                if (wouldKill && targetHuman.gold > 0) {
+                  const stolen = Math.floor(targetHuman.gold * 0.4);
+                  if (stolen > 0) {
+                    dispatchRef.current({ type: 'STEAL_GOLD', payload: { fromPlayerId: targetHuman.id, toPlayerId: cp.id, amount: stolen } });
+                    dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name} plundered ${stolen}g from ${targetHuman.name}!`, type: 'gold' } });
+                  }
+                }
+              }
+
               dispatchRef.current({
                 type: 'ATTACK',
                 payload: {
@@ -812,10 +872,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           dispatchRef.current({ type: 'ADVANCE_PHASE' });
         }, 800);
       } else if (gameState.phase === 'main') {
-        gameLoopRef.current = setTimeout(() => {
+        // Recursive self-scheduling loop — keeps running until no card can be played
+        const runAiMainLoop = () => {
           const state = stateRef.current;
           const cp = state.players[state.currentPlayerIndex];
-          if (!cp) return;
+          if (!cp || cp.isHuman || state.phase !== 'main') return;
           const diff = state.difficulty;
 
           const card = chooseAiCard(cp, diff, state.players);
@@ -825,7 +886,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           }
 
           if (card.type === 'spell') {
-            // Smart: Hard+ targets best enemy; Normal targets hero
             const targetId = chooseAiSpellTarget(card.effect || '', diff, state.players, cp.id);
             dispatchRef.current({ type: 'STAGE_SPELL', payload: { playerId: cp.id, cardInstanceId: card.instanceId, targetId } });
           } else if (card.type === 'enchantment') {
@@ -834,11 +894,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               dispatchRef.current({ type: 'PLAY_CARD', payload: { playerId: cp.id, cardInstanceId: card.instanceId, targetId } });
             } else {
               dispatchRef.current({ type: 'ADVANCE_PHASE' });
+              return;
             }
           } else {
             dispatchRef.current({ type: 'PLAY_CARD', payload: { playerId: cp.id, cardInstanceId: card.instanceId } });
           }
-        }, 1000);
+
+          // Schedule next iteration to play additional cards
+          gameLoopRef.current = setTimeout(runAiMainLoop, 800);
+        };
+        gameLoopRef.current = setTimeout(runAiMainLoop, 1000);
       }
     }
 

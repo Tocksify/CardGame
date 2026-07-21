@@ -63,6 +63,9 @@ export interface Player {
   statBuffs: string[];
   elo?: number;
 
+  damageDealtThisTurn?: number;
+  bonusGoldPending?: number;
+
   damageTakenThisGame?: boolean;
   cardsPlayedThisGame?: number;
   goldEarnedThisGame?: number;
@@ -124,7 +127,10 @@ export type GameAction =
   | { type: 'PROCESS_STATUS_EFFECTS'; payload: { playerId: number } }
   | { type: 'REMOVE_POISON'; payload: { playerId: number; instanceId: string } }
   | { type: 'REMOVE_STUN'; payload: { playerId: number; instanceId: string } }
-  | { type: 'MARK_DEAD'; payload: { playerId: number } };
+  | { type: 'MARK_DEAD'; payload: { playerId: number } }
+  | { type: 'GIVE_STARTING_CARDS'; payload: { playerId: number; cards: CardInstance[] } }
+  | { type: 'STEAL_GOLD'; payload: { fromPlayerId: number; toPlayerId: number; amount: number } }
+  | { type: 'RESET_BONUS_GOLD'; payload: { playerId: number } };
 
 export const initialGameState: GameState = {
   phase: 'countdown',
@@ -234,6 +240,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             tempArmorTurns: Math.max(0, (c.tempArmorTurns ?? 0) - 1),
           }));
           if (newP.artifactSlot) newP.artifactSlotTurns += 1;
+          // Save damage-based gold bonus for next draw phase, reset counter
+          newP.bonusGoldPending = Math.floor((newP.damageDealtThisTurn || 0) * 20);
+          newP.damageDealtThisTurn = 0;
         }
         if (i === nextIndex) {
           newP.field = newP.field.map(c => ({
@@ -599,6 +608,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         return p;
       });
 
+      // Track damage dealt by attacker for bonus-gold system
+      newPlayers = newPlayers.map(p => {
+        if (p.id === attackerPlayerId) {
+          return { ...p, damageDealtThisTurn: (p.damageDealtThisTurn || 0) + attackerAtk };
+        }
+        return p;
+      });
+
       const alivePlayers = newPlayers.filter(p => p.hp > 0 && !p.isDead);
       let winner = state.winner;
       let phase = state.phase;
@@ -733,6 +750,35 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           p.id === action.payload.playerId
             ? { ...p, creaturesKilledThisGame: (p.creaturesKilledThisGame || 0) + 1 }
             : p
+        ),
+      };
+
+    case 'GIVE_STARTING_CARDS': {
+      return {
+        ...state,
+        players: state.players.map(p =>
+          p.id !== action.payload.playerId ? p : { ...p, hand: [...p.hand, ...action.payload.cards] }
+        ),
+      };
+    }
+
+    case 'STEAL_GOLD': {
+      const { fromPlayerId, toPlayerId, amount } = action.payload;
+      return {
+        ...state,
+        players: state.players.map(p => {
+          if (p.id === fromPlayerId) return { ...p, gold: Math.max(0, p.gold - amount) };
+          if (p.id === toPlayerId) return { ...p, gold: p.gold + amount, goldEarnedThisGame: (p.goldEarnedThisGame || 0) + amount };
+          return p;
+        }),
+      };
+    }
+
+    case 'RESET_BONUS_GOLD':
+      return {
+        ...state,
+        players: state.players.map(p =>
+          p.id === action.payload.playerId ? { ...p, bonusGoldPending: 0 } : p
         ),
       };
 
