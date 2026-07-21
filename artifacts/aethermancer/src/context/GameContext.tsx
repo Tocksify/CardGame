@@ -1,17 +1,19 @@
 import React, { createContext, useContext, useReducer, useEffect, useRef, useState } from 'react';
-import { GameState, GameAction, gameReducer, initialGameState, Player } from '../store/gameStore';
+import { GameState, GameAction, gameReducer, initialGameState, Player, StagedSpell } from '../store/gameStore';
 import { getSettings } from '../store/settings';
 import { sounds } from '../lib/sounds';
 import { SHOP_ITEMS, getCardTemplate, generateShopRotation } from '../lib/cards';
 import { loadAchievements, saveAchievements, Achievement } from '../store/achievements';
 
-const SHOP_ROTATION_SECONDS = 180; // 3 minutes
+const SHOP_ROTATION_SECONDS = 180;
 const BUY_PHASE_SECONDS = 30;
 
 interface GameContextType {
   gameState: GameState;
   dispatch: React.Dispatch<GameAction>;
   playCard: (cardInstanceId: string, targetId?: string) => void;
+  stageSpell: (cardInstanceId: string, targetId?: string) => void;
+  sellArtifact: () => void;
   attackWith: (attackerInstanceId: string, targetPlayerId: number, targetInstanceId?: string) => void;
   buyItem: (shopItemId: string) => void;
   useInventoryItem: (inventoryInstanceId: string, targetId?: string) => void;
@@ -20,10 +22,8 @@ interface GameContextType {
   achievementToast: string | null;
   combatAnim: { targetId: string, damage: number } | null;
   announcement: string | null;
-  // Shop rotation
   shopRotationIds: string[];
   shopRotationTimeLeft: number;
-  // Buy phase timer
   buyPhaseTimeLeft: number | null;
 }
 
@@ -36,33 +36,25 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [combatAnim, setCombatAnim] = useState<{ targetId: string, damage: number } | null>(null);
   const [announcement, setAnnouncement] = useState<string | null>(null);
 
-  // Shop rotation state
   const [shopRotationIds, setShopRotationIds] = useState<string[]>(() => generateShopRotation());
   const [shopRotationTimeLeft, setShopRotationTimeLeft] = useState(SHOP_ROTATION_SECONDS);
-
-  // Buy phase timer
   const [buyPhaseTimeLeft, setBuyPhaseTimeLeft] = useState<number | null>(null);
-  
+
   useEffect(() => {
     setAchievements(loadAchievements());
   }, []);
 
-  // ── Shop rotation countdown ──────────────────────────────────────────────
   useEffect(() => {
     if (gameState.phase === 'gameover' || gameState.phase === 'countdown') return;
     const tick = setInterval(() => {
       setShopRotationTimeLeft(t => {
-        if (t <= 1) {
-          setShopRotationIds(generateShopRotation());
-          return SHOP_ROTATION_SECONDS;
-        }
+        if (t <= 1) { setShopRotationIds(generateShopRotation()); return SHOP_ROTATION_SECONDS; }
         return t - 1;
       });
     }, 1000);
     return () => clearInterval(tick);
   }, [gameState.phase]);
 
-  // ── Buy-phase 30-second timer ─────────────────────────────────────────────
   useEffect(() => {
     const currentPlayer = gameState.players[gameState.currentPlayerIndex];
     if (gameState.phase === 'buy' && currentPlayer?.isHuman) {
@@ -92,19 +84,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       let changed = false;
       const next = prev.map(a => {
         if (a.id === id && !a.unlocked) {
-           if (a.target && progressInc > 0) {
-             const newProg = (a.progress || 0) + progressInc;
-             changed = true;
-             if (newProg >= a.target) {
-                showToast(a.name);
-                return { ...a, progress: newProg, unlocked: true };
-             }
-             return { ...a, progress: newProg };
-           } else if (!a.target) {
-             changed = true;
-             showToast(a.name);
-             return { ...a, unlocked: true };
-           }
+          if (a.target && progressInc > 0) {
+            const newProg = (a.progress || 0) + progressInc;
+            changed = true;
+            if (newProg >= a.target) { showToast(a.name); return { ...a, progress: newProg, unlocked: true }; }
+            return { ...a, progress: newProg };
+          } else if (!a.target) {
+            changed = true; showToast(a.name); return { ...a, unlocked: true };
+          }
         }
         return a;
       });
@@ -117,33 +104,76 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setAchievementToast(`Achievement Unlocked: ${name}`);
     setTimeout(() => setAchievementToast(null), 3500);
   };
-  
+
   const announce = (msg: string) => {
-     setAnnouncement(msg);
-     setTimeout(() => setAnnouncement(null), 1500);
+    setAnnouncement(msg);
+    setTimeout(() => setAnnouncement(null), 1500);
   };
 
+  // ── Play card (creatures, artifacts, enchantments) ────────────────────────
   const playCard = (cardInstanceId: string, targetId?: string) => {
     const player = gameState.players[gameState.currentPlayerIndex];
     const card = player.hand.find(c => c.instanceId === cardInstanceId);
     if (!card) return;
-    
+    // Spells are staged via stageSpell, not played directly
+    if (card.type === 'spell') return;
+    // One-per-type check
+    if (player.cardsPlayedByType[card.type]) return;
+
     sounds.play('cardPlay');
     dispatch({ type: 'PLAY_CARD', payload: { playerId: player.id, cardInstanceId, targetId } });
     dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} played ${card.name}.`, type: 'card' } });
-    
+
     if (player.isHuman) {
       triggerAchievement('play_10_cards', 1);
       if (card.rarity === 'legendary') triggerAchievement('legendary_played');
     }
 
-    if (card.type === 'spell' && card.effect) {
-      let spellBonus = player.statBuffs.includes('rabadon') ? 2 : 0;
-      handleSpellEffect(player.id, card.effect, targetId, spellBonus);
-    }
     if (card.type === 'enchantment' && card.effect && targetId) {
       applyEnchantment(player.id, targetId, card.effect);
     }
+  };
+
+  // ── Stage a spell (queues it for combat phase) ────────────────────────────
+  const stageSpell = (cardInstanceId: string, targetId?: string) => {
+    const player = gameState.players[gameState.currentPlayerIndex];
+    const card = player.hand.find(c => c.instanceId === cardInstanceId);
+    if (!card || card.type !== 'spell') return;
+    if (player.cardsPlayedByType['spell']) return; // one spell per turn
+    if (player.aether < card.cost) return;
+
+    sounds.play('cardPlay');
+    dispatch({ type: 'STAGE_SPELL', payload: { playerId: player.id, cardInstanceId, targetId } });
+    dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} staged ${card.name} for combat.`, type: 'card' } });
+
+    if (player.isHuman) {
+      triggerAchievement('play_10_cards', 1);
+      if (card.rarity === 'legendary') triggerAchievement('legendary_played');
+    }
+  };
+
+  // ── Execute all pending spells (called at combat phase start) ─────────────
+  const executePendingSpellsFor = (player: Player) => {
+    if (player.pendingSpells.length === 0) return;
+    const spellBonus = player.statBuffs.includes('rabadon') ? 2 : 0;
+    player.pendingSpells.forEach((spell: StagedSpell) => {
+      if (spell.effect) {
+        handleSpellEffect(player.id, spell.effect, spell.targetId, spellBonus);
+      }
+      dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name}'s ${spell.name} fires!`, type: 'card' } });
+    });
+    sounds.play('cardPlay');
+    dispatch({ type: 'CLEAR_PENDING_SPELLS', payload: { playerId: player.id } });
+  };
+
+  // ── Sell artifact ─────────────────────────────────────────────────────────
+  const sellArtifact = () => {
+    const player = gameState.players[gameState.currentPlayerIndex];
+    if (!player.artifactSlot) return;
+    const sellPrice = player.artifactSlot.cost * 75;
+    dispatch({ type: 'SELL_ARTIFACT', payload: { playerId: player.id } });
+    dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} sold ${player.artifactSlot.name} for ${sellPrice}g.`, type: 'gold' } });
+    sounds.play('gold');
   };
 
   const handleSpellEffect = (sourcePlayerId: number, effect: string, targetId: string | undefined, spellBonus: number) => {
@@ -168,18 +198,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } else if (effect === 'destroy_small_gain_gold' && targetId) {
       let targetOwner = gameState.players.find(p => p.field.some(c => c.instanceId === targetId));
       if (targetOwner) {
-         const creature = targetOwner.field.find(c => c.instanceId === targetId);
-         if (creature && creature.currentDef <= 3) {
-            dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, targetInstanceId: targetId, amount: 999, bypassResist: true } });
-            dispatch({ type: 'ADD_GOLD', payload: { playerId: sourcePlayerId, amount: creature.currentAtk * 50 } });
-            sounds.play('gold');
-         }
+        const creature = targetOwner.field.find(c => c.instanceId === targetId);
+        if (creature && creature.currentDef <= 3) {
+          dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, targetInstanceId: targetId, amount: 999, bypassResist: true } });
+          dispatch({ type: 'ADD_GOLD', payload: { playerId: sourcePlayerId, amount: creature.currentAtk * 50 } });
+          sounds.play('gold');
+        }
       }
     } else if (effect === 'dmg_2_all_enemies') {
       gameState.players.forEach(p => {
         if (p.id !== sourcePlayerId) {
           p.field.forEach(c => {
-             dispatch({ type: 'DAMAGE', payload: { targetPlayerId: p.id, targetInstanceId: c.instanceId, amount: 2 + spellBonus } });
+            dispatch({ type: 'DAMAGE', payload: { targetPlayerId: p.id, targetInstanceId: c.instanceId, amount: 2 + spellBonus } });
           });
         }
       });
@@ -197,20 +227,20 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } else if (effect === 'dmg_5_all') {
       gameState.players.forEach(p => {
         if (p.id !== sourcePlayerId) {
-           p.field.forEach(c => {
-             dispatch({ type: 'DAMAGE', payload: { targetPlayerId: p.id, targetInstanceId: c.instanceId, amount: 5 + spellBonus } });
+          p.field.forEach(c => {
+            dispatch({ type: 'DAMAGE', payload: { targetPlayerId: p.id, targetInstanceId: c.instanceId, amount: 5 + spellBonus } });
           });
           dispatch({ type: 'DAMAGE', payload: { targetPlayerId: p.id, amount: 5 + spellBonus } });
         }
       });
       sounds.play('damage');
     } else if (effect === 'destroy_target' && targetId) {
-       let targetOwner = gameState.players.find(p => p.field.some(c => c.instanceId === targetId));
-       if (targetOwner) {
-         dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, targetInstanceId: targetId, amount: 999, bypassResist: true } });
-         announce("CREATURE DESTROYED");
-         sounds.play('damage');
-       }
+      let targetOwner = gameState.players.find(p => p.field.some(c => c.instanceId === targetId));
+      if (targetOwner) {
+        dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, targetInstanceId: targetId, amount: 999, bypassResist: true } });
+        announce("CREATURE DESTROYED");
+        sounds.play('damage');
+      }
     }
   };
 
@@ -222,32 +252,32 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const player = gameState.players[gameState.currentPlayerIndex];
     const attacker = player.field.find(c => c.instanceId === attackerInstanceId);
     if (!attacker) return;
-    
+
     let dmg = attacker.currentAtk + attacker.tempAtkBonus;
-    
+
     if (player.statBuffs.includes('stormrazor') && !attacker.hasAttackedThisTurn) {
-       dmg += 1;
+      dmg += 1;
     }
 
     const targetOwner = gameState.players.find(p => p.id === targetPlayerId);
     if (targetOwner && targetOwner.statBuffs.includes('thornmail') && targetInstanceId) {
-       dispatch({ type: 'DAMAGE', payload: { targetPlayerId: player.id, targetInstanceId: attackerInstanceId, amount: 1 } });
+      dispatch({ type: 'DAMAGE', payload: { targetPlayerId: player.id, targetInstanceId: attackerInstanceId, amount: 1 } });
     }
 
     dispatch({ type: 'ATTACK', payload: { attackerPlayerId: player.id, attackerInstanceId, targetPlayerId, targetInstanceId, damageOverride: dmg } });
-    
+
     setCombatAnim({ targetId: targetInstanceId || targetPlayerId.toString(), damage: dmg });
     setTimeout(() => setCombatAnim(null), 600);
-    
+
     if (targetOwner && targetInstanceId) {
-       const targetCreature = targetOwner.field.find(c => c.instanceId === targetInstanceId);
-       let resist = targetOwner.perks.includes('perk_resist_1') ? 1 : 0;
-       if (targetCreature && targetCreature.currentDef <= (dmg - resist)) {
-          dispatch({ type: 'ADD_GOLD', payload: { playerId: player.id, amount: 50 } });
-          dispatch({ type: 'RECORD_KILL', payload: { playerId: player.id } });
-          sounds.play('gold');
-          if (player.isHuman) triggerAchievement('kill_5_creatures', 1);
-       }
+      const targetCreature = targetOwner.field.find(c => c.instanceId === targetInstanceId);
+      let resist = targetOwner.perks.includes('perk_resist_1') ? 1 : 0;
+      if (targetCreature && targetCreature.currentDef <= (dmg - resist)) {
+        dispatch({ type: 'ADD_GOLD', payload: { playerId: player.id, amount: 50 } });
+        dispatch({ type: 'RECORD_KILL', payload: { playerId: player.id } });
+        sounds.play('gold');
+        if (player.isHuman) triggerAchievement('kill_5_creatures', 1);
+      }
     }
 
     sounds.play('attack');
@@ -260,7 +290,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const player = gameState.players[gameState.currentPlayerIndex];
     if (player.gold < item.cost) return;
 
-    // Duplicate check for non-stackable items
     if (!item.stackable && item.type !== 'card') {
       const alreadyInInventory = player.inventory.some(i => i.itemId === item.id);
       const alreadyAsPerk = item.effectKey ? player.perks.includes(item.effectKey) : false;
@@ -274,10 +303,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (item.type === 'card' && item.cardTemplateId) {
       const tpl = getCardTemplate(item.cardTemplateId);
       if (tpl) {
-         dispatch({
-           type: 'BUY_SHOP_ITEM',
-           payload: { playerId: player.id, itemTemplateId: item.id, cost: item.cost, itemType: item.type, name: tpl.name, description: tpl.description, cardTemplate: tpl }
-         });
+        dispatch({
+          type: 'BUY_SHOP_ITEM',
+          payload: { playerId: player.id, itemTemplateId: item.id, cost: item.cost, itemType: item.type, name: tpl.name, description: tpl.description, cardTemplate: tpl }
+        });
       }
     } else {
       dispatch({
@@ -294,26 +323,25 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const player = gameState.players[gameState.currentPlayerIndex];
     const item = player.inventory.find(i => i.instanceId === inventoryInstanceId);
     if (!item) return;
-    
-    // Ironheart Crystal is a passive — already applied on purchase
+
     if (item.effectKey === 'ironheart') return;
 
     if (!targetId && (item.effectKey === 'perm_atk_2' || item.effectKey === 'perm_def_4' || item.effectKey === 'perm_stats_1_1' || item.effectKey === 'destroy_target_creature')) {
-       dispatch({ type: 'SET_TARGETING', payload: { mode: 'item', sourceId: inventoryInstanceId, pendingAction: null } });
-       return;
+      dispatch({ type: 'SET_TARGETING', payload: { mode: 'item', sourceId: inventoryInstanceId, pendingAction: null } });
+      return;
     }
 
     if (item.effectKey === 'destroy_target_creature' && targetId) {
-       let targetOwner = gameState.players.find(p => p.field.some(c => c.instanceId === targetId));
-       if (targetOwner) {
-         dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, targetInstanceId: targetId, amount: 999, bypassResist: true } });
-         announce("CREATURE DESTROYED");
-       }
+      let targetOwner = gameState.players.find(p => p.field.some(c => c.instanceId === targetId));
+      if (targetOwner) {
+        dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, targetInstanceId: targetId, amount: 999, bypassResist: true } });
+        announce("CREATURE DESTROYED");
+      }
     } else if (item.effectKey === 'draw_2') {
-       dispatch({ type: 'DRAW_CARD', payload: { playerId: player.id, amount: 2 } });
-       sounds.play('draw');
+      dispatch({ type: 'DRAW_CARD', payload: { playerId: player.id, amount: 2 } });
+      sounds.play('draw');
     }
-    
+
     dispatch({ type: 'USE_INVENTORY', payload: { playerId: player.id, instanceId: inventoryInstanceId, targetId } });
     sounds.play('uiClick');
     dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} used ${item.name}.`, type: 'other' } });
@@ -324,28 +352,26 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     sounds.play('uiClick');
   };
 
-  // Evolution logic
   const checkEvolutions = () => {
-     const player = gameState.players[gameState.currentPlayerIndex];
-     player.field.forEach(c => {
-        if (!c.evolved && c.evolvesTo) {
-           const evTpl = getCardTemplate(c.evolvesTo);
-           if (evTpl && c.evolveCondition) {
-              const cond = c.evolveCondition;
-              if (
-                 (cond.turnsOnField !== undefined && c.turnsOnField >= cond.turnsOnField) ||
-                 (cond.damageDealt !== undefined && c.damageDealt >= cond.damageDealt)
-              ) {
-                 dispatch({ type: 'EVOLVE_CREATURE', payload: { playerId: player.id, instanceId: c.instanceId, newTemplate: evTpl } });
-                 announce(`EVOLUTION! ${c.name} → ${evTpl.name}!`);
-                 if (player.isHuman) triggerAchievement('evolve_creature');
-              }
-           }
+    const player = gameState.players[gameState.currentPlayerIndex];
+    player.field.forEach(c => {
+      if (!c.evolved && c.evolvesTo) {
+        const evTpl = getCardTemplate(c.evolvesTo);
+        if (evTpl && c.evolveCondition) {
+          const cond = c.evolveCondition;
+          if (
+            (cond.turnsOnField !== undefined && c.turnsOnField >= cond.turnsOnField) ||
+            (cond.damageDealt !== undefined && c.damageDealt >= cond.damageDealt)
+          ) {
+            dispatch({ type: 'EVOLVE_CREATURE', payload: { playerId: player.id, instanceId: c.instanceId, newTemplate: evTpl } });
+            announce(`EVOLUTION! ${c.name} → ${evTpl.name}!`);
+            if (player.isHuman) triggerAchievement('evolve_creature');
+          }
         }
-     });
+      }
+    });
   };
 
-  // AI & Game Loop Logic
   const gameLoopRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -353,12 +379,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (gameState.winner) {
         const p = gameState.players.find(p => p.id === gameState.winner);
         if (p?.isHuman) {
-           sounds.play('victory');
-           triggerAchievement('first_win');
-           triggerAchievement('win_3_games', 1);
-           if (!p.damageTakenThisGame) triggerAchievement('win_no_damage');
+          sounds.play('victory');
+          triggerAchievement('first_win');
+          triggerAchievement('win_3_games', 1);
+          if (!p.damageTakenThisGame) triggerAchievement('win_no_damage');
         } else {
-           sounds.play('defeat');
+          sounds.play('defeat');
         }
       }
       return;
@@ -369,32 +395,40 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     const currentPlayer = gameState.players[gameState.currentPlayerIndex];
     if (!currentPlayer) return;
-    
+
     if (gameState.phase === 'draw') {
       gameLoopRef.current = setTimeout(() => {
-        const draws = 1 + (currentPlayer.perks.includes('perk_draw_1') ? 1 : 0) + currentPlayer.artifacts.filter(a => a.effect === 'aura_draw_1').length;
-        dispatch({ type: 'DRAW_CARD', payload: { playerId: currentPlayer.id, amount: draws } });
+        // Replenish aether at start of each turn (fixes turn-1 having too little)
+        dispatchRef.current({ type: 'REPLENISH_AETHER', payload: { playerId: currentPlayer.id } });
+
+        const draws = 1 + (currentPlayer.perks.includes('perk_draw_1') ? 1 : 0) +
+          (currentPlayer.artifactSlot?.effect === 'aura_draw_1' ? 1 : 0);
+        dispatchRef.current({ type: 'DRAW_CARD', payload: { playerId: currentPlayer.id, amount: draws } });
         sounds.play('draw');
-        
-        // Gold per turn: 100 base (was 2)
+
+        // Artifact aura: heal each turn
+        if (currentPlayer.artifactSlot?.effect === 'aura_heal_2') {
+          dispatchRef.current({ type: 'HEAL', payload: { targetPlayerId: currentPlayer.id, amount: 2 } });
+        }
+
         const goldGain = 100 + currentPlayer.goldPerTurn;
-        dispatch({ type: 'ADD_GOLD', payload: { playerId: currentPlayer.id, amount: goldGain } });
+        dispatchRef.current({ type: 'ADD_GOLD', payload: { playerId: currentPlayer.id, amount: goldGain } });
         if (currentPlayer.isHuman) {
-           sounds.play('gold');
-           triggerAchievement('earn_50_gold', goldGain);
+          sounds.play('gold');
+          triggerAchievement('earn_50_gold', goldGain);
         }
 
         if (currentPlayer.statBuffs.includes('sunfire')) {
-           gameState.players.forEach(p => {
-              if (p.id !== currentPlayer.id) {
-                 p.field.forEach(c => {
-                    dispatch({ type: 'DAMAGE', payload: { targetPlayerId: p.id, targetInstanceId: c.instanceId, amount: 1 } });
-                 });
-              }
-           });
+          gameState.players.forEach(p => {
+            if (p.id !== currentPlayer.id) {
+              p.field.forEach(c => {
+                dispatchRef.current({ type: 'DAMAGE', payload: { targetPlayerId: p.id, targetInstanceId: c.instanceId, amount: 1 } });
+              });
+            }
+          });
         }
 
-        dispatch({ type: 'ADVANCE_PHASE' });
+        dispatchRef.current({ type: 'ADVANCE_PHASE' });
       }, 800);
       return;
     }
@@ -403,52 +437,82 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       gameLoopRef.current = setTimeout(() => {
         checkEvolutions();
         if (currentPlayer.isHuman) triggerAchievement('survive_10_turns', 1);
-        dispatch({ type: 'END_TURN' });
+        dispatchRef.current({ type: 'END_TURN' });
       }, 500);
       return;
     }
 
-    // AI Logic
+    // ── Combat phase: fire pending spells first (both human and AI) ─────────
+    if (gameState.phase === 'combat') {
+      const spells = [...currentPlayer.pendingSpells];
+      if (spells.length > 0) {
+        gameLoopRef.current = setTimeout(() => {
+          const spellBonus = currentPlayer.statBuffs.includes('rabadon') ? 2 : 0;
+          spells.forEach((spell) => {
+            if (spell.effect) {
+              handleSpellEffect(currentPlayer.id, spell.effect, spell.targetId, spellBonus);
+            }
+            dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${currentPlayer.name}'s ${spell.name} fires!`, type: 'card' } });
+          });
+          sounds.play('cardPlay');
+          dispatchRef.current({ type: 'CLEAR_PENDING_SPELLS', payload: { playerId: currentPlayer.id } });
+        }, 400);
+        return;
+      }
+
+      // AI combat after spells resolved
+      if (!currentPlayer.isHuman) {
+        gameLoopRef.current = setTimeout(() => {
+          const untapped = currentPlayer.field.filter(c => !c.tapped);
+          if (untapped.length > 0) {
+            const targetHuman = gameState.players.find(p => p.isHuman);
+            if (targetHuman) {
+              attackWith(untapped[0].instanceId, targetHuman.id);
+            }
+          } else {
+            dispatchRef.current({ type: 'ADVANCE_PHASE' });
+          }
+        }, 800);
+      }
+      return;
+    }
+
+    // AI main phase
     if (!currentPlayer.isHuman) {
       if (gameState.phase === 'buy') {
-         gameLoopRef.current = setTimeout(() => {
-            dispatch({ type: 'ADVANCE_PHASE' });
-         }, 800);
+        gameLoopRef.current = setTimeout(() => {
+          dispatchRef.current({ type: 'ADVANCE_PHASE' });
+        }, 800);
       } else if (gameState.phase === 'main') {
-         gameLoopRef.current = setTimeout(() => {
-            const affordableCards = currentPlayer.hand
-               .filter(c => c.cost <= currentPlayer.aether)
-               .sort((a, b) => b.cost - a.cost);
-            
-            if (affordableCards.length > 0) {
-               const card = affordableCards[0];
-               let targetId: string | undefined = undefined;
-               if (card.type === 'spell' && card.effect?.includes('target')) {
-                  targetId = gameState.players.find(p => p.isHuman)?.id.toString();
-               } else if (card.type === 'enchantment') {
-                  targetId = currentPlayer.field[0]?.instanceId;
-               }
-               if (card.type !== 'enchantment' || targetId) {
-                  playCard(card.instanceId, targetId);
-               } else {
-                  dispatch({ type: 'ADVANCE_PHASE' });
-               }
+        gameLoopRef.current = setTimeout(() => {
+          const affordableCards = currentPlayer.hand
+            .filter(c => c.cost <= currentPlayer.aether && !currentPlayer.cardsPlayedByType[c.type])
+            .sort((a, b) => b.cost - a.cost);
+
+          if (affordableCards.length > 0) {
+            const card = affordableCards[0];
+            if (card.type === 'spell') {
+              // AI stages spells
+              let targetId: string | undefined = undefined;
+              if (card.effect?.includes('target')) {
+                targetId = gameState.players.find(p => p.isHuman)?.id.toString();
+              }
+              dispatchRef.current({ type: 'STAGE_SPELL', payload: { playerId: currentPlayer.id, cardInstanceId: card.instanceId, targetId } });
             } else {
-               dispatch({ type: 'ADVANCE_PHASE' });
+              let targetId: string | undefined = undefined;
+              if (card.type === 'enchantment') {
+                targetId = currentPlayer.field[0]?.instanceId;
+              }
+              if (card.type !== 'enchantment' || targetId) {
+                playCard(card.instanceId, targetId);
+              } else {
+                dispatchRef.current({ type: 'ADVANCE_PHASE' });
+              }
             }
-         }, 1000);
-      } else if (gameState.phase === 'combat') {
-         gameLoopRef.current = setTimeout(() => {
-            const untapped = currentPlayer.field.filter(c => !c.tapped);
-            if (untapped.length > 0) {
-               const targetHuman = gameState.players.find(p => p.isHuman);
-               if (targetHuman) {
-                 attackWith(untapped[0].instanceId, targetHuman.id);
-               }
-            } else {
-               dispatch({ type: 'ADVANCE_PHASE' });
-            }
-         }, 800);
+          } else {
+            dispatchRef.current({ type: 'ADVANCE_PHASE' });
+          }
+        }, 1000);
       }
     }
 
@@ -458,8 +522,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, [gameState.phase, gameState.currentPlayerIndex, gameState.players]);
 
   return (
-    <GameContext.Provider value={{ 
-      gameState, dispatch, playCard, attackWith, buyItem, useInventoryItem, endPhase, 
+    <GameContext.Provider value={{
+      gameState, dispatch, playCard, stageSpell, sellArtifact, attackWith,
+      buyItem, useInventoryItem, endPhase,
       achievements, achievementToast, combatAnim, announcement,
       shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft
     }}>

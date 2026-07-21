@@ -24,7 +24,7 @@ export function LobbyProvider({ children }: { children: React.ReactNode }) {
   const [difficulty, setDifficulty] = useState("Normal");
   const [maxAether, setMaxAether] = useState(10);
   const [animatedBattlefield, setAnimatedBattlefield] = useState(false);
-  
+
   const [aiPlayers, setAiPlayers] = useState([
     { id: 2, name: AI_NAMES[0] },
     { id: 3, name: AI_NAMES[1] }
@@ -47,9 +47,9 @@ export function LobbyProvider({ children }: { children: React.ReactNode }) {
   const generatePlayers = (): Player[] => {
     let nextInstanceId = 1000;
     const makeDeck = () => generateDeck().map(t => ({ ...t, instanceId: `card_${nextInstanceId++}` }));
-    
-    const startingGold = 10; // Forced to 10 as per requirements
-    
+
+    const startingGold = 10;
+
     const players: Player[] = [
       {
         id: 1,
@@ -57,12 +57,15 @@ export function LobbyProvider({ children }: { children: React.ReactNode }) {
         isHuman: true,
         hp: 30,
         maxHp: 30,
-        aether: 1,
-        maxAether: 1,
+        aether: 3,
+        maxAether: 3,
         deck: makeDeck(),
         hand: [],
         field: [],
-        artifacts: [],
+        artifactSlot: null,
+        artifactSlotTurns: 0,
+        pendingSpells: [],
+        cardsPlayedByType: {},
         discardPile: [],
         gold: startingGold,
         inventory: [],
@@ -80,12 +83,15 @@ export function LobbyProvider({ children }: { children: React.ReactNode }) {
         isHuman: false,
         hp: difficulty === 'Hard' ? 40 : (difficulty === 'Easy' ? 20 : 30),
         maxHp: difficulty === 'Hard' ? 40 : (difficulty === 'Easy' ? 20 : 30),
-        aether: 1,
-        maxAether: 1,
+        aether: 3,
+        maxAether: 3,
         deck: makeDeck(),
         hand: [],
         field: [],
-        artifacts: [],
+        artifactSlot: null,
+        artifactSlotTurns: 0,
+        pendingSpells: [],
+        cardsPlayedByType: {},
         discardPile: [],
         gold: startingGold,
         inventory: [],
