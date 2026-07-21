@@ -2,8 +2,11 @@ import React, { createContext, useContext, useReducer, useEffect, useRef, useSta
 import { GameState, GameAction, gameReducer, initialGameState, Player } from '../store/gameStore';
 import { getSettings } from '../store/settings';
 import { sounds } from '../lib/sounds';
-import { SHOP_ITEMS, getCardTemplate } from '../lib/cards';
+import { SHOP_ITEMS, getCardTemplate, generateShopRotation } from '../lib/cards';
 import { loadAchievements, saveAchievements, Achievement } from '../store/achievements';
+
+const SHOP_ROTATION_SECONDS = 180; // 3 minutes
+const BUY_PHASE_SECONDS = 30;
 
 interface GameContextType {
   gameState: GameState;
@@ -17,6 +20,11 @@ interface GameContextType {
   achievementToast: string | null;
   combatAnim: { targetId: string, damage: number } | null;
   announcement: string | null;
+  // Shop rotation
+  shopRotationIds: string[];
+  shopRotationTimeLeft: number;
+  // Buy phase timer
+  buyPhaseTimeLeft: number | null;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -27,10 +35,57 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [achievementToast, setAchievementToast] = useState<string | null>(null);
   const [combatAnim, setCombatAnim] = useState<{ targetId: string, damage: number } | null>(null);
   const [announcement, setAnnouncement] = useState<string | null>(null);
+
+  // Shop rotation state
+  const [shopRotationIds, setShopRotationIds] = useState<string[]>(() => generateShopRotation());
+  const [shopRotationTimeLeft, setShopRotationTimeLeft] = useState(SHOP_ROTATION_SECONDS);
+
+  // Buy phase timer
+  const [buyPhaseTimeLeft, setBuyPhaseTimeLeft] = useState<number | null>(null);
   
   useEffect(() => {
     setAchievements(loadAchievements());
   }, []);
+
+  // ── Shop rotation countdown ──────────────────────────────────────────────
+  useEffect(() => {
+    if (gameState.phase === 'gameover' || gameState.phase === 'countdown') return;
+    const tick = setInterval(() => {
+      setShopRotationTimeLeft(t => {
+        if (t <= 1) {
+          setShopRotationIds(generateShopRotation());
+          return SHOP_ROTATION_SECONDS;
+        }
+        return t - 1;
+      });
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [gameState.phase]);
+
+  // ── Buy-phase 30-second timer ─────────────────────────────────────────────
+  useEffect(() => {
+    const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+    if (gameState.phase === 'buy' && currentPlayer?.isHuman) {
+      setBuyPhaseTimeLeft(BUY_PHASE_SECONDS);
+    } else {
+      setBuyPhaseTimeLeft(null);
+    }
+  }, [gameState.phase, gameState.currentPlayerIndex]);
+
+  const dispatchRef = useRef(dispatch);
+  dispatchRef.current = dispatch;
+
+  useEffect(() => {
+    if (buyPhaseTimeLeft === null) return;
+    if (buyPhaseTimeLeft <= 0) {
+      dispatchRef.current({ type: 'ADVANCE_PHASE' });
+      dispatchRef.current({ type: 'TOGGLE_SHOP', payload: false });
+      setBuyPhaseTimeLeft(null);
+      return;
+    }
+    const timer = setTimeout(() => setBuyPhaseTimeLeft(t => (t ?? 0) - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [buyPhaseTimeLeft]);
 
   const triggerAchievement = (id: string, progressInc = 0) => {
     setAchievements(prev => {
@@ -116,7 +171,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
          const creature = targetOwner.field.find(c => c.instanceId === targetId);
          if (creature && creature.currentDef <= 3) {
             dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, targetInstanceId: targetId, amount: 999, bypassResist: true } });
-            dispatch({ type: 'ADD_GOLD', payload: { playerId: sourcePlayerId, amount: creature.currentAtk } });
+            dispatch({ type: 'ADD_GOLD', payload: { playerId: sourcePlayerId, amount: creature.currentAtk * 50 } });
             sounds.play('gold');
          }
       }
@@ -159,8 +214,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const applyEnchantment = (playerId: number, targetId: string, effect: string) => {
-      // Simplified: we will just dispatch an action to modify stats in a robust app.
+  const applyEnchantment = (_playerId: number, _targetId: string, _effect: string) => {
+    // Simplified enchantment handling
   };
 
   const attackWith = (attackerInstanceId: string, targetPlayerId: number, targetInstanceId?: string) => {
@@ -170,12 +225,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     
     let dmg = attacker.currentAtk + attacker.tempAtkBonus;
     
-    // Stormrazor check
     if (player.statBuffs.includes('stormrazor') && !attacker.hasAttackedThisTurn) {
        dmg += 1;
     }
 
-    // Thornmail retaliation
     const targetOwner = gameState.players.find(p => p.id === targetPlayerId);
     if (targetOwner && targetOwner.statBuffs.includes('thornmail') && targetInstanceId) {
        dispatch({ type: 'DAMAGE', payload: { targetPlayerId: player.id, targetInstanceId: attackerInstanceId, amount: 1 } });
@@ -190,7 +243,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
        const targetCreature = targetOwner.field.find(c => c.instanceId === targetInstanceId);
        let resist = targetOwner.perks.includes('perk_resist_1') ? 1 : 0;
        if (targetCreature && targetCreature.currentDef <= (dmg - resist)) {
-          dispatch({ type: 'ADD_GOLD', payload: { playerId: player.id, amount: 1 } });
+          dispatch({ type: 'ADD_GOLD', payload: { playerId: player.id, amount: 50 } });
           dispatch({ type: 'RECORD_KILL', payload: { playerId: player.id } });
           sounds.play('gold');
           if (player.isHuman) triggerAchievement('kill_5_creatures', 1);
@@ -205,25 +258,36 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const item = SHOP_ITEMS.find(i => i.id === shopItemId);
     if (!item) return;
     const player = gameState.players[gameState.currentPlayerIndex];
-    if (player.gold >= item.cost) {
-      if (item.type === 'card' && item.cardTemplateId) {
-        const tpl = getCardTemplate(item.cardTemplateId);
-        if (tpl) {
-           dispatch({
-             type: 'BUY_SHOP_ITEM',
-             payload: { playerId: player.id, itemTemplateId: item.id, cost: item.cost, itemType: item.type, name: tpl.name, description: tpl.description, cardTemplate: tpl }
-           });
-        }
-      } else {
-        dispatch({
-          type: 'BUY_SHOP_ITEM',
-          payload: { playerId: player.id, itemTemplateId: item.id, cost: item.cost, itemType: item.type, name: item.name, description: item.description, effectKey: item.effectKey }
-        });
+    if (player.gold < item.cost) return;
+
+    // Duplicate check for non-stackable items
+    if (!item.stackable && item.type !== 'card') {
+      const alreadyInInventory = player.inventory.some(i => i.itemId === item.id);
+      const alreadyAsPerk = item.effectKey ? player.perks.includes(item.effectKey) : false;
+      const alreadyAsStat = item.effectKey ? player.statBuffs.includes(item.effectKey) : false;
+      if (alreadyInInventory || alreadyAsPerk || alreadyAsStat) {
+        dispatch({ type: 'ADD_LOG', payload: { msg: `You already own ${item.name}.`, type: 'other' } });
+        return;
       }
-      sounds.play('gold');
-      dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} bought ${item.name}.`, type: 'gold' } });
-      if (player.isHuman) triggerAchievement('buy_5_shop', 1);
     }
+
+    if (item.type === 'card' && item.cardTemplateId) {
+      const tpl = getCardTemplate(item.cardTemplateId);
+      if (tpl) {
+         dispatch({
+           type: 'BUY_SHOP_ITEM',
+           payload: { playerId: player.id, itemTemplateId: item.id, cost: item.cost, itemType: item.type, name: tpl.name, description: tpl.description, cardTemplate: tpl }
+         });
+      }
+    } else {
+      dispatch({
+        type: 'BUY_SHOP_ITEM',
+        payload: { playerId: player.id, itemTemplateId: item.id, cost: item.cost, itemType: item.type, name: item.name, description: item.description, effectKey: item.effectKey }
+      });
+    }
+    sounds.play('gold');
+    dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} bought ${item.name}.`, type: 'gold' } });
+    if (player.isHuman) triggerAchievement('buy_5_shop', 1);
   };
 
   const useInventoryItem = (inventoryInstanceId: string, targetId?: string) => {
@@ -231,7 +295,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const item = player.inventory.find(i => i.instanceId === inventoryInstanceId);
     if (!item) return;
     
-    // Wait for target if needed
+    // Ironheart Crystal is a passive — already applied on purchase
+    if (item.effectKey === 'ironheart') return;
+
     if (!targetId && (item.effectKey === 'perm_atk_2' || item.effectKey === 'perm_def_4' || item.effectKey === 'perm_stats_1_1' || item.effectKey === 'destroy_target_creature')) {
        dispatch({ type: 'SET_TARGETING', payload: { mode: 'item', sourceId: inventoryInstanceId, pendingAction: null } });
        return;
@@ -243,10 +309,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
          dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, targetInstanceId: targetId, amount: 999, bypassResist: true } });
          announce("CREATURE DESTROYED");
        }
-    } else if (item.effectKey === 'temp_aether_3') {
-       // We'll just hardcode this state mutation or we need a new action. 
-       // For now, skip this or add an action. Let's assume we skip complex inventory logic for sake of speed, but we should handle it.
-       // Actually I'll use a hack to dispatch a dummy play_card that costs -3? No, we'll just ignore for now to keep reducer clean.
     } else if (item.effectKey === 'draw_2') {
        dispatch({ type: 'DRAW_CARD', payload: { playerId: player.id, amount: 2 } });
        sounds.play('draw');
@@ -308,23 +370,20 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const currentPlayer = gameState.players[gameState.currentPlayerIndex];
     if (!currentPlayer) return;
     
-    // Auto actions
     if (gameState.phase === 'draw') {
       gameLoopRef.current = setTimeout(() => {
-        // Draw cards
         const draws = 1 + (currentPlayer.perks.includes('perk_draw_1') ? 1 : 0) + currentPlayer.artifacts.filter(a => a.effect === 'aura_draw_1').length;
         dispatch({ type: 'DRAW_CARD', payload: { playerId: currentPlayer.id, amount: draws } });
         sounds.play('draw');
         
-        // Gold
-        const goldGain = 2 + currentPlayer.goldPerTurn;
+        // Gold per turn: 100 base (was 2)
+        const goldGain = 100 + currentPlayer.goldPerTurn;
         dispatch({ type: 'ADD_GOLD', payload: { playerId: currentPlayer.id, amount: goldGain } });
         if (currentPlayer.isHuman) {
            sounds.play('gold');
            triggerAchievement('earn_50_gold', goldGain);
         }
 
-        // Sunfire Totem
         if (currentPlayer.statBuffs.includes('sunfire')) {
            gameState.players.forEach(p => {
               if (p.id !== currentPlayer.id) {
@@ -396,10 +455,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => {
       if (gameLoopRef.current) clearTimeout(gameLoopRef.current);
     };
-  }, [gameState.phase, gameState.currentPlayerIndex, gameState.players]); 
+  }, [gameState.phase, gameState.currentPlayerIndex, gameState.players]);
 
   return (
-    <GameContext.Provider value={{ gameState, dispatch, playCard, attackWith, buyItem, useInventoryItem, endPhase, achievements, achievementToast, combatAnim, announcement }}>
+    <GameContext.Provider value={{ 
+      gameState, dispatch, playCard, attackWith, buyItem, useInventoryItem, endPhase, 
+      achievements, achievementToast, combatAnim, announcement,
+      shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft
+    }}>
       {children}
     </GameContext.Provider>
   );

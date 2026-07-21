@@ -23,7 +23,8 @@ export interface ShopItemTemplate {
   cost: number;
   description: string;
   effectKey?: string;
-  cardTemplateId?: string; // If it's a card
+  cardTemplateId?: string;
+  stackable?: boolean; // if true, can be purchased multiple times
 }
 
 export const CARD_TEMPLATES: CardTemplate[] = [
@@ -66,37 +67,39 @@ export const CARD_TEMPLATES: CardTemplate[] = [
 ];
 
 export const SHOP_ITEMS: ShopItemTemplate[] = [
-  // Items
-  { id: 'i1', name: 'Aether Shard', type: 'item', cost: 8, description: 'Give any creature +2 ATK for the rest of this game.', effectKey: 'perm_atk_2' },
-  { id: 'i2', name: 'Crystal Ward', type: 'item', cost: 10, description: 'Give any creature +4 DEF permanently.', effectKey: 'perm_def_4' },
-  { id: 'i3', name: 'Mana Infusion', type: 'item', cost: 12, description: 'Gain 3 extra Aether this turn.', effectKey: 'temp_aether_3' },
-  { id: 'i4', name: 'Elixir of Fortune', type: 'item', cost: 7, description: 'Draw 2 extra cards this turn.', effectKey: 'draw_2' },
-  { id: 'i5', name: 'Battle Serum', type: 'item', cost: 9, description: 'Give any creature +1 ATK and +1 DEF permanently.', effectKey: 'perm_stats_1_1' },
-  { id: 'i6', name: 'Void Essence', type: 'item', cost: 15, description: 'Destroy target creature on the enemy field instantly.', effectKey: 'destroy_target_creature' },
-  { id: 'i7', name: 'Phoenix Feather', type: 'item', cost: 11, description: 'Restore 8 HP to your hero.', effectKey: 'heal_8_hero' },
+  // ── Items (consumable / one-time use) ──────────────────────────────────
+  { id: 'hp1',  name: 'Healing Potion',      type: 'item', cost: 200,  description: 'Restore 20 HP to your hero. Can stock multiples.', effectKey: 'heal_20_hero', stackable: true },
+  { id: 'i1',   name: 'Aether Shard',        type: 'item', cost: 400,  description: 'Give any creature +2 ATK permanently.', effectKey: 'perm_atk_2' },
+  { id: 'i2',   name: 'Crystal Ward',        type: 'item', cost: 500,  description: 'Give any creature +4 DEF permanently.', effectKey: 'perm_def_4' },
+  { id: 'i3',   name: 'Mana Infusion',       type: 'item', cost: 600,  description: 'Gain 3 extra Aether this turn.', effectKey: 'temp_aether_3' },
+  { id: 'i4',   name: 'Elixir of Fortune',   type: 'item', cost: 350,  description: 'Draw 2 extra cards this turn.', effectKey: 'draw_2' },
+  { id: 'i5',   name: 'Battle Serum',        type: 'item', cost: 450,  description: 'Give any creature +1 ATK and +1 DEF permanently.', effectKey: 'perm_stats_1_1' },
+  { id: 'i6',   name: 'Void Essence',        type: 'item', cost: 750,  description: 'Instantly destroy a target creature on the enemy field.', effectKey: 'destroy_target_creature' },
+  { id: 'i7',   name: 'Phoenix Feather',     type: 'item', cost: 550,  description: 'Restore 8 HP to your hero.', effectKey: 'heal_8_hero' },
+  // Ironheart Crystal was Warmog's — moved here from Stats by user request
+  { id: 'st1',  name: 'Ironheart Crystal',   type: 'item', cost: 900,  description: 'Permanently increase max HP by 20 and restore that much HP.', effectKey: 'ironheart' },
 
-  // Stat Items
-  { id: 'st1', name: 'Warmog\'s Crystal', type: 'stat', cost: 18, description: 'Permanently increase max HP by 8, regen 2 HP/turn.', effectKey: 'warmogs' },
-  { id: 'st2', name: 'Stormrazor Gem', type: 'stat', cost: 14, description: 'Creatures deal +1 bonus damage on first attack each turn.', effectKey: 'stormrazor' },
-  { id: 'st3', name: 'Sunfire Totem', type: 'stat', cost: 16, description: 'Start of your turns: deal 1 dmg to all enemy creatures.', effectKey: 'sunfire' },
-  { id: 'st4', name: 'Jak\'Sho Shard', type: 'stat', cost: 20, description: 'All your creatures gain +2 ATK/+2 DEF on deploy.', effectKey: 'jaksho' },
-  { id: 'st5', name: 'Rabadon\'s Crown', type: 'stat', cost: 22, description: 'Spell damage is permanently increased by 2.', effectKey: 'rabadon' },
-  { id: 'st6', name: 'Thornmail Plate', type: 'stat', cost: 17, description: 'When a creature takes damage, attacker takes 1 damage.', effectKey: 'thornmail' },
+  // ── Stat items (passive, apply immediately on purchase) ────────────────
+  { id: 'st2',  name: 'Tempest Sigil',       type: 'stat', cost: 700,  description: 'Your creatures deal +1 bonus damage on first attack each turn.', effectKey: 'stormrazor' },
+  { id: 'st3',  name: 'Solar Pyre Totem',    type: 'stat', cost: 800,  description: 'Start of your turns: deal 1 damage to all enemy creatures.', effectKey: 'sunfire' },
+  { id: 'st4',  name: "Titan's Shard",       type: 'stat', cost: 1000, description: 'All your creatures gain +2 ATK/+2 DEF on deploy.', effectKey: 'jaksho' },
+  { id: 'st5',  name: "Archmage's Diadem",   type: 'stat', cost: 1100, description: 'Spell damage is permanently increased by 2.', effectKey: 'rabadon' },
+  { id: 'st6',  name: 'Thornweave Plate',    type: 'stat', cost: 850,  description: 'When a creature takes damage, the attacker takes 1 damage.', effectKey: 'thornmail' },
 
-  // Perks
-  { id: 'p1', name: 'Soul Anchor', type: 'perk', cost: 20, description: 'Your max life is increased by 10.', effectKey: 'perk_hp_10' },
-  { id: 'p2', name: 'Aether Mastery', type: 'perk', cost: 25, description: 'Gain 2 extra Aether per turn permanently.', effectKey: 'perk_aether_2' },
-  { id: 'p3', name: 'Golden Touch', type: 'perk', cost: 30, description: 'Earn 2 extra gold per turn permanently.', effectKey: 'perk_gold_2' },
-  { id: 'p4', name: 'Arcane Dominion', type: 'perk', cost: 35, description: 'Start each turn with 1 free card draw.', effectKey: 'perk_draw_1' },
-  { id: 'p5', name: 'Void Resistance', type: 'perk', cost: 28, description: 'Reduce all damage taken by 1.', effectKey: 'perk_resist_1' },
+  // ── Perks (permanent hero upgrades) ───────────────────────────────────
+  { id: 'p1', name: 'Soul Anchor',       type: 'perk', cost: 1000, description: 'Your max life is increased by 10.', effectKey: 'perk_hp_10' },
+  { id: 'p2', name: 'Aether Mastery',    type: 'perk', cost: 1250, description: 'Gain 2 extra Aether per turn permanently.', effectKey: 'perk_aether_2' },
+  { id: 'p3', name: 'Golden Touch',      type: 'perk', cost: 1500, description: 'Earn 50 extra gold per turn permanently.', effectKey: 'perk_gold_2' },
+  { id: 'p4', name: 'Arcane Dominion',   type: 'perk', cost: 1750, description: 'Start each turn with 1 free card draw.', effectKey: 'perk_draw_1' },
+  { id: 'p5', name: 'Void Resistance',   type: 'perk', cost: 1400, description: 'Reduce all damage taken by 1.', effectKey: 'perk_resist_1' },
   
-  // Cards
-  { id: 'c10_shop', name: 'Void Colossus', type: 'card', cost: 18, description: '8/8 Creature, costs 8 Aether.', cardTemplateId: 'c10' },
-  { id: 's7_shop', name: 'Arcane Nova', type: 'card', cost: 14, description: 'Spell: Deal 5 damage to all enemies.', cardTemplateId: 's7' },
-  { id: 'a4_shop', name: 'Eternity Bloom', type: 'card', cost: 15, description: 'Artifact: Heal 2 life each turn.', cardTemplateId: 'a4' },
-  { id: 'c9_shop', name: 'Storm Drake', type: 'card', cost: 12, description: '5/3 Creature, costs 4 Aether, Haste.', cardTemplateId: 'c9' },
-  { id: 'c11_shop', name: 'Celestial Titan', type: 'card', cost: 20, description: '6/8 Creature, Taunt.', cardTemplateId: 'c11' },
-  { id: 's8_shop', name: 'Soul Reaper', type: 'card', cost: 16, description: 'Spell: Destroy any creature.', cardTemplateId: 's8' },
+  // ── Cards ──────────────────────────────────────────────────────────────
+  { id: 'c10_shop',  name: 'Void Colossus',   type: 'card', cost: 900,  description: '8/8 Creature, costs 8 Aether.', cardTemplateId: 'c10', stackable: true },
+  { id: 's7_shop',   name: 'Arcane Nova',      type: 'card', cost: 700,  description: 'Spell: Deal 5 damage to all enemies.', cardTemplateId: 's7', stackable: true },
+  { id: 'a4_shop',   name: 'Eternity Bloom',   type: 'card', cost: 750,  description: 'Artifact: Heal 2 life each turn.', cardTemplateId: 'a4', stackable: true },
+  { id: 'c9_shop',   name: 'Storm Drake',      type: 'card', cost: 600,  description: '5/3 Creature, costs 4 Aether, Haste.', cardTemplateId: 'c9', stackable: true },
+  { id: 'c11_shop',  name: 'Celestial Titan',  type: 'card', cost: 1000, description: '6/8 Creature, Taunt.', cardTemplateId: 'c11', stackable: true },
+  { id: 's8_shop',   name: 'Soul Reaper',      type: 'card', cost: 800,  description: 'Spell: Destroy any creature.', cardTemplateId: 's8', stackable: true },
 ];
 
 export function getCardTemplate(id: string): CardTemplate | undefined {
@@ -104,7 +107,6 @@ export function getCardTemplate(id: string): CardTemplate | undefined {
 }
 
 export function generateDeck(): CardTemplate[] {
-  // Generate a starter deck of 30 cards
   const deck: CardTemplate[] = [];
   const starterIds = [
     'c1', 'c1', 'c1', 'c2', 'c2', 'c3', 'c3', 'c4', 'c4', 'c5', 'c5',
@@ -119,8 +121,27 @@ export function generateDeck(): CardTemplate[] {
     if (tpl) deck.push(tpl);
   }
   
-  // Shuffle
   return deck.sort(() => Math.random() - 0.5);
+}
+
+/** Pick a random subset of shop items for one rotation (≈4-5 per category). */
+export function generateShopRotation(): string[] {
+  const pick = (ids: string[], n: number) => {
+    const shuffled = [...ids].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, n);
+  };
+
+  const itemIds   = SHOP_ITEMS.filter(i => i.type === 'item').map(i => i.id);
+  const statIds   = SHOP_ITEMS.filter(i => i.type === 'stat').map(i => i.id);
+  const perkIds   = SHOP_ITEMS.filter(i => i.type === 'perk').map(i => i.id);
+  const cardIds   = SHOP_ITEMS.filter(i => i.type === 'card').map(i => i.id);
+
+  return [
+    ...pick(itemIds, 5),
+    ...pick(statIds, 4),
+    ...pick(perkIds, 3),
+    ...pick(cardIds, 4),
+  ];
 }
 
 export const AI_NAMES = ["Arcane Apprentice", "Shadow Weaver", "Storm Sage", "Iron Golem", "Void Entity"];

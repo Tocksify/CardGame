@@ -48,7 +48,6 @@ export interface Player {
   perks: string[];
   statBuffs: string[];
   
-  // Stats tracking for achievements
   damageTakenThisGame?: boolean;
   cardsPlayedThisGame?: number;
   goldEarnedThisGame?: number;
@@ -159,13 +158,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       
       const newPlayers = state.players.map((p, i) => {
         let newP = { ...p };
-        // Increment turns on field for the player whose turn just ended
         if (i === state.currentPlayerIndex) {
           newP.field = newP.field.map(c => ({ ...c, turnsOnField: c.turnsOnField + 1 }));
         }
 
         if (i === nextIndex) {
-          // Untap creatures for the next player
           newP.field = newP.field.map(c => ({ 
             ...c, tapped: false, tempAtkBonus: 0, tempDefBonus: 0, hasAttackedThisTurn: false 
           }));
@@ -238,14 +235,29 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             newP.hand = [...newP.hand, newCard]; 
           } else if (itemType === 'item') {
             if (newP.inventory.length < 8) {
-              newP.inventory = [...newP.inventory, {
-                instanceId: generateId(),
-                itemId: action.payload.itemTemplateId,
-                type: 'item',
-                name,
-                description,
-                effectKey
-              }];
+              // Ironheart Crystal applies immediately (permanent HP boost)
+              if (effectKey === 'ironheart') {
+                newP.maxHp += 20;
+                newP.hp = Math.min(newP.hp + 20, newP.maxHp);
+                // Also put it in inventory as proof of ownership
+                newP.inventory = [...newP.inventory, {
+                  instanceId: generateId(),
+                  itemId: action.payload.itemTemplateId,
+                  type: 'item',
+                  name,
+                  description,
+                  effectKey
+                }];
+              } else {
+                newP.inventory = [...newP.inventory, {
+                  instanceId: generateId(),
+                  itemId: action.payload.itemTemplateId,
+                  type: 'item',
+                  name,
+                  description,
+                  effectKey
+                }];
+              }
             }
           } else if (itemType === 'stat') {
              if (newP.inventory.length < 8) {
@@ -257,12 +269,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
                 description,
                 effectKey
               }];
-              // Immediately apply permanent perks from stats
               if (effectKey) newP.statBuffs = [...newP.statBuffs, effectKey];
-              if (effectKey === 'warmogs') {
-                 newP.maxHp += 8;
-                 newP.hp += 8;
-              }
              }
           } else if (itemType === 'perk') {
             newP.perks = [...newP.perks, effectKey || ''];
@@ -272,7 +279,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             } else if (effectKey === 'perk_aether_2') {
               newP.aetherBonus += 2;
             } else if (effectKey === 'perk_gold_2') {
-              newP.goldPerTurn += 2;
+              newP.goldPerTurn += 50;
             }
           }
           return newP;
@@ -454,6 +461,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             
             let newField = p.field;
             let newHp = p.hp;
+            let newMaxHp = p.maxHp;
             
             if (item.effectKey === 'perm_atk_2' && targetId) {
                newField = newField.map(c => c.instanceId === targetId ? { ...c, currentAtk: c.currentAtk + 2 } : c);
@@ -463,13 +471,21 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
                newField = newField.map(c => c.instanceId === targetId ? { ...c, currentAtk: c.currentAtk + 1, currentDef: c.currentDef + 1 } : c);
             } else if (item.effectKey === 'heal_8_hero') {
                newHp = Math.min(p.maxHp, p.hp + 8);
+            } else if (item.effectKey === 'heal_20_hero') {
+               newHp = Math.min(p.maxHp, p.hp + 20);
+            } else if (item.effectKey === 'ironheart') {
+               // Already applied on purchase — remove from inventory, no further effect
             }
             
             return { 
               ...p, 
               field: newField,
               hp: newHp,
-              inventory: p.inventory.filter(i => i.instanceId !== instanceId) 
+              maxHp: newMaxHp,
+              // Ironheart Crystal stays in inventory as a passive indicator (don't remove)
+              inventory: item.effectKey === 'ironheart' 
+                ? p.inventory 
+                : p.inventory.filter(i => i.instanceId !== instanceId)
             };
           }
           return p;
