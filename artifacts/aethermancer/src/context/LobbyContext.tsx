@@ -1,33 +1,61 @@
 import React, { useState } from 'react';
-import { generateDeck, AI_NAMES } from '../lib/cards';
-import { Player } from '../store/gameStore';
+import { drawFromPool, generateDeck, AI_NAMES, CardTemplate } from '../lib/cards';
+import { Player, GameMode, MatchType, generateId } from '../store/gameStore';
+
+export type Difficulty = 'Novice' | 'Easy' | 'Normal' | 'Hard' | 'Expert' | 'Nightmare';
+
+interface DifficultyConfig {
+  hp: number;
+  aetherBonus: number;
+  deckStrength: number; // higher = more rares/legendaries in AI deck
+  label: string;
+}
+
+const DIFFICULTY_CFG: Record<Difficulty, DifficultyConfig> = {
+  Novice:    { hp: 15, aetherBonus: -1, deckStrength: 0,   label: 'Very easy — for new players.' },
+  Easy:      { hp: 20, aetherBonus: 0,  deckStrength: 0.5, label: 'Relaxed challenge.' },
+  Normal:    { hp: 30, aetherBonus: 0,  deckStrength: 1,   label: 'Balanced — recommended.' },
+  Hard:      { hp: 40, aetherBonus: 1,  deckStrength: 1.5, label: 'Tougher AI with bonus Aether.' },
+  Expert:    { hp: 50, aetherBonus: 2,  deckStrength: 2,   label: 'Relentless — very difficult.' },
+  Nightmare: { hp: 60, aetherBonus: 3,  deckStrength: 3,   label: 'Merciless. You will suffer.' },
+};
 
 interface LobbyContextType {
   roomName: string;
   setRoomName: (n: string) => void;
-  difficulty: string;
-  setDifficulty: (d: string) => void;
+  difficulty: Difficulty;
+  setDifficulty: (d: Difficulty) => void;
   maxAether: number;
   setMaxAether: (a: number) => void;
   animatedBattlefield: boolean;
   setAnimatedBattlefield: (v: boolean) => void;
-  aiPlayers: { id: number, name: string }[];
+  aiPlayers: { id: number; name: string }[];
   addAi: () => void;
   removeAi: (id: number) => void;
-  generatePlayers: () => Player[];
+  generatePlayers: (opts?: { gameMode?: GameMode; matchType?: MatchType; ranked?: boolean }) => Player[];
+  gameMode: GameMode;
+  setGameMode: (m: GameMode) => void;
+  matchType: MatchType;
+  setMatchType: (t: MatchType) => void;
+  ranked: boolean;
+  setRanked: (r: boolean) => void;
+  getDifficultyConfig: (d: Difficulty) => DifficultyConfig;
 }
 
 const LobbyContext = React.createContext<LobbyContextType | undefined>(undefined);
 
 export function LobbyProvider({ children }: { children: React.ReactNode }) {
-  const [roomName, setRoomName] = useState("Aether Arena");
-  const [difficulty, setDifficulty] = useState("Normal");
+  const [roomName, setRoomName] = useState('Aether Arena');
+  const [difficulty, setDifficulty] = useState<Difficulty>('Normal');
   const [maxAether, setMaxAether] = useState(10);
   const [animatedBattlefield, setAnimatedBattlefield] = useState(false);
+  const [gameMode, setGameMode] = useState<GameMode>('8card');
+  const [matchType, setMatchType] = useState<MatchType>('singleplayer');
+  const [ranked, setRanked] = useState(false);
 
   const [aiPlayers, setAiPlayers] = useState([
     { id: 2, name: AI_NAMES[0] },
-    { id: 3, name: AI_NAMES[1] }
+    { id: 3, name: AI_NAMES[1] },
   ]);
 
   const addAi = () => {
@@ -39,73 +67,55 @@ export function LobbyProvider({ children }: { children: React.ReactNode }) {
   };
 
   const removeAi = (id: number) => {
-    if (aiPlayers.length > 2) {
-      setAiPlayers(aiPlayers.filter(a => a.id !== id));
-    }
+    if (aiPlayers.length > 1) setAiPlayers(aiPlayers.filter(a => a.id !== id));
   };
 
-  const generatePlayers = (): Player[] => {
-    let nextInstanceId = 1000;
-    const makeDeck = () => generateDeck().map(t => ({ ...t, instanceId: `card_${nextInstanceId++}` }));
+  const generatePlayers = (opts?: { gameMode?: GameMode; matchType?: MatchType; ranked?: boolean }): Player[] => {
+    const mode = opts?.gameMode ?? gameMode;
+    const cfg = DIFFICULTY_CFG[difficulty];
+
+    const makeCardInstance = (tpl: CardTemplate) => ({ ...tpl, instanceId: `card_${generateId()}` });
+
+    const makeHand = () => {
+      if (mode === '8card') {
+        // Give 8 pool-drawn cards as the starting hand
+        return drawFromPool(8).map(makeCardInstance);
+      }
+      // Draft mode: start with empty hand, cards come from draft
+      return [];
+    };
+
+    const makeDeck = () => generateDeck().map(makeCardInstance);
 
     const startingGold = 10;
 
     const players: Player[] = [
       {
-        id: 1,
-        name: "YOU",
-        isHuman: true,
-        hp: 30,
-        maxHp: 30,
-        aether: 3,
-        maxAether: 3,
+        id: 1, name: 'YOU', isHuman: true,
+        hp: 30, maxHp: 30,
+        aether: 3, maxAether: 3,
         deck: makeDeck(),
-        hand: [],
-        field: [],
-        artifactSlot: null,
-        artifactSlotTurns: 0,
-        pendingSpells: [],
-        cardsPlayedByType: {},
-        discardPile: [],
-        gold: startingGold,
-        inventory: [],
-        goldPerTurn: 0,
-        aetherBonus: 0,
-        perks: [],
-        statBuffs: []
-      }
+        hand: makeHand(),
+        field: [], artifactSlot: null, artifactSlotTurns: 0,
+        pendingSpells: [], cardsPlayedByType: {}, discardPile: [],
+        gold: startingGold, inventory: [], goldPerTurn: 0,
+        aetherBonus: 0, perks: [], statBuffs: [],
+      },
     ];
 
     aiPlayers.forEach(ai => {
+      const aiHp = cfg.hp;
       players.push({
-        id: ai.id,
-        name: ai.name,
-        isHuman: false,
-        hp: difficulty === 'Hard' ? 40 : (difficulty === 'Easy' ? 20 : 30),
-        maxHp: difficulty === 'Hard' ? 40 : (difficulty === 'Easy' ? 20 : 30),
-        aether: 3,
-        maxAether: 3,
+        id: ai.id, name: ai.name, isHuman: false,
+        hp: aiHp, maxHp: aiHp,
+        aether: 3, maxAether: 3,
         deck: makeDeck(),
-        hand: [],
-        field: [],
-        artifactSlot: null,
-        artifactSlotTurns: 0,
-        pendingSpells: [],
-        cardsPlayedByType: {},
-        discardPile: [],
-        gold: startingGold,
-        inventory: [],
-        goldPerTurn: 0,
-        aetherBonus: difficulty === 'Hard' ? 1 : 0,
-        perks: [],
-        statBuffs: []
+        hand: makeHand(),
+        field: [], artifactSlot: null, artifactSlotTurns: 0,
+        pendingSpells: [], cardsPlayedByType: {}, discardPile: [],
+        gold: startingGold, inventory: [], goldPerTurn: 0,
+        aetherBonus: Math.max(0, cfg.aetherBonus), perks: [], statBuffs: [],
       });
-    });
-
-    // Draw starting hands
-    players.forEach(p => {
-      p.hand = p.deck.slice(0, 5);
-      p.deck = p.deck.slice(5);
     });
 
     return players;
@@ -113,9 +123,16 @@ export function LobbyProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <LobbyContext.Provider value={{
-      roomName, setRoomName, difficulty, setDifficulty,
-      maxAether, setMaxAether, animatedBattlefield, setAnimatedBattlefield,
-      aiPlayers, addAi, removeAi, generatePlayers
+      roomName, setRoomName,
+      difficulty, setDifficulty,
+      maxAether, setMaxAether,
+      animatedBattlefield, setAnimatedBattlefield,
+      aiPlayers, addAi, removeAi,
+      generatePlayers,
+      gameMode, setGameMode,
+      matchType, setMatchType,
+      ranked, setRanked,
+      getDifficultyConfig: (d) => DIFFICULTY_CFG[d],
     }}>
       {children}
     </LobbyContext.Provider>
@@ -124,8 +141,9 @@ export function LobbyProvider({ children }: { children: React.ReactNode }) {
 
 export function useLobby() {
   const context = React.useContext(LobbyContext);
-  if (context === undefined) {
-    throw new Error('useLobby must be used within a LobbyProvider');
-  }
+  if (!context) throw new Error('useLobby must be used within a LobbyProvider');
   return context;
 }
+
+export { DIFFICULTY_CFG };
+export type { DifficultyConfig };

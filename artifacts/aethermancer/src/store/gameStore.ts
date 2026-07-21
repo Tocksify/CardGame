@@ -1,6 +1,8 @@
 import { CardTemplate, CardType, CardRarity } from '../lib/cards';
 
-export type GamePhase = 'countdown' | 'draw' | 'buy' | 'main' | 'combat' | 'end' | 'gameover';
+export type GamePhase = 'countdown' | 'draw' | 'draft' | 'buy' | 'main' | 'combat' | 'end' | 'gameover';
+export type GameMode = '8card' | 'draft';
+export type MatchType = 'singleplayer' | 'multiplayer';
 
 export interface CardInstance extends CardTemplate {
   instanceId: string;
@@ -21,6 +23,10 @@ export interface FieldCard extends CardInstance {
   damageDealt: number;
   evolved: boolean;
   hasAttackedThisTurn?: boolean;
+  poisonStacks: number;
+  stunned: boolean;
+  stunTurnsLeft: number;
+  tempArmorTurns?: number;
 }
 
 export interface InventoryItem {
@@ -43,13 +49,9 @@ export interface Player {
   deck: CardInstance[];
   hand: CardInstance[];
   field: FieldCard[];
-  /** Single artifact slot — one artifact at a time */
   artifactSlot: CardInstance | null;
-  /** How many full turns the artifact has been in the slot (for the 2-turn swap lock) */
   artifactSlotTurns: number;
-  /** Spells staged during main phase, executed automatically at combat start */
   pendingSpells: StagedSpell[];
-  /** Tracks which card types have been played this turn (one per type limit) */
   cardsPlayedByType: Partial<Record<CardType, boolean>>;
   discardPile: CardInstance[];
   gold: number;
@@ -58,12 +60,14 @@ export interface Player {
   aetherBonus: number;
   perks: string[];
   statBuffs: string[];
+  elo?: number;
 
   damageTakenThisGame?: boolean;
   cardsPlayedThisGame?: number;
   goldEarnedThisGame?: number;
   creaturesKilledThisGame?: number;
   shopItemsBoughtThisGame?: number;
+  isDead?: boolean;
 }
 
 export interface GameState {
@@ -71,21 +75,28 @@ export interface GameState {
   turn: number;
   currentPlayerIndex: number;
   players: Player[];
-  log: { id: string, msg: string, type: 'damage' | 'card' | 'gold' | 'other' }[];
+  log: { id: string; msg: string; type: 'damage' | 'card' | 'gold' | 'other' }[];
   winner: number | null;
   shopOpen: boolean;
   inventoryOpen: boolean;
   targetingMode: 'none' | 'spell' | 'attack' | 'item' | 'enchantment';
   sourceId: string | null;
   pendingAction: any | null;
+  gameMode: GameMode;
+  matchType: MatchType;
+  ranked: boolean;
+  draftOptions: CardTemplate[];
 }
 
 export type GameAction =
-  | { type: 'START_GAME'; payload: { players: Player[] } }
+  | { type: 'START_GAME'; payload: { players: Player[]; gameMode: GameMode; matchType: MatchType; ranked: boolean } }
   | { type: 'SET_PHASE'; payload: GamePhase }
   | { type: 'ADVANCE_PHASE' }
   | { type: 'END_TURN' }
   | { type: 'DRAW_CARD'; payload: { playerId: number; amount: number } }
+  | { type: 'GIVE_CARDS'; payload: { playerId: number; cards: CardInstance[] } }
+  | { type: 'SET_DRAFT_OPTIONS'; payload: CardTemplate[] }
+  | { type: 'CLEAR_DRAFT_OPTIONS' }
   | { type: 'PLAY_CARD'; payload: { playerId: number; cardInstanceId: string; targetId?: string } }
   | { type: 'STAGE_SPELL'; payload: { playerId: number; cardInstanceId: string; targetId?: string } }
   | { type: 'CLEAR_PENDING_SPELLS'; payload: { playerId: number } }
@@ -94,17 +105,22 @@ export type GameAction =
   | { type: 'REPLENISH_AETHER'; payload: { playerId: number } }
   | { type: 'BUY_SHOP_ITEM'; payload: { playerId: number; itemTemplateId: string; cost: number; itemType: string; effectKey?: string; cardTemplate?: CardTemplate; name: string; description: string } }
   | { type: 'USE_INVENTORY'; payload: { playerId: number; instanceId: string; targetId?: string } }
-  | { type: 'ATTACK'; payload: { attackerPlayerId: number; attackerInstanceId: string; targetPlayerId: number; targetInstanceId?: string, damageOverride?: number } }
-  | { type: 'DAMAGE'; payload: { targetPlayerId: number; targetInstanceId?: string; amount: number; sourcePlayerId?: number; sourceInstanceId?: string; bypassResist?: boolean } }
+  | { type: 'ATTACK'; payload: { attackerPlayerId: number; attackerInstanceId: string; targetPlayerId: number; targetInstanceId?: string; damageOverride?: number } }
+  | { type: 'DAMAGE'; payload: { targetPlayerId: number; targetInstanceId?: string; amount: number; sourcePlayerId?: number; sourceInstanceId?: string; bypassResist?: boolean; bypassArmor?: boolean } }
   | { type: 'HEAL'; payload: { targetPlayerId: number; amount: number } }
   | { type: 'ADD_GOLD'; payload: { playerId: number; amount: number } }
-  | { type: 'ADD_LOG'; payload: { msg: string, type?: 'damage' | 'card' | 'gold' | 'other' } }
+  | { type: 'ADD_LOG'; payload: { msg: string; type?: 'damage' | 'card' | 'gold' | 'other' } }
   | { type: 'TOGGLE_SHOP'; payload: boolean }
   | { type: 'TOGGLE_INVENTORY'; payload: boolean }
-  | { type: 'SET_TARGETING'; payload: { mode: GameState['targetingMode'], sourceId: string | null, pendingAction: any | null } }
+  | { type: 'SET_TARGETING'; payload: { mode: GameState['targetingMode']; sourceId: string | null; pendingAction: any | null } }
   | { type: 'CLEAR_TARGETING' }
   | { type: 'EVOLVE_CREATURE'; payload: { playerId: number; instanceId: string; newTemplate: CardTemplate } }
-  | { type: 'RECORD_KILL'; payload: { playerId: number } };
+  | { type: 'RECORD_KILL'; payload: { playerId: number } }
+  | { type: 'APPLY_POISON'; payload: { playerId: number; instanceId: string; stacks: number } }
+  | { type: 'APPLY_STUN'; payload: { playerId: number; instanceId: string; turns: number } }
+  | { type: 'PROCESS_STATUS_EFFECTS'; payload: { playerId: number } }
+  | { type: 'REMOVE_POISON'; payload: { playerId: number; instanceId: string } }
+  | { type: 'MARK_DEAD'; payload: { playerId: number } };
 
 export const initialGameState: GameState = {
   phase: 'countdown',
@@ -118,13 +134,16 @@ export const initialGameState: GameState = {
   targetingMode: 'none',
   sourceId: null,
   pendingAction: null,
+  gameMode: '8card',
+  matchType: 'singleplayer',
+  ranked: false,
+  draftOptions: [],
 };
 
 export function generateId() {
   return Math.random().toString(36).substring(2, 9);
 }
 
-/** Apply or reverse artifact aura to a list of field cards */
 function applyAuraToField(field: FieldCard[], effect: string | undefined, sign: 1 | -1): FieldCard[] {
   if (!effect) return field;
   return field.map(c => {
@@ -136,13 +155,22 @@ function applyAuraToField(field: FieldCard[], effect: string | undefined, sign: 
   });
 }
 
+function getArmorReduction(card: FieldCard): number {
+  if (card.keywords?.includes('heavy_armor')) return 3;
+  if ((card.tempArmorTurns ?? 0) > 0) return 3;
+  return 0;
+}
+
 export function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case 'START_GAME':
       return {
         ...initialGameState,
         players: action.payload.players,
-        log: [{ id: generateId(), msg: 'Game started. Match begins!', type: 'other' }],
+        gameMode: action.payload.gameMode,
+        matchType: action.payload.matchType,
+        ranked: action.payload.ranked,
+        log: [{ id: generateId(), msg: 'Game started. The arcane battle begins!', type: 'other' }],
       };
 
     case 'SET_PHASE':
@@ -157,38 +185,35 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'ADD_LOG':
       return {
         ...state,
-        log: [...state.log, { id: generateId(), msg: action.payload.msg, type: action.payload.type || 'other' }].slice(-20)
+        log: [...state.log, { id: generateId(), msg: action.payload.msg, type: action.payload.type || 'other' }].slice(-25),
       };
 
     case 'SET_TARGETING':
-      return {
-        ...state,
-        targetingMode: action.payload.mode,
-        sourceId: action.payload.sourceId,
-        pendingAction: action.payload.pendingAction,
-      };
+      return { ...state, targetingMode: action.payload.mode, sourceId: action.payload.sourceId, pendingAction: action.payload.pendingAction };
 
     case 'CLEAR_TARGETING':
       return { ...state, targetingMode: 'none', sourceId: null, pendingAction: null };
 
+    case 'SET_DRAFT_OPTIONS':
+      return { ...state, draftOptions: action.payload, phase: 'draft' };
+
+    case 'CLEAR_DRAFT_OPTIONS':
+      return { ...state, draftOptions: [] };
+
     case 'ADVANCE_PHASE': {
       const phases: GamePhase[] = ['draw', 'buy', 'main', 'combat', 'end'];
-      const currentIndex = phases.indexOf(state.phase);
-      if (currentIndex === -1 || currentIndex === phases.length - 1) {
-        return state;
-      }
+      const currentIndex = phases.indexOf(state.phase as any);
+      if (currentIndex === -1 || currentIndex === phases.length - 1) return state;
       return { ...state, phase: phases[currentIndex + 1] };
     }
 
-    case 'REPLENISH_AETHER': {
+    case 'REPLENISH_AETHER':
       return {
         ...state,
-        players: state.players.map(p => {
-          if (p.id !== action.payload.playerId) return p;
-          return { ...p, aether: p.maxAether + p.aetherBonus };
-        }),
+        players: state.players.map(p =>
+          p.id !== action.payload.playerId ? p : { ...p, aether: p.maxAether + p.aetherBonus }
+        ),
       };
-    }
 
     case 'END_TURN': {
       const nextIndex = (state.currentPlayerIndex + 1) % state.players.length;
@@ -196,24 +221,21 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       const newPlayers = state.players.map((p, i) => {
         let newP = { ...p };
-
         if (i === state.currentPlayerIndex) {
-          // Increment turns-on-field for current player's creatures
-          newP.field = newP.field.map(c => ({ ...c, turnsOnField: c.turnsOnField + 1 }));
-          // Increment artifact slot lock counter
-          if (newP.artifactSlot) {
-            newP.artifactSlotTurns = newP.artifactSlotTurns + 1;
-          }
+          newP.field = newP.field.map(c => ({
+            ...c,
+            turnsOnField: c.turnsOnField + 1,
+            tempArmorTurns: Math.max(0, (c.tempArmorTurns ?? 0) - 1),
+          }));
+          if (newP.artifactSlot) newP.artifactSlotTurns += 1;
         }
-
         if (i === nextIndex) {
           newP.field = newP.field.map(c => ({
-            ...c, tapped: false, tempAtkBonus: 0, tempDefBonus: 0, hasAttackedThisTurn: false
+            ...c, tapped: false, tempAtkBonus: 0, tempDefBonus: 0, hasAttackedThisTurn: false,
           }));
           const newMaxAether = Math.min(10, p.maxAether + 1);
           newP.maxAether = newMaxAether;
           newP.aether = newMaxAether + p.aetherBonus;
-          // Reset per-turn type limit
           newP.cardsPlayedByType = {};
         }
         return newP;
@@ -238,14 +260,119 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           if (p.id !== playerId) return p;
           const toDraw = Math.min(amount, p.deck.length);
           if (toDraw === 0) return p;
-          const drawn = p.deck.slice(0, toDraw);
           return {
             ...p,
             deck: p.deck.slice(toDraw),
-            hand: [...p.hand, ...drawn],
+            hand: [...p.hand, ...p.deck.slice(0, toDraw)],
           };
         }),
       };
+    }
+
+    case 'GIVE_CARDS': {
+      const { playerId, cards } = action.payload;
+      return {
+        ...state,
+        players: state.players.map(p =>
+          p.id !== playerId ? p : { ...p, hand: [...p.hand, ...cards] }
+        ),
+        draftOptions: [],
+        phase: 'buy',
+      };
+    }
+
+    case 'MARK_DEAD': {
+      return {
+        ...state,
+        players: state.players.map(p =>
+          p.id !== action.payload.playerId ? p : { ...p, isDead: true }
+        ),
+      };
+    }
+
+    case 'APPLY_POISON': {
+      const { playerId, instanceId, stacks } = action.payload;
+      return {
+        ...state,
+        players: state.players.map(p => {
+          if (p.id !== playerId) return p;
+          return {
+            ...p,
+            field: p.field.map(c =>
+              c.instanceId === instanceId
+                ? { ...c, poisonStacks: c.poisonStacks + stacks }
+                : c
+            ),
+          };
+        }),
+      };
+    }
+
+    case 'APPLY_STUN': {
+      const { playerId, instanceId, turns } = action.payload;
+      return {
+        ...state,
+        players: state.players.map(p => {
+          if (p.id !== playerId) return p;
+          return {
+            ...p,
+            field: p.field.map(c =>
+              c.instanceId === instanceId
+                ? { ...c, stunned: true, stunTurnsLeft: Math.max(c.stunTurnsLeft, turns) }
+                : c
+            ),
+          };
+        }),
+      };
+    }
+
+    case 'REMOVE_POISON': {
+      const { playerId, instanceId } = action.payload;
+      return {
+        ...state,
+        players: state.players.map(p => {
+          if (p.id !== playerId) return p;
+          return {
+            ...p,
+            field: p.field.map(c =>
+              c.instanceId === instanceId ? { ...c, poisonStacks: 0 } : c
+            ),
+          };
+        }),
+      };
+    }
+
+    case 'PROCESS_STATUS_EFFECTS': {
+      const { playerId } = action.payload;
+      let newPlayers = state.players.map(p => {
+        if (p.id !== playerId) return p;
+        const newField: FieldCard[] = [];
+        for (const c of p.field) {
+          let card = { ...c };
+          // Poison tick
+          if (card.poisonStacks > 0) {
+            card.currentDef = card.currentDef - card.poisonStacks;
+            card.poisonStacks = Math.max(0, card.poisonStacks - 1);
+          }
+          // Stun tick
+          if (card.stunned) {
+            card.stunTurnsLeft = Math.max(0, card.stunTurnsLeft - 1);
+            if (card.stunTurnsLeft <= 0) card.stunned = false;
+          }
+          if (card.currentDef > 0) newField.push(card);
+        }
+        return { ...p, field: newField };
+      });
+
+      const alivePlayers = newPlayers.filter(p => p.hp > 0 && !p.isDead);
+      let winner = state.winner;
+      let phase = state.phase;
+      if (alivePlayers.length === 1 && state.players.length > 1) {
+        winner = alivePlayers[0].id;
+        phase = 'gameover';
+      }
+
+      return { ...state, players: newPlayers, winner, phase };
     }
 
     case 'BUY_SHOP_ITEM': {
@@ -255,62 +382,31 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         players: state.players.map(p => {
           if (p.id !== playerId) return p;
           if (p.gold < cost) return p;
-
-          let newP = {
-            ...p,
-            gold: p.gold - cost,
-            shopItemsBoughtThisGame: (p.shopItemsBoughtThisGame || 0) + 1
-          };
+          let newP = { ...p, gold: p.gold - cost, shopItemsBoughtThisGame: (p.shopItemsBoughtThisGame || 0) + 1 };
 
           if (itemType === 'card' && cardTemplate) {
-            const newCard: CardInstance = {
-              instanceId: generateId(),
-              templateId: cardTemplate.templateId,
-              name: cardTemplate.name,
-              type: cardTemplate.type,
-              cost: cardTemplate.cost,
-              atk: cardTemplate.atk,
-              def: cardTemplate.def,
-              description: cardTemplate.description,
-              effect: cardTemplate.effect,
-              keywords: cardTemplate.keywords,
-              rarity: cardTemplate.rarity,
-              evolvesTo: cardTemplate.evolvesTo,
-              evolveCondition: cardTemplate.evolveCondition
-            };
+            const newCard: CardInstance = { instanceId: generateId(), ...cardTemplate };
             newP.hand = [...newP.hand, newCard];
           } else if (itemType === 'item') {
             if (newP.inventory.length < 8) {
               if (effectKey === 'ironheart') {
-                newP.maxHp += 20;
-                newP.hp = Math.min(newP.hp + 20, newP.maxHp);
-                newP.inventory = [...newP.inventory, {
-                  instanceId: generateId(), itemId: action.payload.itemTemplateId,
-                  type: 'item', name, description, effectKey
-                }];
-              } else {
-                newP.inventory = [...newP.inventory, {
-                  instanceId: generateId(), itemId: action.payload.itemTemplateId,
-                  type: 'item', name, description, effectKey
-                }];
+                newP.maxHp += 20; newP.hp = Math.min(newP.hp + 20, newP.maxHp);
               }
+              newP.inventory = [...newP.inventory, { instanceId: generateId(), itemId: action.payload.itemTemplateId, type: 'item', name, description, effectKey }];
             }
           } else if (itemType === 'stat') {
             if (newP.inventory.length < 8) {
-              newP.inventory = [...newP.inventory, {
-                instanceId: generateId(), itemId: action.payload.itemTemplateId,
-                type: 'stat', name, description, effectKey
-              }];
+              newP.inventory = [...newP.inventory, { instanceId: generateId(), itemId: action.payload.itemTemplateId, type: 'stat', name, description, effectKey }];
               if (effectKey) newP.statBuffs = [...newP.statBuffs, effectKey];
             }
           } else if (itemType === 'perk') {
             newP.perks = [...newP.perks, effectKey || ''];
             if (effectKey === 'perk_hp_10') { newP.maxHp += 10; newP.hp += 10; }
-            else if (effectKey === 'perk_aether_2') { newP.aetherBonus += 2; }
-            else if (effectKey === 'perk_gold_2') { newP.goldPerTurn += 50; }
+            else if (effectKey === 'perk_aether_2') newP.aetherBonus += 2;
+            else if (effectKey === 'perk_gold_2') newP.goldPerTurn += 50;
           }
           return newP;
-        })
+        }),
       };
     }
 
@@ -322,15 +418,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           if (p.id !== playerId) return p;
           const card = p.hand.find(c => c.instanceId === cardInstanceId);
           if (!card || card.type !== 'spell') return p;
-          if (p.aether < card.cost) return p;
-          if (p.cardsPlayedByType['spell']) return p; // already played a spell this turn
-
-          const staged: StagedSpell = { ...card, targetId };
+          if (p.aether < card.cost || p.cardsPlayedByType['spell']) return p;
           return {
             ...p,
             hand: p.hand.filter(c => c.instanceId !== cardInstanceId),
             aether: p.aether - card.cost,
-            pendingSpells: [...p.pendingSpells, staged],
+            pendingSpells: [...p.pendingSpells, { ...card, targetId }],
             cardsPlayedByType: { ...p.cardsPlayedByType, spell: true },
             cardsPlayedThisGame: (p.cardsPlayedThisGame || 0) + 1,
           };
@@ -338,101 +431,83 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
 
-    case 'CLEAR_PENDING_SPELLS': {
+    case 'CLEAR_PENDING_SPELLS':
       return {
         ...state,
         players: state.players.map(p =>
           p.id === action.payload.playerId ? { ...p, pendingSpells: [] } : p
         ),
       };
-    }
 
     case 'PLAY_CARD': {
       const { playerId, cardInstanceId, targetId } = action.payload;
-      let cardToPlay: CardInstance | undefined;
-
       const newPlayers = state.players.map(p => {
-        if (p.id === playerId) {
-          cardToPlay = p.hand.find(c => c.instanceId === cardInstanceId);
-          if (!cardToPlay) return p;
-          if (p.aether < cardToPlay.cost) return p;
-          // Spells must use STAGE_SPELL instead
-          if (cardToPlay.type === 'spell') return p;
-          // One-per-type limit
-          if (p.cardsPlayedByType[cardToPlay.type]) return p;
+        if (p.id !== playerId) return p;
+        const cardToPlay = p.hand.find(c => c.instanceId === cardInstanceId);
+        if (!cardToPlay) return p;
+        if (p.aether < cardToPlay.cost) return p;
+        if (cardToPlay.type === 'spell') return p;
+        if (p.cardsPlayedByType[cardToPlay.type]) return p;
 
-          const newHand = p.hand.filter(c => c.instanceId !== cardInstanceId);
-          const newAether = p.aether - cardToPlay.cost;
-          let newField = p.field;
-          let newArtifactSlot = p.artifactSlot;
-          let newArtifactSlotTurns = p.artifactSlotTurns;
+        const newHand = p.hand.filter(c => c.instanceId !== cardInstanceId);
+        const newAether = p.aether - cardToPlay.cost;
+        let newField = p.field;
+        let newArtifactSlot = p.artifactSlot;
+        let newArtifactSlotTurns = p.artifactSlotTurns;
 
-          if (cardToPlay.type === 'creature') {
-            // Enforce max 4 creatures on the field
-            if (p.field.length >= 4) return p;
-            let bonusAtk = 0;
-            let bonusDef = 0;
-            if (p.statBuffs.includes('jaksho')) { bonusAtk += 2; bonusDef += 2; }
-            // Apply active artifact aura to new creature
-            if (p.artifactSlot?.effect === 'aura_atk_1') bonusAtk += 1;
-            if (p.artifactSlot?.effect === 'aura_def_1') bonusDef += 1;
-            newField = [...p.field, {
-              ...cardToPlay,
-              currentAtk: (cardToPlay.atk || 0) + bonusAtk,
-              currentDef: (cardToPlay.def || 1) + bonusDef,
-              tapped: cardToPlay.keywords?.includes('haste') ? false : true,
-              attachments: [], tempAtkBonus: 0, tempDefBonus: 0,
-              turnsOnField: 0, damageDealt: 0, evolved: false
-            }];
-          } else if (cardToPlay.type === 'artifact') {
-            // Check 2-turn lock before swapping
-            if (p.artifactSlot && p.artifactSlotTurns < 2) return p;
-            // Apply aura bonuses to existing field (new artifact)
-            newField = applyAuraToField(p.field, cardToPlay.effect, 1);
-            // Remove old artifact aura bonuses if swapping
-            if (p.artifactSlot) {
-              newField = applyAuraToField(newField, p.artifactSlot.effect, -1);
-            }
-            newArtifactSlot = cardToPlay;
-            newArtifactSlotTurns = 0;
-          }
+        if (cardToPlay.type === 'character') {
+          if (p.field.length >= 4) return p;
+          let bonusAtk = 0, bonusDef = 0;
+          if (p.statBuffs.includes('jaksho')) { bonusAtk += 2; bonusDef += 2; }
+          if (p.artifactSlot?.effect === 'aura_atk_1') bonusAtk += 1;
+          if (p.artifactSlot?.effect === 'aura_def_1') bonusDef += 1;
+          // Electric aura from Thunder Titan
+          const hasElectricAura = p.field.some(c => c.keywords?.includes('electric_aura'));
+          if (hasElectricAura) bonusAtk += 1;
 
-          return {
-            ...p,
-            hand: newHand,
-            aether: newAether,
-            field: newField,
-            artifactSlot: newArtifactSlot,
-            artifactSlotTurns: newArtifactSlotTurns,
-            cardsPlayedByType: { ...p.cardsPlayedByType, [cardToPlay.type]: true },
-            cardsPlayedThisGame: (p.cardsPlayedThisGame || 0) + 1,
+          const newCard: FieldCard = {
+            ...cardToPlay,
+            currentAtk: (cardToPlay.atk || 0) + bonusAtk,
+            currentDef: (cardToPlay.def || 1) + bonusDef,
+            tapped: cardToPlay.keywords?.includes('haste') ? false : true,
+            attachments: [], tempAtkBonus: 0, tempDefBonus: 0,
+            turnsOnField: 0, damageDealt: 0, evolved: false,
+            poisonStacks: 0, stunned: false, stunTurnsLeft: 0,
           };
+          newField = [...p.field, newCard];
+        } else if (cardToPlay.type === 'artifact') {
+          if (p.artifactSlot && p.artifactSlotTurns < 2) return p;
+          newField = applyAuraToField(p.field, cardToPlay.effect, 1);
+          if (p.artifactSlot) newField = applyAuraToField(newField, p.artifactSlot.effect, -1);
+          newArtifactSlot = cardToPlay;
+          newArtifactSlotTurns = 0;
         }
-        return p;
+
+        return {
+          ...p, hand: newHand, aether: newAether, field: newField,
+          artifactSlot: newArtifactSlot, artifactSlotTurns: newArtifactSlotTurns,
+          cardsPlayedByType: { ...p.cardsPlayedByType, [cardToPlay.type]: true },
+          cardsPlayedThisGame: (p.cardsPlayedThisGame || 0) + 1,
+        };
       });
       return { ...state, players: newPlayers };
     }
 
-    case 'SELL_ARTIFACT': {
+    case 'SELL_ARTIFACT':
       return {
         ...state,
         players: state.players.map(p => {
-          if (p.id !== action.payload.playerId) return p;
-          if (!p.artifactSlot) return p;
-          const sellPrice = p.artifactSlot.cost * 75; // 75g per aether cost
-          // Reverse aura bonuses
-          const newField = applyAuraToField(p.field, p.artifactSlot.effect, -1);
+          if (p.id !== action.payload.playerId || !p.artifactSlot) return p;
+          const sellPrice = p.artifactSlot.cost * 75;
           return {
             ...p,
-            field: newField,
-            artifactSlot: null,
-            artifactSlotTurns: 0,
+            field: applyAuraToField(p.field, p.artifactSlot.effect, -1),
+            artifactSlot: null, artifactSlotTurns: 0,
             gold: p.gold + sellPrice,
             goldEarnedThisGame: (p.goldEarnedThisGame || 0) + sellPrice,
           };
         }),
       };
-    }
 
     case 'SELL_CREATURE': {
       const { playerId, instanceId } = action.payload;
@@ -442,8 +517,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           if (p.id !== playerId) return p;
           const creature = p.field.find(c => c.instanceId === instanceId);
           if (!creature) return p;
-          // Gold based on rarity and cost
-          const rarityMult = creature.rarity === 'legendary' ? 100 : creature.rarity === 'rare' ? 75 : 50;
+          const rarityMult = creature.rarity === 'legendary' || creature.rarity === 'secret' ? 100 : creature.rarity === 'rare' ? 75 : 50;
           const sellPrice = creature.cost * rarityMult;
           return {
             ...p,
@@ -465,14 +539,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             ...p,
             field: p.field.map(c => {
               if (c.instanceId === attackerInstanceId) {
-                if (damageOverride === undefined) {
-                  attackerAtk = c.currentAtk + c.tempAtkBonus;
-                }
+                if (damageOverride === undefined) attackerAtk = c.currentAtk + c.tempAtkBonus;
                 return { ...c, tapped: true, hasAttackedThisTurn: true, damageDealt: c.damageDealt + attackerAtk };
               }
               return c;
-            })
-          }
+            }),
+          };
         }
         return p;
       });
@@ -484,117 +556,111 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
               ...p,
               field: p.field.map(c => {
                 if (c.instanceId === targetInstanceId) {
-                  return { ...c, currentDef: c.currentDef - attackerAtk };
+                  const armor = getArmorReduction(c);
+                  const dmg = Math.max(1, attackerAtk - armor);
+                  return { ...c, currentDef: c.currentDef - dmg };
                 }
                 return c;
-              }).filter(c => c.currentDef > 0)
-            }
+              }).filter(c => c.currentDef > 0),
+            };
           } else {
-            return { ...p, hp: Math.max(0, p.hp - attackerAtk), damageTakenThisGame: true };
+            const resist = p.perks.includes('perk_resist_1') ? 1 : 0;
+            const finalDmg = Math.max(0, attackerAtk - resist);
+            return { ...p, hp: Math.max(0, p.hp - finalDmg), damageTakenThisGame: true };
           }
         }
         return p;
       });
 
-      const alivePlayers = newPlayers.filter(p => p.hp > 0);
+      const alivePlayers = newPlayers.filter(p => p.hp > 0 && !p.isDead);
       let winner = state.winner;
       let phase = state.phase;
-      if (alivePlayers.length === 1) { winner = alivePlayers[0].id; phase = 'gameover'; }
+      if (alivePlayers.length === 1 && state.players.length > 1) { winner = alivePlayers[0].id; phase = 'gameover'; }
 
       return { ...state, players: newPlayers, winner, phase };
     }
 
-    case 'ADD_GOLD': {
+    case 'ADD_GOLD':
       return {
         ...state,
         players: state.players.map(p =>
-          p.id === action.payload.playerId ? {
-            ...p,
-            gold: p.gold + action.payload.amount,
-            goldEarnedThisGame: (p.goldEarnedThisGame || 0) + action.payload.amount
-          } : p
-        )
+          p.id === action.payload.playerId
+            ? { ...p, gold: p.gold + action.payload.amount, goldEarnedThisGame: (p.goldEarnedThisGame || 0) + action.payload.amount }
+            : p
+        ),
       };
-    }
 
     case 'DAMAGE': {
-      const { targetPlayerId, targetInstanceId, amount, bypassResist } = action.payload;
-      let actualAmount = amount;
+      const { targetPlayerId, targetInstanceId, amount, bypassResist, bypassArmor } = action.payload;
 
       let newPlayers = state.players.map(p => {
-        if (p.id === targetPlayerId) {
-          if (p.perks.includes('perk_resist_1') && !bypassResist) {
-            actualAmount = Math.max(1, actualAmount - 1);
-          }
-          if (targetInstanceId) {
-            return {
-              ...p,
-              field: p.field.map(c => {
-                if (c.instanceId === targetInstanceId) {
-                  return { ...c, currentDef: c.currentDef - actualAmount };
-                }
-                return c;
-              }).filter(c => c.currentDef > 0)
-            }
-          } else {
-            return { ...p, hp: Math.max(0, p.hp - actualAmount), damageTakenThisGame: true };
-          }
+        if (p.id !== targetPlayerId) return p;
+        let actualAmount = amount;
+        if (p.perks.includes('perk_resist_1') && !bypassResist) actualAmount = Math.max(1, actualAmount - 1);
+
+        if (targetInstanceId) {
+          return {
+            ...p,
+            field: p.field.map(c => {
+              if (c.instanceId !== targetInstanceId) return c;
+              const armor = bypassArmor ? 0 : getArmorReduction(c);
+              const dmg = Math.max(1, actualAmount - armor);
+              return { ...c, currentDef: c.currentDef - dmg };
+            }).filter(c => c.currentDef > 0),
+          };
+        } else {
+          return { ...p, hp: Math.max(0, p.hp - actualAmount), damageTakenThisGame: true };
         }
-        return p;
       });
 
-      const alivePlayers = newPlayers.filter(p => p.hp > 0);
+      const alivePlayers = newPlayers.filter(p => p.hp > 0 && !p.isDead);
       let winner = state.winner;
       let phase = state.phase;
-      if (alivePlayers.length === 1) { winner = alivePlayers[0].id; phase = 'gameover'; }
+      if (alivePlayers.length === 1 && state.players.length > 1) { winner = alivePlayers[0].id; phase = 'gameover'; }
 
       return { ...state, players: newPlayers, winner, phase };
     }
 
-    case 'HEAL': {
-      const { targetPlayerId, amount } = action.payload;
+    case 'HEAL':
       return {
         ...state,
         players: state.players.map(p =>
-          p.id === targetPlayerId ? { ...p, hp: Math.min(p.maxHp, p.hp + amount) } : p
-        )
+          p.id === action.payload.targetPlayerId
+            ? { ...p, hp: Math.min(p.maxHp, p.hp + action.payload.amount) }
+            : p
+        ),
       };
-    }
 
     case 'USE_INVENTORY': {
       const { playerId, instanceId, targetId } = action.payload;
       return {
         ...state,
         players: state.players.map(p => {
-          if (p.id === playerId) {
-            const item = p.inventory.find(i => i.instanceId === instanceId);
-            if (!item) return p;
-            let newField = p.field;
-            let newHp = p.hp;
-            let newMaxHp = p.maxHp;
-            if (item.effectKey === 'perm_atk_2' && targetId) {
-              newField = newField.map(c => c.instanceId === targetId ? { ...c, currentAtk: c.currentAtk + 2 } : c);
-            } else if (item.effectKey === 'perm_def_4' && targetId) {
-              newField = newField.map(c => c.instanceId === targetId ? { ...c, currentDef: c.currentDef + 4 } : c);
-            } else if (item.effectKey === 'perm_stats_1_1' && targetId) {
-              newField = newField.map(c => c.instanceId === targetId ? { ...c, currentAtk: c.currentAtk + 1, currentDef: c.currentDef + 1 } : c);
-            } else if (item.effectKey === 'heal_8_hero') {
-              newHp = Math.min(p.maxHp, p.hp + 8);
-            } else if (item.effectKey === 'heal_20_hero') {
-              newHp = Math.min(p.maxHp, p.hp + 20);
-            }
-            return {
-              ...p,
-              field: newField,
-              hp: newHp,
-              maxHp: newMaxHp,
-              inventory: item.effectKey === 'ironheart'
-                ? p.inventory
-                : p.inventory.filter(i => i.instanceId !== instanceId)
-            };
-          }
-          return p;
-        })
+          if (p.id !== playerId) return p;
+          const item = p.inventory.find(i => i.instanceId === instanceId);
+          if (!item) return p;
+          let newField = p.field;
+          let newHp = p.hp;
+          let newMaxHp = p.maxHp;
+          if (item.effectKey === 'perm_atk_2' && targetId)
+            newField = newField.map(c => c.instanceId === targetId ? { ...c, currentAtk: c.currentAtk + 2 } : c);
+          else if (item.effectKey === 'perm_def_4' && targetId)
+            newField = newField.map(c => c.instanceId === targetId ? { ...c, currentDef: c.currentDef + 4 } : c);
+          else if (item.effectKey === 'perm_stats_1_1' && targetId)
+            newField = newField.map(c => c.instanceId === targetId ? { ...c, currentAtk: c.currentAtk + 1, currentDef: c.currentDef + 1 } : c);
+          else if (item.effectKey === 'heal_8_hero') newHp = Math.min(p.maxHp, p.hp + 8);
+          else if (item.effectKey === 'heal_20_hero') newHp = Math.min(p.maxHp, p.hp + 20);
+          else if (item.effectKey === 'cure_poison' && targetId)
+            newField = newField.map(c => c.instanceId === targetId ? { ...c, poisonStacks: 0 } : c);
+          else if (item.effectKey === 'temp_armor' && targetId)
+            newField = newField.map(c => c.instanceId === targetId ? { ...c, tempArmorTurns: 2 } : c);
+          return {
+            ...p, field: newField, hp: newHp, maxHp: newMaxHp,
+            inventory: item.effectKey === 'ironheart'
+              ? p.inventory
+              : p.inventory.filter(i => i.instanceId !== instanceId),
+          };
+        }),
       };
     }
 
@@ -603,40 +669,33 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return {
         ...state,
         players: state.players.map(p => {
-          if (p.id === playerId) {
-            return {
-              ...p,
-              field: p.field.map(c => {
-                if (c.instanceId === instanceId) {
-                  return {
-                    ...c,
-                    templateId: newTemplate.templateId,
-                    name: newTemplate.name,
-                    description: newTemplate.description,
-                    currentAtk: newTemplate.atk || 0,
-                    currentDef: newTemplate.def || 1,
-                    rarity: newTemplate.rarity,
-                    evolved: true,
-                    keywords: newTemplate.keywords
-                  };
-                }
-                return c;
-              })
-            };
-          }
-          return p;
-        })
+          if (p.id !== playerId) return p;
+          return {
+            ...p,
+            field: p.field.map(c => {
+              if (c.instanceId !== instanceId) return c;
+              return {
+                ...c,
+                templateId: newTemplate.templateId, name: newTemplate.name,
+                description: newTemplate.description,
+                currentAtk: newTemplate.atk || 0, currentDef: newTemplate.def || 1,
+                rarity: newTemplate.rarity, evolved: true, keywords: newTemplate.keywords,
+              };
+            }),
+          };
+        }),
       };
     }
 
-    case 'RECORD_KILL': {
+    case 'RECORD_KILL':
       return {
         ...state,
         players: state.players.map(p =>
-          p.id === action.payload.playerId ? { ...p, creaturesKilledThisGame: (p.creaturesKilledThisGame || 0) + 1 } : p
-        )
+          p.id === action.payload.playerId
+            ? { ...p, creaturesKilledThisGame: (p.creaturesKilledThisGame || 0) + 1 }
+            : p
+        ),
       };
-    }
 
     default:
       return state;

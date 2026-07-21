@@ -19,7 +19,7 @@ const TAB_TYPE_MAP: Record<string, ShopItemTemplate['type']> = {
 
 // ── Card type colors (MTG-style) ──────────────────────────────────────────
 const TYPE_FRAME: Record<string, { bg: string; bar: string; glow: string; icon: React.ReactNode }> = {
-  creature:    { bg: '#0e1f3d', bar: '#1a3a6e', glow: 'rgba(60,100,200,0.6)',  icon: <Swords size={7} /> },
+  character:   { bg: '#0e1f3d', bar: '#1a3a6e', glow: 'rgba(60,100,200,0.6)',  icon: <Swords size={7} /> },
   spell:       { bg: '#2a0a0a', bar: '#6e1a1a', glow: 'rgba(200,60,60,0.6)',   icon: <Zap size={7} /> },
   artifact:    { bg: '#241600', bar: '#6e4e1a', glow: 'rgba(200,140,60,0.6)',  icon: <Package size={7} /> },
   enchantment: { bg: '#072210', bar: '#1a5a2e', glow: 'rgba(60,180,100,0.6)', icon: <Sparkles size={7} /> },
@@ -69,7 +69,7 @@ const ArenaCardUI = ({
   combatAnim?: { targetId: string; damage: number } | null;
   size?: 'sm' | 'md';
 }) => {
-  const frame = TYPE_FRAME[card.type] || TYPE_FRAME.creature;
+  const frame = TYPE_FRAME[card.type] || TYPE_FRAME.character;
   const fc = card as FieldCard;
   const displayAtk = fc.currentAtk ?? card.atk ?? 0;
   const displayDef = fc.currentDef ?? card.def ?? 1;
@@ -111,7 +111,7 @@ const ArenaCardUI = ({
       </div>
       <div className="h-[14%] flex items-center justify-between px-0.5"
            style={{ background: 'linear-gradient(180deg, #0e0a05, #080603)', borderTop: '1px solid rgba(74,48,0,0.5)' }}>
-        {card.type === 'creature' ? (
+        {card.type === 'character' ? (
           <>
             <div className="flex items-center gap-0.5 font-bold text-[9px]" style={{ color: '#e8a030' }}><Swords size={7} />{displayAtk}</div>
             <div className="text-[5px]" style={{ color: 'rgba(201,162,39,0.4)' }}>◆</div>
@@ -211,7 +211,7 @@ const HandCardUI = ({
   staged?: boolean;
   onClick?: () => void;
 }) => {
-  const frame = TYPE_FRAME[card.type] || TYPE_FRAME.creature;
+  const frame = TYPE_FRAME[card.type] || TYPE_FRAME.character;
   const borderCls = rarityBorder(card.rarity);
 
   return (
@@ -252,7 +252,7 @@ const HandCardUI = ({
       </div>
       <div className="h-[12%] flex items-center justify-between px-1"
            style={{ background: 'linear-gradient(180deg, #0e0a05, #070503)', borderTop: '1px solid rgba(74,48,0,0.5)' }}>
-        {card.type === 'creature' ? (
+        {card.type === 'character' ? (
           <>
             <div className="flex items-center gap-0.5 font-display font-bold text-[10px]" style={{ color: '#e8a030' }}><Swords size={8} />{card.atk}</div>
             <div className="flex items-center gap-0.5 font-display font-bold text-[10px]" style={{ color: '#5db860' }}><ShieldAlert size={8} />{card.def}</div>
@@ -345,10 +345,15 @@ const PlayerZone = ({
             {player.field.some(c => c.evolved) && (
               <div className="absolute inset-0" style={{ animation: 'evolve-glow 2s ease-in-out infinite' }} />
             )}
+            {(player.isDead || player.hp <= 0) && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-20">
+                <span className="text-[8px] font-display font-black text-red-400 tracking-widest">DEAD</span>
+              </div>
+            )}
           </div>
 
-          <div className="text-[8px] font-display font-bold text-center leading-tight max-w-[60px] truncate"
-               style={{ color: isMe ? '#c9a227' : '#c8b888', textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>
+          <div className="text-[8px] font-display font-bold text-center leading-tight max-w-[60px] truncate flex items-center gap-1"
+               style={{ color: isMe ? '#c9a227' : (player.hp <= 0 || player.isDead) ? 'rgba(180,50,50,0.7)' : '#c8b888', textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>
             {player.name}
           </div>
 
@@ -608,7 +613,7 @@ export default function GamePage() {
   const [, setLocation] = useLocation();
   const {
     gameState, dispatch, playCard, stageSpell, sellArtifact, sellCreature, attackWith,
-    buyItem, useInventoryItem, endPhase, achievementToast, combatAnim, announcement,
+    buyItem, useInventoryItem, endPhase, pickDraftCard, achievementToast, combatAnim, announcement,
     shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft,
   } = useGame();
   const { animatedBattlefield } = useLobby();
@@ -616,6 +621,7 @@ export default function GamePage() {
   const [countdown, setCountdown] = useState<number | null>(3);
   const [shopTab, setShopTab] = useState<'items' | 'stat' | 'perks' | 'cards'>('items');
   const [logOpen, setLogOpen] = useState(false);
+  const [isSpectating, setIsSpectating] = useState(false);
 
   useEffect(() => {
     if (gameState.phase === 'countdown') {
@@ -748,7 +754,7 @@ export default function GamePage() {
   const targetingLabel: Record<string, string> = {
     spell:       'Select a target for your spell',
     attack:      'Select an enemy to attack',
-    enchantment: 'Select your creature to enchant',
+    enchantment: 'Select your character to enchant',
     item:        'Select a target for this item',
   };
 
@@ -997,9 +1003,9 @@ export default function GamePage() {
           {/* Right: type limit indicators */}
           {isMyTurn && gameState.phase === 'main' && (
             <div className="flex items-center gap-1 shrink-0">
-              {(['creature','spell','artifact','enchantment'] as const).map(type => {
+              {(['character','spell','artifact','enchantment'] as const).map(type => {
                 const used = !!me.cardsPlayedByType[type];
-                const colors: Record<string,string> = { creature:'#4a7ae0', spell:'#e04040', artifact:'#c9a227', enchantment:'#4aaa60' };
+                const colors: Record<string,string> = { character:'#4a7ae0', spell:'#e04040', artifact:'#c9a227', enchantment:'#4aaa60' };
                 return (
                   <div key={type}
                        className="text-[6px] font-display uppercase px-1 py-0.5 border leading-none"
@@ -1029,7 +1035,7 @@ export default function GamePage() {
               const isStaged = me.pendingSpells.some(s => s.instanceId === card.instanceId);
               const canAfford = me.aether >= card.cost;
               const artifactLocked = card.type === 'artifact' && me.artifactSlot !== null && me.artifactSlotTurns < 2;
-              const fieldFull = card.type === 'creature' && me.field.length >= 4;
+              const fieldFull = card.type === 'character' && me.field.length >= 4;
               const playable = isMyTurn && gameState.phase === 'main' && canAfford && !typeUsed && !artifactLocked && !fieldFull;
 
               return (
@@ -1298,6 +1304,111 @@ export default function GamePage() {
         )}
       </AnimatePresence>
 
+      {/* ── Draft Overlay ────────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {gameState.phase === 'draft' && gameState.draftOptions.length > 0 && isMyTurn && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 flex flex-col items-center justify-center backdrop-blur-sm"
+            style={{ background: 'rgba(8,5,2,0.92)' }}
+          >
+            <div className="text-[10px] font-display uppercase tracking-[0.5em] mb-2" style={{ color: '#7a6040' }}>
+              Choose one card to add to your hand
+            </div>
+            <h2 className="text-2xl font-display font-black mb-8" style={{ color: '#c9a227', letterSpacing: '0.1em' }}>
+              DRAFT PHASE
+            </h2>
+            <div className="flex gap-6 items-start flex-wrap justify-center px-6">
+              {gameState.draftOptions.map(card => {
+                const frame = TYPE_FRAME[card.type] || TYPE_FRAME.character;
+                return (
+                  <motion.div
+                    key={card.templateId}
+                    whileHover={{ scale: 1.08, y: -8 }}
+                    onClick={() => pickDraftCard(card)}
+                    className="w-32 border-2 cursor-pointer flex flex-col overflow-hidden transition-colors"
+                    style={{
+                      background: frame.bg,
+                      borderColor: card.rarity === 'secret' ? '#e040fb' : card.rarity === 'legendary' ? '#c9a227' : card.rarity === 'rare' ? '#9c4bdc' : 'rgba(74,48,0,0.8)',
+                      boxShadow: card.rarity === 'secret' ? '0 0 20px rgba(224,64,251,0.6)' : card.rarity === 'legendary' ? '0 0 15px rgba(201,162,39,0.7)' : card.rarity === 'rare' ? '0 0 12px rgba(160,80,220,0.5)' : 'none',
+                      height: 192,
+                    }}
+                  >
+                    <div className="h-8 flex items-center justify-between px-1.5 shrink-0" style={{ background: `${frame.bar}dd` }}>
+                      <span className="text-[9px] font-display font-bold text-amber-100 truncate">{card.name}</span>
+                      <div className="w-5 h-5 rounded-full flex items-center justify-center font-bold text-[9px] text-white shrink-0"
+                           style={{ background: '#2a1a00', border: '1px solid #c9a227' }}>{card.cost}</div>
+                    </div>
+                    <div className="h-20 w-full shrink-0">
+                      <CardArt templateId={card.templateId} type={card.type} artTheme={(card as any).artTheme} />
+                    </div>
+                    <div className="flex-1 p-1 text-[7px] leading-tight overflow-hidden" style={{ background: '#120e06', color: '#cbb888' }}>
+                      <div className="font-display uppercase text-[6px] mb-0.5" style={{ color: frame.bar }}>
+                        {card.type} · {card.rarity}
+                        {card.atk !== undefined && <span> · {card.atk}/{card.def}</span>}
+                      </div>
+                      {card.description}
+                    </div>
+                    <div className="h-6 flex items-center justify-center text-[7px] font-display font-bold uppercase tracking-wider"
+                         style={{ background: 'rgba(201,162,39,0.08)', borderTop: '1px solid rgba(74,48,0,0.4)', color: '#c9a227' }}>
+                      SELECT
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Multiplayer Death Overlay ─────────────────────────────────────── */}
+      <AnimatePresence>
+        {me.hp <= 0 && gameState.matchType === 'multiplayer' && gameState.phase !== 'gameover' && !isSpectating && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            className="absolute inset-0 z-50 flex items-center justify-center backdrop-blur-sm"
+            style={{ background: 'rgba(4,2,1,0.92)' }}
+          >
+            <div className="text-center flex flex-col items-center gap-5 p-10 max-w-sm w-full"
+                 style={{ background: 'linear-gradient(180deg, #140c04 0%, #0d0804 100%)', border: '2px solid rgba(180,40,40,0.6)' }}>
+              <div className="text-3xl">☠</div>
+              <h2 className="text-4xl font-display font-black" style={{ color: '#b02828', letterSpacing: '0.05em' }}>DEFEATED</h2>
+              <p className="text-sm italic" style={{ color: '#7a6040' }}>
+                The battle rages on. You may spectate or return to the main hall.
+              </p>
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setIsSpectating(true)}
+                  className="btn-fantasy flex-1 py-3 text-sm"
+                >
+                  Spectate
+                </button>
+                <button
+                  onClick={() => setLocation('/')}
+                  className="btn-fantasy flex-1 py-3 text-sm"
+                  style={{ borderColor: 'rgba(74,48,0,0.5)' }}
+                >
+                  Quit
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Spectating Banner ─────────────────────────────────────────────── */}
+      {isSpectating && me.hp <= 0 && gameState.phase !== 'gameover' && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-4 py-2 pointer-events-auto"
+             style={{ background: 'rgba(30,18,4,0.95)', border: '1px solid rgba(201,162,39,0.4)' }}>
+          <span className="text-[9px] font-display uppercase tracking-widest" style={{ color: '#c9a227' }}>
+            👁 Spectating
+          </span>
+          <button onClick={() => setLocation('/')} className="text-[9px] font-display uppercase text-muted-foreground hover:text-foreground border border-border px-2 py-0.5">
+            Quit
+          </button>
+        </div>
+      )}
+
       {/* ── Countdown Overlay ────────────────────────────────────────────── */}
       <AnimatePresence>
         {countdown !== null && (
@@ -1372,7 +1483,7 @@ export default function GamePage() {
                 {[
                   { label: 'Turns Survived',  value: gameState.turn,                              color: '#c8b888' },
                   { label: 'Gold Earned',      value: `${(me.goldEarnedThisGame||0).toLocaleString()}g`, color: '#c9a227' },
-                  { label: 'Creatures Slain',  value: me.creaturesKilledThisGame || 0,             color: '#e05050' },
+                  { label: 'Characters Slain', value: me.creaturesKilledThisGame || 0,             color: '#e05050' },
                   { label: 'Cards Played',     value: me.cardsPlayedThisGame || 0,                 color: '#70a0c0' },
                 ].map(row => (
                   <div key={row.label} className="flex justify-between items-center">

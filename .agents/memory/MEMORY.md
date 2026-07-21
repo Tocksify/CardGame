@@ -1,0 +1,1 @@
+- [Aethermancer feature batch 1](aethermancer-features.md) — creature→character rename, draft mode, status effects, new heroes, multiplayer, ELO, matchmaking all implemented in one session.

@@ -1,5 +1,5 @@
-export type CardType = 'creature' | 'spell' | 'artifact' | 'enchantment';
-export type CardRarity = 'common' | 'rare' | 'legendary';
+export type CardType = 'character' | 'spell' | 'artifact' | 'enchantment';
+export type CardRarity = 'common' | 'rare' | 'legendary' | 'secret';
 
 export interface CardTemplate {
   templateId: string;
@@ -14,6 +14,8 @@ export interface CardTemplate {
   rarity?: CardRarity;
   evolvesTo?: string;
   evolveCondition?: { turnsOnField?: number; damageDealt?: number };
+  /** Visual theme for card art */
+  artTheme?: string;
 }
 
 export interface ShopItemTemplate {
@@ -24,118 +26,435 @@ export interface ShopItemTemplate {
   description: string;
   effectKey?: string;
   cardTemplateId?: string;
-  stackable?: boolean; // if true, can be purchased multiple times
+  stackable?: boolean;
 }
 
-export const CARD_TEMPLATES: CardTemplate[] = [
-  // Commons
-  { templateId: 'c1', name: 'Aether Sprite', type: 'creature', cost: 1, atk: 2, def: 1, description: 'A nimble sprite of pure energy.', rarity: 'common', evolvesTo: 'ev_c1', evolveCondition: { turnsOnField: 3 } },
-  { templateId: 'c2', name: 'Stone Golem', type: 'creature', cost: 3, atk: 3, def: 4, description: 'A sturdy defender.', rarity: 'common', evolvesTo: 'ev_c2', evolveCondition: { turnsOnField: 4 } },
-  { templateId: 'c3', name: 'Flame Imp', type: 'creature', cost: 2, atk: 2, def: 2, description: 'Deals 1 extra damage when attacking.', keywords: ['flame_aura'], rarity: 'common' },
-  { templateId: 'c4', name: 'Tide Caller', type: 'creature', cost: 3, atk: 2, def: 3, description: 'Manipulates the waters of the arena.', rarity: 'common' },
-  { templateId: 'c5', name: 'Void Walker', type: 'creature', cost: 4, atk: 4, def: 2, description: 'Steps between dimensions to strike.', rarity: 'common' },
-  { templateId: 's1', name: 'Bolt of Ruin', type: 'spell', cost: 2, description: 'Deal 3 damage to any target.', effect: 'dmg_3_target', rarity: 'common' },
-  { templateId: 's2', name: 'Arcane Surge', type: 'spell', cost: 3, description: 'Draw 2 cards.', effect: 'draw_2', rarity: 'common' },
-  { templateId: 's5', name: 'Healing Rain', type: 'spell', cost: 2, description: 'Restore 4 life.', effect: 'heal_4_hero', rarity: 'common' },
-  { templateId: 'a1', name: 'Iron Totem', type: 'artifact', cost: 2, description: 'All your creatures get +1 DEF.', effect: 'aura_def_1', rarity: 'common' },
-  { templateId: 'e1', name: 'Crystal Heart', type: 'enchantment', cost: 2, description: 'Attach to creature: +2/+2', effect: 'buff_2_2', rarity: 'common' },
-  { templateId: 'e3', name: 'Frost Armor', type: 'enchantment', cost: 2, description: 'Attach to creature: +0/+4', effect: 'buff_0_4', rarity: 'common' },
-  
-  // Rares
-  { templateId: 'c6', name: 'Ancient Drake', type: 'creature', cost: 5, atk: 5, def: 4, description: 'A majestic dragon from the early ages.', rarity: 'rare', evolvesTo: 'ev_c6', evolveCondition: { damageDealt: 8 } },
-  { templateId: 'c7', name: 'Celestial Guard', type: 'creature', cost: 3, atk: 1, def: 6, description: 'Enemies must attack this first.', keywords: ['taunt'], rarity: 'rare' },
-  { templateId: 'c8', name: 'Shadow Rogue', type: 'creature', cost: 3, atk: 4, def: 1, description: 'Can attack the enemy hero directly.', keywords: ['stealth'], rarity: 'rare' },
-  { templateId: 'c9', name: 'Storm Drake', type: 'creature', cost: 4, atk: 5, def: 3, description: 'Attacks immediately upon deployment.', keywords: ['haste'], rarity: 'rare' },
-  { templateId: 's3', name: 'Soul Drain', type: 'spell', cost: 4, description: 'Destroy a creature with DEF 3 or less, gain its ATK as gold.', effect: 'destroy_small_gain_gold', rarity: 'rare' },
-  { templateId: 's4', name: 'Nova Blast', type: 'spell', cost: 5, description: 'Deal 2 damage to all enemy creatures.', effect: 'dmg_2_all_enemies', rarity: 'rare' },
-  { templateId: 'a2', name: 'Aether Lens', type: 'artifact', cost: 3, description: 'Draw a card each turn.', effect: 'aura_draw_1', rarity: 'rare' },
-  { templateId: 'a3', name: 'War Banner', type: 'artifact', cost: 4, description: 'All your creatures get +1 ATK.', effect: 'aura_atk_1', rarity: 'rare' },
-  { templateId: 'e2', name: 'Blood Pact', type: 'enchantment', cost: 3, description: 'Attach to creature: +3 ATK, -1 DEF', effect: 'buff_3_m1', rarity: 'rare' },
-  
-  // Legendaries
-  { templateId: 'c10', name: 'Void Colossus', type: 'creature', cost: 8, atk: 8, def: 8, description: 'An unstoppable force of destruction.', rarity: 'legendary' },
-  { templateId: 's6', name: 'Void Rift', type: 'spell', cost: 6, description: 'Deal 6 damage to enemy hero.', effect: 'dmg_6_enemy_hero', rarity: 'legendary' },
-  { templateId: 's7', name: 'Arcane Nova', type: 'spell', cost: 5, description: 'Deal 5 damage to all enemies.', effect: 'dmg_5_all', rarity: 'legendary' },
-  { templateId: 'a4', name: 'Eternity Bloom', type: 'artifact', cost: 6, description: 'Heal 2 life each turn.', effect: 'aura_heal_2', rarity: 'legendary' },
-  { templateId: 'c11', name: 'Celestial Titan', type: 'creature', cost: 6, atk: 6, def: 8, description: 'A divine protector of the realm.', keywords: ['taunt'], rarity: 'legendary' },
-  { templateId: 's8', name: 'Soul Reaper', type: 'spell', cost: 7, description: 'Destroy any creature.', effect: 'destroy_target', rarity: 'legendary' },
+// ── Rarity draw weights ────────────────────────────────────────────────────
+export const RARITY_WEIGHTS: Record<CardRarity, number> = {
+  common: 60,
+  rare: 25,
+  legendary: 12,
+  secret: 3,
+};
 
-  // Evolutions
-  { templateId: 'ev_c1', name: 'Aether Titan', type: 'creature', cost: 0, atk: 5, def: 4, description: 'The ascended form of Aether Sprite. Evolved.', rarity: 'legendary' },
-  { templateId: 'ev_c2', name: 'Stone Colossus', type: 'creature', cost: 0, atk: 6, def: 7, description: 'Ancient Golem awakened. Evolved.', rarity: 'legendary' },
-  { templateId: 'ev_c6', name: 'Elder Drake', type: 'creature', cost: 0, atk: 8, def: 6, description: 'The Ancient Drake reaches its final form.', keywords: ['haste'], rarity: 'legendary' },
+export const CARD_TEMPLATES: CardTemplate[] = [
+  // ── Common Characters ─────────────────────────────────────────────────────
+  {
+    templateId: 'c1', name: 'Aether Sprite', type: 'character', cost: 1,
+    atk: 2, def: 1,
+    description: 'A nimble sprite of pure aetheric energy.',
+    rarity: 'common', artTheme: 'aether',
+    evolvesTo: 'ev_c1', evolveCondition: { turnsOnField: 3 },
+  },
+  {
+    templateId: 'c2', name: 'Stone Golem', type: 'character', cost: 3,
+    atk: 3, def: 4,
+    description: 'A sturdy stone defender.',
+    rarity: 'common', artTheme: 'earth',
+    evolvesTo: 'ev_c2', evolveCondition: { turnsOnField: 4 },
+  },
+  {
+    templateId: 'c3', name: 'Flame Imp', type: 'character', cost: 2,
+    atk: 2, def: 2,
+    description: 'Deals 1 extra damage when attacking. Applies burn on hit.',
+    keywords: ['flame_aura', 'poison_on_hit'],
+    rarity: 'common', artTheme: 'fire',
+  },
+  {
+    templateId: 'c4', name: 'Tide Caller', type: 'character', cost: 3,
+    atk: 2, def: 3,
+    description: 'Manipulates the waters. Stuns enemies it strikes.',
+    keywords: ['stun_on_hit'],
+    rarity: 'common', artTheme: 'water',
+  },
+  {
+    templateId: 'c5', name: 'Void Walker', type: 'character', cost: 4,
+    atk: 4, def: 2,
+    description: 'Steps between dimensions to strike.',
+    rarity: 'common', artTheme: 'void',
+  },
+  {
+    templateId: 'h5', name: 'Ironclad Knight', type: 'character', cost: 3,
+    atk: 2, def: 6,
+    description: 'Enemies must attack this character first.',
+    keywords: ['taunt'],
+    rarity: 'common', artTheme: 'iron',
+  },
+  {
+    templateId: 'h7', name: 'Frost Guardian', type: 'character', cost: 2,
+    atk: 1, def: 5,
+    description: 'Chills on hit — the struck enemy is stunned.',
+    keywords: ['stun_on_hit'],
+    rarity: 'common', artTheme: 'frost',
+  },
+  {
+    templateId: 'h8', name: 'Plague Rat', type: 'character', cost: 1,
+    atk: 2, def: 2,
+    description: 'Poisons enemies it attacks (2 stacks).',
+    keywords: ['poison_on_hit'],
+    rarity: 'common', artTheme: 'poison',
+  },
+  {
+    templateId: 'h10', name: 'Bog Crawler', type: 'character', cost: 2,
+    atk: 3, def: 3,
+    description: 'A lurking swamp beast. Deals poison on contact.',
+    keywords: ['poison_on_hit'],
+    rarity: 'common', artTheme: 'poison',
+  },
+
+  // ── Common Spells ─────────────────────────────────────────────────────────
+  {
+    templateId: 's1', name: 'Bolt of Ruin', type: 'spell', cost: 2,
+    description: 'Deal 3 damage to any target.',
+    effect: 'dmg_3_target', rarity: 'common',
+  },
+  {
+    templateId: 's2', name: 'Arcane Surge', type: 'spell', cost: 3,
+    description: 'Draw 2 cards from the pool.',
+    effect: 'draw_2', rarity: 'common',
+  },
+  {
+    templateId: 's5', name: 'Healing Rain', type: 'spell', cost: 2,
+    description: 'Restore 4 life.',
+    effect: 'heal_4_hero', rarity: 'common',
+  },
+  {
+    templateId: 's9', name: 'Poison Cloud', type: 'spell', cost: 2,
+    description: 'Apply 3 poison stacks to all enemy characters.',
+    effect: 'poison_all_enemies', rarity: 'common',
+  },
+  {
+    templateId: 's10', name: 'Thunder Clap', type: 'spell', cost: 3,
+    description: 'Stun a target character for 1 turn.',
+    effect: 'stun_target', rarity: 'common',
+  },
+
+  // ── Common Artifacts ──────────────────────────────────────────────────────
+  {
+    templateId: 'a1', name: 'Iron Totem', type: 'artifact', cost: 2,
+    description: 'All your characters get +1 DEF.',
+    effect: 'aura_def_1', rarity: 'common',
+  },
+
+  // ── Common Enchantments ───────────────────────────────────────────────────
+  {
+    templateId: 'e1', name: 'Crystal Heart', type: 'enchantment', cost: 2,
+    description: 'Attach to character: +2/+2',
+    effect: 'buff_2_2', rarity: 'common',
+  },
+  {
+    templateId: 'e3', name: 'Frost Armor', type: 'enchantment', cost: 2,
+    description: 'Attach to character: +0/+4',
+    effect: 'buff_0_4', rarity: 'common',
+  },
+  {
+    templateId: 'e4', name: 'Venom Coating', type: 'enchantment', cost: 2,
+    description: 'Attach to character: gains Poison on Hit.',
+    effect: 'add_poison_keyword', rarity: 'common',
+  },
+
+  // ── Rare Characters ───────────────────────────────────────────────────────
+  {
+    templateId: 'c6', name: 'Ancient Drake', type: 'character', cost: 5,
+    atk: 5, def: 4,
+    description: 'A majestic dragon from the early ages.',
+    rarity: 'rare', artTheme: 'dragon',
+    evolvesTo: 'ev_c6', evolveCondition: { damageDealt: 8 },
+  },
+  {
+    templateId: 'c7', name: 'Celestial Guard', type: 'character', cost: 3,
+    atk: 1, def: 6,
+    description: 'Enemies must attack this character first.',
+    keywords: ['taunt'], rarity: 'rare', artTheme: 'celestial',
+  },
+  {
+    templateId: 'c8', name: 'Shadow Rogue', type: 'character', cost: 3,
+    atk: 4, def: 1,
+    description: 'Can attack the enemy hero directly.',
+    keywords: ['stealth'], rarity: 'rare', artTheme: 'shadow',
+  },
+  {
+    templateId: 'c9', name: 'Storm Drake', type: 'character', cost: 4,
+    atk: 5, def: 3,
+    description: 'Attacks immediately upon deployment.',
+    keywords: ['haste'], rarity: 'rare', artTheme: 'storm',
+  },
+  {
+    templateId: 'h1', name: 'Huntress', type: 'character', cost: 3,
+    atk: 4, def: 4,
+    description: 'Swift hunter. Can strike enemy heroes directly.',
+    keywords: ['stealth'], rarity: 'rare', artTheme: 'huntress',
+  },
+  {
+    templateId: 'h2', name: 'Zip', type: 'character', cost: 2,
+    atk: 3, def: 2,
+    description: 'Electric hero. Attacks first. Stuns enemies on hit.',
+    keywords: ['haste', 'stun_on_hit', 'electric'],
+    rarity: 'rare', artTheme: 'electric',
+  },
+  {
+    templateId: 'h6', name: 'Ember Witch', type: 'character', cost: 3,
+    atk: 5, def: 1,
+    description: 'Her attacks set enemies ablaze — poisons on hit.',
+    keywords: ['poison_on_hit', 'flame_aura'],
+    rarity: 'rare', artTheme: 'fire',
+  },
+  {
+    templateId: 'h11', name: 'Void Phantom', type: 'character', cost: 3,
+    atk: 5, def: 2,
+    description: 'A shadow that strikes from nowhere. Stealth.',
+    keywords: ['stealth'], rarity: 'rare', artTheme: 'void',
+  },
+  {
+    templateId: 'h12', name: 'Radiant Paladin', type: 'character', cost: 4,
+    atk: 3, def: 5,
+    description: 'Heals your hero for 2 each time it kills an enemy.',
+    keywords: ['heal_on_kill', 'taunt'],
+    rarity: 'rare', artTheme: 'celestial',
+  },
+
+  // ── Rare Spells ───────────────────────────────────────────────────────────
+  {
+    templateId: 's3', name: 'Soul Drain', type: 'spell', cost: 4,
+    description: 'Destroy a character with DEF 3 or less, gain its ATK as gold.',
+    effect: 'destroy_small_gain_gold', rarity: 'rare',
+  },
+  {
+    templateId: 's4', name: 'Nova Blast', type: 'spell', cost: 5,
+    description: 'Deal 2 damage to all enemy characters.',
+    effect: 'dmg_2_all_enemies', rarity: 'rare',
+  },
+  {
+    templateId: 's11', name: 'Venomstrike', type: 'spell', cost: 3,
+    description: 'Deal 2 damage and apply 4 poison stacks to a target.',
+    effect: 'dmg_2_and_poison_4', rarity: 'rare',
+  },
+  {
+    templateId: 's12', name: 'Chain Lightning', type: 'spell', cost: 4,
+    description: 'Stun all enemy characters for 1 turn.',
+    effect: 'stun_all_enemies', rarity: 'rare',
+  },
+
+  // ── Rare Artifacts ────────────────────────────────────────────────────────
+  {
+    templateId: 'a2', name: 'Aether Lens', type: 'artifact', cost: 3,
+    description: 'Draw a card each turn.',
+    effect: 'aura_draw_1', rarity: 'rare',
+  },
+  {
+    templateId: 'a3', name: 'War Banner', type: 'artifact', cost: 4,
+    description: 'All your characters get +1 ATK.',
+    effect: 'aura_atk_1', rarity: 'rare',
+  },
+  {
+    templateId: 'a5', name: 'Venom Chalice', type: 'artifact', cost: 3,
+    description: 'Your characters apply 1 poison on every attack.',
+    effect: 'aura_poison_1', rarity: 'rare',
+  },
+
+  // ── Rare Enchantments ─────────────────────────────────────────────────────
+  {
+    templateId: 'e2', name: 'Blood Pact', type: 'enchantment', cost: 3,
+    description: 'Attach to character: +3 ATK, -1 DEF',
+    effect: 'buff_3_m1', rarity: 'rare',
+  },
+  {
+    templateId: 'e5', name: 'Stormweave', type: 'enchantment', cost: 3,
+    description: 'Attach to character: Gains Stun on Hit.',
+    effect: 'add_stun_keyword', rarity: 'rare',
+  },
+
+  // ── Legendary Characters ──────────────────────────────────────────────────
+  {
+    templateId: 'c10', name: 'Void Colossus', type: 'character', cost: 8,
+    atk: 8, def: 8,
+    description: 'An unstoppable force of destruction.',
+    rarity: 'legendary', artTheme: 'void',
+  },
+  {
+    templateId: 'c11', name: 'Celestial Titan', type: 'character', cost: 6,
+    atk: 6, def: 8,
+    description: 'A divine protector of the realm.',
+    keywords: ['taunt'], rarity: 'legendary', artTheme: 'celestial',
+  },
+  {
+    templateId: 'h3', name: 'JoBoorn', type: 'character', cost: 5,
+    atk: 7, def: 2,
+    description: 'Legendary warrior. High Attack, Heavy Armor (blocks 3 dmg), but very low Vitality.',
+    keywords: ['heavy_armor'],
+    rarity: 'legendary', artTheme: 'iron',
+  },
+  {
+    templateId: 'h9', name: 'Thunder Titan', type: 'character', cost: 7,
+    atk: 6, def: 6,
+    description: 'Electric colossus. All your characters deal +1 damage.',
+    keywords: ['electric', 'electric_aura'],
+    rarity: 'legendary', artTheme: 'electric',
+  },
+
+  // ── Legendary Spells ──────────────────────────────────────────────────────
+  {
+    templateId: 's6', name: 'Void Rift', type: 'spell', cost: 6,
+    description: 'Deal 6 damage to enemy hero.',
+    effect: 'dmg_6_enemy_hero', rarity: 'legendary',
+  },
+  {
+    templateId: 's7', name: 'Arcane Nova', type: 'spell', cost: 5,
+    description: 'Deal 5 damage to all enemies.',
+    effect: 'dmg_5_all', rarity: 'legendary',
+  },
+  {
+    templateId: 's8', name: 'Soul Reaper', type: 'spell', cost: 7,
+    description: 'Destroy any character.',
+    effect: 'destroy_target', rarity: 'legendary',
+  },
+
+  // ── Legendary Artifacts ───────────────────────────────────────────────────
+  {
+    templateId: 'a4', name: 'Eternity Bloom', type: 'artifact', cost: 6,
+    description: 'Heal 2 life each turn.',
+    effect: 'aura_heal_2', rarity: 'legendary',
+  },
+
+  // ── Secret Characters ─────────────────────────────────────────────────────
+  {
+    templateId: 'h4', name: '???', type: 'character', cost: 9,
+    atk: 10, def: 10,
+    description: 'The Unknown. A mystery of untold power. No one knows who — or what — it is.',
+    keywords: ['taunt', 'stealth', 'heavy_armor'],
+    rarity: 'secret', artTheme: 'unknown',
+  },
+
+  // ── Evolutions ────────────────────────────────────────────────────────────
+  {
+    templateId: 'ev_c1', name: 'Aether Titan', type: 'character', cost: 0,
+    atk: 5, def: 4,
+    description: 'The ascended form of Aether Sprite. Evolved.',
+    rarity: 'legendary', artTheme: 'aether',
+  },
+  {
+    templateId: 'ev_c2', name: 'Stone Colossus', type: 'character', cost: 0,
+    atk: 6, def: 7,
+    description: 'Ancient Golem awakened. Evolved.',
+    rarity: 'legendary', artTheme: 'earth',
+  },
+  {
+    templateId: 'ev_c6', name: 'Elder Drake', type: 'character', cost: 0,
+    atk: 8, def: 6,
+    description: 'The Ancient Drake reaches its final form.',
+    keywords: ['haste'], rarity: 'legendary', artTheme: 'dragon',
+  },
 ];
 
+// ─── Pool of drawable cards (excludes evolutions) ──────────────────────────
+export const DRAWABLE_POOL = CARD_TEMPLATES.filter(
+  c => !c.templateId.startsWith('ev_') && c.cost > 0
+);
+
+/** Draw `amount` cards from the pool weighted by rarity. */
+export function drawFromPool(amount: number): CardTemplate[] {
+  const totalWeight = Object.values(RARITY_WEIGHTS).reduce((a, b) => a + b, 0);
+  const drawn: CardTemplate[] = [];
+
+  for (let i = 0; i < amount; i++) {
+    let roll = Math.random() * totalWeight;
+    let targetRarity: CardRarity = 'common';
+    for (const [rarity, weight] of Object.entries(RARITY_WEIGHTS)) {
+      roll -= weight;
+      if (roll <= 0) { targetRarity = rarity as CardRarity; break; }
+    }
+    const pool = DRAWABLE_POOL.filter(c => c.rarity === targetRarity);
+    // Fallback to common if nothing in that rarity
+    const finalPool = pool.length > 0 ? pool : DRAWABLE_POOL.filter(c => c.rarity === 'common');
+    if (finalPool.length > 0) {
+      drawn.push(finalPool[Math.floor(Math.random() * finalPool.length)]);
+    }
+  }
+  return drawn;
+}
+
+/** Draw 3 unique (by templateId) draft options from the pool. */
+export function generateDraftOptions(): CardTemplate[] {
+  const seen = new Set<string>();
+  const results: CardTemplate[] = [];
+  let attempts = 0;
+  while (results.length < 3 && attempts < 60) {
+    const [card] = drawFromPool(1);
+    if (card && !seen.has(card.templateId)) {
+      seen.add(card.templateId);
+      results.push(card);
+    }
+    attempts++;
+  }
+  return results;
+}
+
+// ─── Legacy deck generator (used for AI in 8card mode) ─────────────────────
+export function generateDeck(): CardTemplate[] {
+  return drawFromPool(30).sort(() => Math.random() - 0.5);
+}
+
 export const SHOP_ITEMS: ShopItemTemplate[] = [
-  // ── Items (consumable / one-time use) ──────────────────────────────────
-  { id: 'hp1',  name: 'Healing Potion',      type: 'item', cost: 200,  description: 'Restore 20 HP to your hero. Can stock multiples.', effectKey: 'heal_20_hero', stackable: true },
-  { id: 'i1',   name: 'Aether Shard',        type: 'item', cost: 400,  description: 'Give any creature +2 ATK permanently.', effectKey: 'perm_atk_2' },
-  { id: 'i2',   name: 'Crystal Ward',        type: 'item', cost: 500,  description: 'Give any creature +4 DEF permanently.', effectKey: 'perm_def_4' },
+  // ── Items ─────────────────────────────────────────────────────────────────
+  { id: 'hp1',  name: 'Healing Potion',      type: 'item', cost: 200,  description: 'Restore 20 HP to your hero.', effectKey: 'heal_20_hero', stackable: true },
+  { id: 'i1',   name: 'Aether Shard',        type: 'item', cost: 400,  description: 'Give any character +2 ATK permanently.', effectKey: 'perm_atk_2' },
+  { id: 'i2',   name: 'Crystal Ward',        type: 'item', cost: 500,  description: 'Give any character +4 DEF permanently.', effectKey: 'perm_def_4' },
   { id: 'i3',   name: 'Mana Infusion',       type: 'item', cost: 600,  description: 'Gain 3 extra Aether this turn.', effectKey: 'temp_aether_3' },
-  { id: 'i4',   name: 'Elixir of Fortune',   type: 'item', cost: 350,  description: 'Draw 2 extra cards this turn.', effectKey: 'draw_2' },
-  { id: 'i5',   name: 'Battle Serum',        type: 'item', cost: 450,  description: 'Give any creature +1 ATK and +1 DEF permanently.', effectKey: 'perm_stats_1_1' },
-  { id: 'i6',   name: 'Void Essence',        type: 'item', cost: 750,  description: 'Instantly destroy a target creature on the enemy field.', effectKey: 'destroy_target_creature' },
+  { id: 'i4',   name: 'Elixir of Fortune',   type: 'item', cost: 350,  description: 'Draw 2 extra cards from the pool.', effectKey: 'draw_2' },
+  { id: 'i5',   name: 'Battle Serum',        type: 'item', cost: 450,  description: 'Give any character +1 ATK and +1 DEF permanently.', effectKey: 'perm_stats_1_1' },
+  { id: 'i6',   name: 'Void Essence',        type: 'item', cost: 750,  description: 'Instantly destroy a target character on the enemy field.', effectKey: 'destroy_target_creature' },
   { id: 'i7',   name: 'Phoenix Feather',     type: 'item', cost: 550,  description: 'Restore 8 HP to your hero.', effectKey: 'heal_8_hero' },
-  // Ironheart Crystal was Warmog's — moved here from Stats by user request
+  { id: 'i8',   name: 'Antidote',            type: 'item', cost: 300,  description: 'Remove all poison from a character.', effectKey: 'cure_poison', stackable: true },
+  { id: 'i9',   name: 'Venom Vial',          type: 'item', cost: 400,  description: 'Apply 5 poison stacks to any target character.', effectKey: 'apply_poison_5' },
+  { id: 'i10',  name: 'Thunder Orb',         type: 'item', cost: 500,  description: 'Stun an enemy character for 2 turns.', effectKey: 'stun_2_turns' },
+  { id: 'i11',  name: 'War Horn',            type: 'item', cost: 650,  description: 'All your characters get +2 ATK this turn.', effectKey: 'temp_atk_all_2' },
+  { id: 'i12',  name: 'Shield Rune',         type: 'item', cost: 600,  description: 'Give any character Heavy Armor for 2 turns (-3 dmg received).', effectKey: 'temp_armor' },
   { id: 'st1',  name: 'Ironheart Crystal',   type: 'item', cost: 900,  description: 'Permanently increase max HP by 20 and restore that much HP.', effectKey: 'ironheart' },
 
-  // ── Stat items (passive, apply immediately on purchase) ────────────────
-  { id: 'st2',  name: 'Tempest Sigil',       type: 'stat', cost: 700,  description: 'Your creatures deal +1 bonus damage on first attack each turn.', effectKey: 'stormrazor' },
-  { id: 'st3',  name: 'Solar Pyre Totem',    type: 'stat', cost: 800,  description: 'Start of your turns: deal 1 damage to all enemy creatures.', effectKey: 'sunfire' },
-  { id: 'st4',  name: "Titan's Shard",       type: 'stat', cost: 1000, description: 'All your creatures gain +2 ATK/+2 DEF on deploy.', effectKey: 'jaksho' },
+  // ── Stat items ────────────────────────────────────────────────────────────
+  { id: 'st2',  name: 'Tempest Sigil',       type: 'stat', cost: 700,  description: 'Your characters deal +1 bonus damage on first attack each turn.', effectKey: 'stormrazor' },
+  { id: 'st3',  name: 'Solar Pyre Totem',    type: 'stat', cost: 800,  description: 'Start of your turns: deal 1 damage to all enemy characters.', effectKey: 'sunfire' },
+  { id: 'st4',  name: "Titan's Shard",       type: 'stat', cost: 1000, description: 'All your characters gain +2 ATK/+2 DEF on deploy.', effectKey: 'jaksho' },
   { id: 'st5',  name: "Archmage's Diadem",   type: 'stat', cost: 1100, description: 'Spell damage is permanently increased by 2.', effectKey: 'rabadon' },
-  { id: 'st6',  name: 'Thornweave Plate',    type: 'stat', cost: 850,  description: 'When a creature takes damage, the attacker takes 1 damage.', effectKey: 'thornmail' },
+  { id: 'st6',  name: 'Thornweave Plate',    type: 'stat', cost: 850,  description: 'When a character takes damage, the attacker takes 1 damage.', effectKey: 'thornmail' },
+  { id: 'st7',  name: 'Plague Standard',     type: 'stat', cost: 950,  description: 'Your characters apply 1 poison on every hit.', effectKey: 'plague_standard' },
 
-  // ── Perks (permanent hero upgrades) ───────────────────────────────────
+  // ── Perks ─────────────────────────────────────────────────────────────────
   { id: 'p1', name: 'Soul Anchor',       type: 'perk', cost: 1000, description: 'Your max life is increased by 10.', effectKey: 'perk_hp_10' },
   { id: 'p2', name: 'Aether Mastery',    type: 'perk', cost: 1250, description: 'Gain 2 extra Aether per turn permanently.', effectKey: 'perk_aether_2' },
   { id: 'p3', name: 'Golden Touch',      type: 'perk', cost: 1500, description: 'Earn 50 extra gold per turn permanently.', effectKey: 'perk_gold_2' },
   { id: 'p4', name: 'Arcane Dominion',   type: 'perk', cost: 1750, description: 'Start each turn with 1 free card draw.', effectKey: 'perk_draw_1' },
   { id: 'p5', name: 'Void Resistance',   type: 'perk', cost: 1400, description: 'Reduce all damage taken by 1.', effectKey: 'perk_resist_1' },
-  
-  // ── Cards ──────────────────────────────────────────────────────────────
-  { id: 'c10_shop',  name: 'Void Colossus',   type: 'card', cost: 900,  description: '8/8 Creature, costs 8 Aether.', cardTemplateId: 'c10', stackable: true },
+  { id: 'p6', name: 'Venomblood',        type: 'perk', cost: 1200, description: 'Your hero is immune to poison.', effectKey: 'perk_poison_immune' },
+  { id: 'p7', name: 'Iron Will',         type: 'perk', cost: 1300, description: 'Characters you deploy cannot be stunned.', effectKey: 'perk_stun_immune' },
+
+  // ── Cards ─────────────────────────────────────────────────────────────────
+  { id: 'c10_shop',  name: 'Void Colossus',   type: 'card', cost: 900,  description: '8/8 Character, costs 8 Aether.', cardTemplateId: 'c10', stackable: true },
   { id: 's7_shop',   name: 'Arcane Nova',      type: 'card', cost: 700,  description: 'Spell: Deal 5 damage to all enemies.', cardTemplateId: 's7', stackable: true },
   { id: 'a4_shop',   name: 'Eternity Bloom',   type: 'card', cost: 750,  description: 'Artifact: Heal 2 life each turn.', cardTemplateId: 'a4', stackable: true },
-  { id: 'c9_shop',   name: 'Storm Drake',      type: 'card', cost: 600,  description: '5/3 Creature, costs 4 Aether, Haste.', cardTemplateId: 'c9', stackable: true },
-  { id: 'c11_shop',  name: 'Celestial Titan',  type: 'card', cost: 1000, description: '6/8 Creature, Taunt.', cardTemplateId: 'c11', stackable: true },
-  { id: 's8_shop',   name: 'Soul Reaper',      type: 'card', cost: 800,  description: 'Spell: Destroy any creature.', cardTemplateId: 's8', stackable: true },
+  { id: 'c9_shop',   name: 'Storm Drake',      type: 'card', cost: 600,  description: '5/3 Character, costs 4 Aether, Haste.', cardTemplateId: 'c9', stackable: true },
+  { id: 'c11_shop',  name: 'Celestial Titan',  type: 'card', cost: 1000, description: '6/8 Character, Taunt.', cardTemplateId: 'c11', stackable: true },
+  { id: 's8_shop',   name: 'Soul Reaper',      type: 'card', cost: 800,  description: 'Spell: Destroy any character.', cardTemplateId: 's8', stackable: true },
+  { id: 'h3_shop',   name: 'JoBoorn',          type: 'card', cost: 1100, description: '7/2 Legendary — Heavy Armor blocks 3 damage.', cardTemplateId: 'h3', stackable: true },
+  { id: 'h1_shop',   name: 'Huntress',         type: 'card', cost: 700,  description: '4/4 Rare — Stealth, attacks heroes directly.', cardTemplateId: 'h1', stackable: true },
+  { id: 'h2_shop',   name: 'Zip',              type: 'card', cost: 600,  description: '3/2 Rare — Electric, Haste, Stun on Hit.', cardTemplateId: 'h2', stackable: true },
+  { id: 'h9_shop',   name: 'Thunder Titan',    type: 'card', cost: 950,  description: '6/6 Legendary — Electric Aura: +1 ATK all.', cardTemplateId: 'h9', stackable: true },
 ];
 
 export function getCardTemplate(id: string): CardTemplate | undefined {
   return CARD_TEMPLATES.find(c => c.templateId === id);
 }
 
-export function generateDeck(): CardTemplate[] {
-  const deck: CardTemplate[] = [];
-  const starterIds = [
-    'c1', 'c1', 'c1', 'c2', 'c2', 'c3', 'c3', 'c4', 'c4', 'c5', 'c5',
-    'c7', 'c7', 'c8', 'c8',
-    's1', 's1', 's1', 's2', 's2', 's5', 's5',
-    'a1', 'a1', 'a2',
-    'e1', 'e1', 'e3', 'e3', 'c6'
-  ];
-  
-  for (const id of starterIds) {
-    const tpl = getCardTemplate(id);
-    if (tpl) deck.push(tpl);
-  }
-  
-  return deck.sort(() => Math.random() - 0.5);
-}
-
-/** Pick a random subset of shop items for one rotation (≈4-5 per category). */
+/** Pick a random subset of shop items for one rotation. */
 export function generateShopRotation(): string[] {
   const pick = (ids: string[], n: number) => {
     const shuffled = [...ids].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, n);
   };
-
-  const itemIds   = SHOP_ITEMS.filter(i => i.type === 'item').map(i => i.id);
-  const statIds   = SHOP_ITEMS.filter(i => i.type === 'stat').map(i => i.id);
-  const perkIds   = SHOP_ITEMS.filter(i => i.type === 'perk').map(i => i.id);
-  const cardIds   = SHOP_ITEMS.filter(i => i.type === 'card').map(i => i.id);
-
+  const itemIds = SHOP_ITEMS.filter(i => i.type === 'item').map(i => i.id);
+  const statIds = SHOP_ITEMS.filter(i => i.type === 'stat').map(i => i.id);
+  const perkIds = SHOP_ITEMS.filter(i => i.type === 'perk').map(i => i.id);
+  const cardIds = SHOP_ITEMS.filter(i => i.type === 'card').map(i => i.id);
   return [
     ...pick(itemIds, 5),
     ...pick(statIds, 4),
@@ -144,4 +463,7 @@ export function generateShopRotation(): string[] {
   ];
 }
 
-export const AI_NAMES = ["Arcane Apprentice", "Shadow Weaver", "Storm Sage", "Iron Golem", "Void Entity"];
+export const AI_NAMES = [
+  'Arcane Apprentice', 'Shadow Weaver', 'Storm Sage',
+  'Iron Golem', 'Void Entity', 'Blood Hexer', 'Ash Prophet', 'Dusk Herald',
+];

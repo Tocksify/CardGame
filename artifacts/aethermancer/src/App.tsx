@@ -9,6 +9,8 @@ import LobbyPage from './pages/LobbyPage';
 import OptionsPage from './pages/OptionsPage';
 import GamePage from './pages/GamePage';
 import AchievementsPage from './pages/AchievementsPage';
+import MultiplayerLobbyPage from './pages/MultiplayerLobbyPage';
+import MatchmakingPage from './pages/MatchmakingPage';
 
 import { LobbyProvider } from './context/LobbyContext';
 import { GameProvider } from './context/GameContext';
@@ -20,6 +22,8 @@ function Router() {
     <Switch>
       <Route path="/" component={MainMenuPage} />
       <Route path="/lobby" component={LobbyPage} />
+      <Route path="/multiplayer" component={MultiplayerLobbyPage} />
+      <Route path="/matchmaking" component={MatchmakingPage} />
       <Route path="/options" component={OptionsPage} />
       <Route path="/game" component={GamePage} />
       <Route path="/achievements" component={AchievementsPage} />
