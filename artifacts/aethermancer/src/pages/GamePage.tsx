@@ -268,15 +268,15 @@ const HandCardUI = ({
 // ── Arena positions ───────────────────────────────────────────────────────
 type PositionId = 'left' | 'right' | 'top' | 'bottom' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
-const POSITION_CFG: Record<PositionId, { wrapperCls: string; inner: string; cardArea: string }> = {
-  left:           { wrapperCls: 'left-0 top-1/2 -translate-y-1/2', inner: 'flex-row',         cardArea: 'flex-col gap-1' },
-  right:          { wrapperCls: 'right-0 top-1/2 -translate-y-1/2', inner: 'flex-row-reverse', cardArea: 'flex-col gap-1' },
-  top:            { wrapperCls: 'top-0 left-1/2 -translate-x-1/2', inner: 'flex-col',          cardArea: 'flex-row gap-1' },
-  bottom:         { wrapperCls: 'bottom-0 left-1/2 -translate-x-1/2', inner: 'flex-col-reverse', cardArea: 'flex-row gap-1' },
-  'top-left':     { wrapperCls: 'top-0 left-0',   inner: 'flex-col',         cardArea: 'flex-row gap-1' },
-  'top-right':    { wrapperCls: 'top-0 right-0',  inner: 'flex-col',         cardArea: 'flex-row-reverse gap-1' },
-  'bottom-left':  { wrapperCls: 'bottom-0 left-0',  inner: 'flex-col-reverse', cardArea: 'flex-row gap-1' },
-  'bottom-right': { wrapperCls: 'bottom-0 right-0', inner: 'flex-col-reverse', cardArea: 'flex-row-reverse gap-1' },
+const POSITION_CFG: Record<PositionId, { wrapperCls: string; inner: string; cardArea: string; horizontal?: boolean }> = {
+  left:           { wrapperCls: 'left-0 top-1/2 -translate-y-1/2', inner: 'flex-row',         cardArea: 'flex-row flex-wrap gap-1 max-w-[120px]' },
+  right:          { wrapperCls: 'right-0 top-1/2 -translate-y-1/2', inner: 'flex-row-reverse', cardArea: 'flex-row flex-wrap gap-1 max-w-[120px]' },
+  top:            { wrapperCls: 'top-0 left-1/2 -translate-x-1/2', inner: 'flex-row-reverse',  cardArea: 'flex-row gap-1', horizontal: true },
+  bottom:         { wrapperCls: 'bottom-0 left-1/2 -translate-x-1/2', inner: 'flex-row',       cardArea: 'flex-row gap-1', horizontal: true },
+  'top-left':     { wrapperCls: 'top-0 left-0',   inner: 'flex-col',         cardArea: 'flex-row flex-wrap gap-1 max-w-[120px]' },
+  'top-right':    { wrapperCls: 'top-0 right-0',  inner: 'flex-col',         cardArea: 'flex-row flex-wrap gap-1 max-w-[120px]' },
+  'bottom-left':  { wrapperCls: 'bottom-0 left-0',  inner: 'flex-col-reverse', cardArea: 'flex-row flex-wrap gap-1 max-w-[120px]' },
+  'bottom-right': { wrapperCls: 'bottom-0 right-0', inner: 'flex-col-reverse', cardArea: 'flex-row flex-wrap gap-1 max-w-[120px]' },
 };
 
 function getPositions(count: number): PositionId[] {
@@ -293,7 +293,7 @@ function getPositions(count: number): PositionId[] {
 // ── Player Zone ───────────────────────────────────────────────────────────
 const PlayerZone = ({
   player, posId, isMe, isMyTurn, phase, targetingMode, onHeroClick, onCardClick,
-  combatAnim, aether, maxAether, onSellArtifact,
+  combatAnim, aether, maxAether, onSellArtifact, onSellCreature,
 }: {
   player: Player;
   posId: PositionId;
@@ -307,6 +307,7 @@ const PlayerZone = ({
   aether?: number;
   maxAether?: number;
   onSellArtifact?: () => void;
+  onSellCreature?: (instanceId: string) => void;
 }) => {
   const cfg = POSITION_CFG[posId];
   const isHeroHit = combatAnim?.targetId === player.id.toString();
@@ -392,19 +393,35 @@ const PlayerZone = ({
 
         {/* Field cards area */}
         {player.field.length > 0 && (
-          <div className={`flex ${cfg.cardArea} flex-wrap max-w-[160px] max-h-[160px] overflow-hidden`}>
-            {player.field.slice(0, 6).map(card => {
+          <div className={`flex ${cfg.cardArea} overflow-hidden`} style={{ maxWidth: cfg.horizontal ? undefined : 120, maxHeight: cfg.horizontal ? undefined : 200 }}>
+            {player.field.map(card => {
               const isTargetable = targetingMode !== 'none' && !isMe;
+              const canSellThis = isMe && isMyTurn && phase === 'main' && onSellCreature;
               return (
-                <ArenaCardUI
-                  key={card.instanceId}
-                  card={card}
-                  size="sm"
-                  tapped={card.tapped}
-                  targetable={isTargetable}
-                  onClick={() => onCardClick(card)}
-                  combatAnim={combatAnim}
-                />
+                <div key={card.instanceId} className="relative">
+                  <ArenaCardUI
+                    card={card}
+                    size="sm"
+                    tapped={card.tapped}
+                    targetable={isTargetable}
+                    onClick={() => onCardClick(card)}
+                    combatAnim={combatAnim}
+                  />
+                  {canSellThis && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onSellCreature!(card.instanceId); }}
+                      title={`Sell for ${card.cost * (card.rarity === 'legendary' ? 100 : card.rarity === 'rare' ? 75 : 50)}g`}
+                      className="absolute -top-1 -right-1 w-4 h-4 flex items-center justify-center text-[7px] font-bold hover:opacity-80 transition-opacity z-20"
+                      style={{
+                        background: 'rgba(100,60,0,0.95)',
+                        border: '1px solid rgba(201,162,39,0.7)',
+                        color: '#c9a227',
+                      }}
+                    >
+                      $
+                    </button>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -590,7 +607,7 @@ const PendingSpellBadge = ({ spell }: { spell: { name: string; targetId?: string
 export default function GamePage() {
   const [, setLocation] = useLocation();
   const {
-    gameState, dispatch, playCard, stageSpell, sellArtifact, attackWith,
+    gameState, dispatch, playCard, stageSpell, sellArtifact, sellCreature, attackWith,
     buyItem, useInventoryItem, endPhase, achievementToast, combatAnim, announcement,
     shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft,
   } = useGame();
@@ -856,6 +873,7 @@ export default function GamePage() {
               aether={player.isHuman ? me.aether : undefined}
               maxAether={player.isHuman ? me.maxAether : undefined}
               onSellArtifact={player.isHuman ? sellArtifact : undefined}
+              onSellCreature={player.isHuman ? sellCreature : undefined}
             />
           );
         })}
@@ -1007,10 +1025,12 @@ export default function GamePage() {
               const rotation = me.hand.length > 5 ? offset * 3 : 0;
               const translateY = me.hand.length > 5 ? Math.abs(offset) * 4 : 0;
               const typeUsed = !!me.cardsPlayedByType[card.type];
-              const isStaged = card.type === 'spell' && typeUsed;
+              // Only mark this specific card as staged if its instanceId is in pendingSpells
+              const isStaged = me.pendingSpells.some(s => s.instanceId === card.instanceId);
               const canAfford = me.aether >= card.cost;
               const artifactLocked = card.type === 'artifact' && me.artifactSlot !== null && me.artifactSlotTurns < 2;
-              const playable = isMyTurn && gameState.phase === 'main' && canAfford && !typeUsed && !artifactLocked;
+              const fieldFull = card.type === 'creature' && me.field.length >= 4;
+              const playable = isMyTurn && gameState.phase === 'main' && canAfford && !typeUsed && !artifactLocked && !fieldFull;
 
               return (
                 <div key={card.instanceId}

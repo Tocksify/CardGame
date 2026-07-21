@@ -14,6 +14,7 @@ interface GameContextType {
   playCard: (cardInstanceId: string, targetId?: string) => void;
   stageSpell: (cardInstanceId: string, targetId?: string) => void;
   sellArtifact: () => void;
+  sellCreature: (instanceId: string) => void;
   attackWith: (attackerInstanceId: string, targetPlayerId: number, targetInstanceId?: string) => void;
   buyItem: (shopItemId: string) => void;
   useInventoryItem: (inventoryInstanceId: string, targetId?: string) => void;
@@ -173,6 +174,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const sellPrice = player.artifactSlot.cost * 75;
     dispatch({ type: 'SELL_ARTIFACT', payload: { playerId: player.id } });
     dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} sold ${player.artifactSlot.name} for ${sellPrice}g.`, type: 'gold' } });
+    sounds.play('gold');
+  };
+
+  // ── Sell creature from field ───────────────────────────────────────────────
+  const sellCreature = (instanceId: string) => {
+    const player = gameState.players[gameState.currentPlayerIndex];
+    const creature = player.field.find(c => c.instanceId === instanceId);
+    if (!creature) return;
+    const rarityMult = creature.rarity === 'legendary' ? 100 : creature.rarity === 'rare' ? 75 : 50;
+    const sellPrice = creature.cost * rarityMult;
+    dispatch({ type: 'SELL_CREATURE', payload: { playerId: player.id, instanceId } });
+    dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} sold ${creature.name} for ${sellPrice}g.`, type: 'gold' } });
     sounds.play('gold');
   };
 
@@ -463,11 +476,26 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       // AI combat after spells resolved
       if (!currentPlayer.isHuman) {
         gameLoopRef.current = setTimeout(() => {
-          const untapped = currentPlayer.field.filter(c => !c.tapped);
+          const untapped = currentPlayer.field.filter(c => !c.tapped && !c.hasAttackedThisTurn);
           if (untapped.length > 0) {
             const targetHuman = gameState.players.find(p => p.isHuman);
             if (targetHuman) {
-              attackWith(untapped[0].instanceId, targetHuman.id);
+              // Dispatch attack directly to avoid stale-closure issues with attackWith()
+              const attacker = untapped[0];
+              const dmg = attacker.currentAtk + attacker.tempAtkBonus;
+              dispatchRef.current({
+                type: 'ATTACK',
+                payload: {
+                  attackerPlayerId: currentPlayer.id,
+                  attackerInstanceId: attacker.instanceId,
+                  targetPlayerId: targetHuman.id,
+                  damageOverride: dmg,
+                },
+              });
+              dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${currentPlayer.name} attacks for ${dmg} damage!`, type: 'damage' } });
+              sounds.play('attack');
+            } else {
+              dispatchRef.current({ type: 'ADVANCE_PHASE' });
             }
           } else {
             dispatchRef.current({ type: 'ADVANCE_PHASE' });
@@ -523,7 +551,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <GameContext.Provider value={{
-      gameState, dispatch, playCard, stageSpell, sellArtifact, attackWith,
+      gameState, dispatch, playCard, stageSpell, sellArtifact, sellCreature, attackWith,
       buyItem, useInventoryItem, endPhase,
       achievements, achievementToast, combatAnim, announcement,
       shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft

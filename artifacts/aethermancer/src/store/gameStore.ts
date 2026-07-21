@@ -90,6 +90,7 @@ export type GameAction =
   | { type: 'STAGE_SPELL'; payload: { playerId: number; cardInstanceId: string; targetId?: string } }
   | { type: 'CLEAR_PENDING_SPELLS'; payload: { playerId: number } }
   | { type: 'SELL_ARTIFACT'; payload: { playerId: number } }
+  | { type: 'SELL_CREATURE'; payload: { playerId: number; instanceId: string } }
   | { type: 'REPLENISH_AETHER'; payload: { playerId: number } }
   | { type: 'BUY_SHOP_ITEM'; payload: { playerId: number; itemTemplateId: string; cost: number; itemType: string; effectKey?: string; cardTemplate?: CardTemplate; name: string; description: string } }
   | { type: 'USE_INVENTORY'; payload: { playerId: number; instanceId: string; targetId?: string } }
@@ -367,6 +368,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           let newArtifactSlotTurns = p.artifactSlotTurns;
 
           if (cardToPlay.type === 'creature') {
+            // Enforce max 4 creatures on the field
+            if (p.field.length >= 4) return p;
             let bonusAtk = 0;
             let bonusDef = 0;
             if (p.statBuffs.includes('jaksho')) { bonusAtk += 2; bonusDef += 2; }
@@ -424,6 +427,27 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             field: newField,
             artifactSlot: null,
             artifactSlotTurns: 0,
+            gold: p.gold + sellPrice,
+            goldEarnedThisGame: (p.goldEarnedThisGame || 0) + sellPrice,
+          };
+        }),
+      };
+    }
+
+    case 'SELL_CREATURE': {
+      const { playerId, instanceId } = action.payload;
+      return {
+        ...state,
+        players: state.players.map(p => {
+          if (p.id !== playerId) return p;
+          const creature = p.field.find(c => c.instanceId === instanceId);
+          if (!creature) return p;
+          // Gold based on rarity and cost
+          const rarityMult = creature.rarity === 'legendary' ? 100 : creature.rarity === 'rare' ? 75 : 50;
+          const sellPrice = creature.cost * rarityMult;
+          return {
+            ...p,
+            field: p.field.filter(c => c.instanceId !== instanceId),
             gold: p.gold + sellPrice,
             goldEarnedThisGame: (p.goldEarnedThisGame || 0) + sellPrice,
           };
