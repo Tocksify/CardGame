@@ -760,113 +760,127 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     // ── Combat phase ───────────────────────────────────────────────────────
     if (gameState.phase === 'combat') {
+      // Novice: sometimes skip combat entirely (decide once upfront)
+      const skipCombat = !currentPlayer.isHuman && currentPlayer.difficulty === 'Novice' && Math.random() < 0.3;
+
+      // Define AI combat loop here so it can be referenced from both
+      // the spell-resolution callback and the normal (no-spell) path.
+      const runAiCombatLoop = () => {
+        const state = stateRef.current;
+        const cp = state.players[state.currentPlayerIndex];
+        if (!cp || cp.isHuman || state.phase !== 'combat') return;
+
+        if (skipCombat) {
+          dispatchRef.current({ type: 'ADVANCE_PHASE' });
+          return;
+        }
+
+        const diff = state.difficulty;
+        const untapped = cp.field.filter(c => !c.tapped && !c.hasAttackedThisTurn && !c.stunned);
+
+        if (untapped.length === 0) {
+          dispatchRef.current({ type: 'ADVANCE_PHASE' });
+          return;
+        }
+
+        const targetHuman = state.players.find(p => p.isHuman && p.hp > 0);
+        if (!targetHuman) {
+          dispatchRef.current({ type: 'ADVANCE_PHASE' });
+          return;
+        }
+
+        const attacker = untapped[0];
+        const target = chooseAiAttackTarget(cp, diff, state.players);
+        if (!target) {
+          dispatchRef.current({ type: 'ADVANCE_PHASE' });
+          return;
+        }
+
+        const dmg = attacker.currentAtk + attacker.tempAtkBonus;
+
+        // Kill-steal: if this attack would kill the human hero, take 40% of their gold first
+        if (!target.targetInstanceId) {
+          const resist = targetHuman.perks.includes('perk_resist_1') ? 1 : 0;
+          const effectiveDmg = Math.max(0, dmg - resist);
+          const wouldKill = targetHuman.hp - effectiveDmg <= 0 &&
+            !(targetHuman.perks.includes('perk_undying') && !targetHuman.undyingUsed);
+          if (wouldKill && targetHuman.gold > 0) {
+            const stolen = Math.floor(targetHuman.gold * 0.4);
+            if (stolen > 0) {
+              dispatchRef.current({ type: 'STEAL_GOLD', payload: { fromPlayerId: targetHuman.id, toPlayerId: cp.id, amount: stolen } });
+              dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name} plundered ${stolen}g from ${targetHuman.name}!`, type: 'gold' } });
+            }
+          }
+        }
+
+        dispatchRef.current({
+          type: 'ATTACK',
+          payload: {
+            attackerPlayerId: cp.id,
+            attackerInstanceId: attacker.instanceId,
+            targetPlayerId: target.targetPlayerId,
+            targetInstanceId: target.targetInstanceId,
+            damageOverride: dmg,
+          },
+        });
+
+        // AI status on hit
+        if (target.targetInstanceId) {
+          if (attacker.keywords?.includes('poison_on_hit') || cp.statBuffs.includes('plague_standard')) {
+            if (!targetHuman.perks.includes('perk_poison_immune')) {
+              dispatchRef.current({ type: 'APPLY_POISON', payload: { playerId: targetHuman.id, instanceId: target.targetInstanceId, stacks: 2 } });
+            }
+          }
+          if (attacker.keywords?.includes('stun_on_hit') || cp.statBuffs.includes('frost_mantle')) {
+            if (!targetHuman.perks.includes('perk_stun_immune')) {
+              dispatchRef.current({ type: 'APPLY_STUN', payload: { playerId: targetHuman.id, instanceId: target.targetInstanceId, turns: 1 } });
+            }
+          }
+          // AI kill bonus
+          const tgtCreature = targetHuman.field.find(c => c.instanceId === target.targetInstanceId);
+          if (tgtCreature && tgtCreature.currentDef <= dmg) {
+            dispatchRef.current({ type: 'ADD_GOLD', payload: { playerId: cp.id, amount: 50 } });
+            dispatchRef.current({ type: 'RECORD_KILL', payload: { playerId: cp.id } });
+            if (attacker.keywords?.includes('heal_on_kill')) {
+              dispatchRef.current({ type: 'HEAL', payload: { targetPlayerId: cp.id, amount: 2 } });
+            }
+          }
+        }
+
+        dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name} attacks for ${dmg} damage!`, type: 'damage' } });
+        sounds.play('attack');
+
+        // Schedule the next attacker
+        gameLoopRef.current = setTimeout(runAiCombatLoop, 700);
+      };
+
+      // Fire any pending spells first, then (for AI) continue to creature attacks.
+      // IMPORTANT: after CLEAR_PENDING_SPELLS the effect deps (phase / currentPlayerIndex)
+      // do NOT change, so the effect would NOT re-run. We must kick off the AI attack loop
+      // from inside the callback instead of relying on the effect re-running.
       const spells = [...currentPlayer.pendingSpells];
       if (spells.length > 0) {
         gameLoopRef.current = setTimeout(() => {
-          const spellBonus = currentPlayer.statBuffs.includes('rabadon') ? 2 : 0;
+          const state = stateRef.current;
+          const cp = state.players[state.currentPlayerIndex];
+          const spellBonus = cp?.statBuffs.includes('rabadon') ? 2 : 0;
           spells.forEach(spell => {
             if (spell.effect) handleSpellEffect(currentPlayer.id, spell.effect, spell.targetId, spellBonus);
             dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${currentPlayer.name}'s ${spell.name} fires!`, type: 'card' } });
           });
           sounds.play('cardPlay_spell');
           dispatchRef.current({ type: 'CLEAR_PENDING_SPELLS', payload: { playerId: currentPlayer.id } });
+
+          // After spells resolve, continue with AI creature attacks.
+          // The effect will NOT re-run because phase/currentPlayerIndex haven't changed.
+          if (!currentPlayer.isHuman) {
+            gameLoopRef.current = setTimeout(runAiCombatLoop, 400);
+          }
         }, 400);
         return;
       }
 
       if (!currentPlayer.isHuman) {
-        // Novice: sometimes skip combat entirely (decide once upfront)
-        const skipCombat = currentPlayer.difficulty === 'Novice' && Math.random() < 0.3;
-
-        const runAiCombatLoop = () => {
-          const state = stateRef.current;
-          const cp = state.players[state.currentPlayerIndex];
-          if (!cp || cp.isHuman || state.phase !== 'combat') return;
-
-          if (skipCombat) {
-            dispatchRef.current({ type: 'ADVANCE_PHASE' });
-            return;
-          }
-
-          const diff = state.difficulty;
-          const untapped = cp.field.filter(c => !c.tapped && !c.hasAttackedThisTurn && !c.stunned);
-
-          if (untapped.length === 0) {
-            dispatchRef.current({ type: 'ADVANCE_PHASE' });
-            return;
-          }
-
-          const targetHuman = state.players.find(p => p.isHuman && p.hp > 0);
-          if (!targetHuman) {
-            dispatchRef.current({ type: 'ADVANCE_PHASE' });
-            return;
-          }
-
-          const attacker = untapped[0];
-          const target = chooseAiAttackTarget(cp, diff, state.players);
-          if (!target) {
-            dispatchRef.current({ type: 'ADVANCE_PHASE' });
-            return;
-          }
-
-          const dmg = attacker.currentAtk + attacker.tempAtkBonus;
-
-          // Kill-steal: if this attack would kill the human hero, take 40% of their gold first
-          if (!target.targetInstanceId) {
-            const resist = targetHuman.perks.includes('perk_resist_1') ? 1 : 0;
-            const effectiveDmg = Math.max(0, dmg - resist);
-            const wouldKill = targetHuman.hp - effectiveDmg <= 0 &&
-              !(targetHuman.perks.includes('perk_undying') && !targetHuman.undyingUsed);
-            if (wouldKill && targetHuman.gold > 0) {
-              const stolen = Math.floor(targetHuman.gold * 0.4);
-              if (stolen > 0) {
-                dispatchRef.current({ type: 'STEAL_GOLD', payload: { fromPlayerId: targetHuman.id, toPlayerId: cp.id, amount: stolen } });
-                dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name} plundered ${stolen}g from ${targetHuman.name}!`, type: 'gold' } });
-              }
-            }
-          }
-
-          dispatchRef.current({
-            type: 'ATTACK',
-            payload: {
-              attackerPlayerId: cp.id,
-              attackerInstanceId: attacker.instanceId,
-              targetPlayerId: target.targetPlayerId,
-              targetInstanceId: target.targetInstanceId,
-              damageOverride: dmg,
-            },
-          });
-
-          // AI status on hit
-          if (target.targetInstanceId) {
-            if (attacker.keywords?.includes('poison_on_hit') || cp.statBuffs.includes('plague_standard')) {
-              if (!targetHuman.perks.includes('perk_poison_immune')) {
-                dispatchRef.current({ type: 'APPLY_POISON', payload: { playerId: targetHuman.id, instanceId: target.targetInstanceId, stacks: 2 } });
-              }
-            }
-            if (attacker.keywords?.includes('stun_on_hit') || cp.statBuffs.includes('frost_mantle')) {
-              if (!targetHuman.perks.includes('perk_stun_immune')) {
-                dispatchRef.current({ type: 'APPLY_STUN', payload: { playerId: targetHuman.id, instanceId: target.targetInstanceId, turns: 1 } });
-              }
-            }
-            // AI kill bonus
-            const tgtCreature = targetHuman.field.find(c => c.instanceId === target.targetInstanceId);
-            if (tgtCreature && tgtCreature.currentDef <= dmg) {
-              dispatchRef.current({ type: 'ADD_GOLD', payload: { playerId: cp.id, amount: 50 } });
-              dispatchRef.current({ type: 'RECORD_KILL', payload: { playerId: cp.id } });
-              if (attacker.keywords?.includes('heal_on_kill')) {
-                dispatchRef.current({ type: 'HEAL', payload: { targetPlayerId: cp.id, amount: 2 } });
-              }
-            }
-          }
-
-          dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name} attacks for ${dmg} damage!`, type: 'damage' } });
-          sounds.play('attack');
-
-          // Schedule the next card's attack
-          gameLoopRef.current = setTimeout(runAiCombatLoop, 700);
-        };
-
         gameLoopRef.current = setTimeout(runAiCombatLoop, 900);
       }
       return;

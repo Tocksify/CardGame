@@ -624,6 +624,7 @@ export default function GamePage() {
   const [shopTab, setShopTab] = useState<'items' | 'stat' | 'perks' | 'cards'>('items');
   const [logOpen, setLogOpen] = useState(false);
   const [isSpectating, setIsSpectating] = useState(false);
+  const [relicDragOver, setRelicDragOver] = useState(false);
 
   useEffect(() => {
     if (gameState.phase === 'countdown') {
@@ -1025,57 +1026,170 @@ export default function GamePage() {
           )}
         </div>
 
-        {/* Hand area */}
-        <div className="flex-1 overflow-x-auto overflow-y-visible min-h-0">
-          <div className="flex justify-center items-end min-w-max h-full px-6 pb-2 pt-1 gap-1">
-            {me.hand.map((card, index) => {
-              const offset = index - (me.hand.length - 1) / 2;
-              const rotation = me.hand.length > 5 ? offset * 3 : 0;
-              const translateY = me.hand.length > 5 ? Math.abs(offset) * 4 : 0;
-              const typeUsed = !!me.cardsPlayedByType[card.type];
-              const isStaged = me.pendingSpells.some(s => s.instanceId === card.instanceId);
-              const canAfford = me.aether >= card.cost;
-              const artifactLocked = card.type === 'artifact' && me.artifactSlot !== null && me.artifactSlotTurns < 2;
-              const fieldFull = card.type === 'character' && me.field.length >= 4;
-              const playable = isMyTurn && gameState.phase === 'main' && canAfford && !typeUsed && !artifactLocked && !fieldFull;
-              const canSellFromHand = isMyTurn && (gameState.phase === 'main' || gameState.phase === 'buy');
-              const rarityMult = card.rarity === 'legendary' || card.rarity === 'secret' ? 50 : card.rarity === 'rare' ? 35 : 20;
-              const handSellPrice = Math.max(10, card.cost * rarityMult);
+        {/* Hand area + Relic drop zone */}
+        <div className="flex-1 flex min-h-0 overflow-hidden">
 
-              return (
-                <div key={card.instanceId}
-                     style={{ transform: `rotate(${rotation}deg) translateY(${translateY}px)` }}
-                     className="transition-transform duration-200 relative">
-                  <HandCardUI
-                    card={card}
-                    playable={playable}
-                    staged={isStaged}
-                    onClick={() => handleCardClick(card)}
-                  />
-                  {canSellFromHand && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); sellHandCard(card.instanceId); }}
-                      title={`Discard for ${handSellPrice}g`}
-                      className="absolute -top-1 -right-1 w-5 h-5 flex items-center justify-center text-[7px] font-bold hover:opacity-90 transition-opacity z-20"
-                      style={{
-                        background: 'rgba(80,40,0,0.97)',
-                        border: '1px solid rgba(201,162,39,0.6)',
-                        color: '#c9a227',
-                        boxShadow: '0 0 4px rgba(201,162,39,0.3)',
-                      }}
-                    >
-                      $
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-            {me.hand.length === 0 && (
-              <div className="font-display text-lg tracking-[0.4em] uppercase select-none mb-4"
-                   style={{ color: 'rgba(74,48,0,0.4)' }}>
-                — Hand Empty —
+          {/* ── Relic Drop Slot ── */}
+          {(() => {
+            const artifactLocked = me.artifactSlot !== null && me.artifactSlotTurns < 2;
+            const canDrop = isMyTurn && gameState.phase === 'main'
+              && !me.cardsPlayedByType['artifact']
+              && !(me.artifactSlot !== null && me.artifactSlotTurns < 2);
+
+            const handleRelicDrop = (e: React.DragEvent) => {
+              e.preventDefault();
+              setRelicDragOver(false);
+              const cardId = e.dataTransfer.getData('artifactCardId');
+              if (!cardId || !canDrop) return;
+              playCard(cardId);
+            };
+
+            return (
+              <div className="flex flex-col items-center justify-center shrink-0 px-2 gap-1"
+                   style={{ width: 76, borderRight: '1px solid rgba(74,48,0,0.3)' }}>
+                <div className="text-[6px] font-display uppercase tracking-wider"
+                     style={{ color: 'rgba(200,140,60,0.55)' }}>Relic Slot</div>
+
+                {me.artifactSlot ? (
+                  /* Equipped artifact */
+                  <div className="relative w-14"
+                       style={{
+                         background: 'linear-gradient(180deg, #241600, #180e00)',
+                         border: `2px solid ${artifactLocked ? 'rgba(180,80,80,0.7)' : 'rgba(200,140,60,0.7)'}`,
+                         boxShadow: artifactLocked
+                           ? '0 0 8px rgba(180,80,80,0.3)'
+                           : '0 0 10px rgba(200,140,60,0.4)',
+                         minHeight: 72,
+                         padding: '4px',
+                       }}
+                       title={me.artifactSlot.description}>
+                    <div className="flex flex-col items-center gap-0.5">
+                      <Package size={12} style={{ color: '#c9a227' }} />
+                      <span className="text-[6px] font-display font-bold text-amber-200 text-center leading-tight w-full truncate">
+                        {me.artifactSlot.name}
+                      </span>
+                      <span className="text-[5px] italic text-amber-700 text-center leading-tight w-full truncate">
+                        {me.artifactSlot.description?.slice(0, 22)}
+                      </span>
+                      {artifactLocked ? (
+                        <span className="text-[6px] font-display text-red-400 mt-0.5">
+                          🔒 {2 - me.artifactSlotTurns}t left
+                        </span>
+                      ) : (
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={(!isMyTurn || gameState.phase !== 'main') ? undefined : sellArtifact}
+                          title={`Unequip & sell for ${me.artifactSlot.cost * 75}g`}
+                          className="mt-0.5 px-1.5 py-0.5 text-[6px] font-display font-bold cursor-pointer hover:opacity-80 transition-opacity select-none"
+                          style={{
+                            background: 'rgba(100,60,0,0.9)',
+                            border: '1px solid rgba(201,162,39,0.6)',
+                            color: '#c9a227',
+                            opacity: (!isMyTurn || gameState.phase !== 'main') ? 0.3 : 1,
+                          }}
+                        >
+                          Sell {me.artifactSlot.cost * 75}g
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  /* Empty drop zone */
+                  <div
+                    onDragOver={(e) => { if (canDrop) { e.preventDefault(); setRelicDragOver(true); } }}
+                    onDragLeave={() => setRelicDragOver(false)}
+                    onDrop={handleRelicDrop}
+                    className="w-14 flex flex-col items-center justify-center gap-0.5 transition-all duration-150"
+                    style={{
+                      minHeight: 72,
+                      border: relicDragOver
+                        ? '2px solid rgba(200,140,60,0.9)'
+                        : '2px dashed rgba(200,140,60,0.25)',
+                      background: relicDragOver
+                        ? 'rgba(200,140,60,0.12)'
+                        : 'rgba(200,140,60,0.03)',
+                      boxShadow: relicDragOver ? '0 0 12px rgba(200,140,60,0.4)' : 'none',
+                    }}
+                  >
+                    <Package size={14} style={{ color: relicDragOver ? 'rgba(200,140,60,0.8)' : 'rgba(200,140,60,0.2)' }} />
+                    <span className="text-[5px] font-display text-center leading-tight"
+                          style={{ color: relicDragOver ? 'rgba(200,140,60,0.8)' : 'rgba(200,140,60,0.2)' }}>
+                      {canDrop ? 'Drop artifact' : 'Empty'}
+                    </span>
+                  </div>
+                )}
               </div>
-            )}
+            );
+          })()}
+
+          {/* ── Hand cards ── */}
+          <div className="flex-1 overflow-x-auto overflow-y-visible min-h-0">
+            <div className="flex justify-center items-end min-w-max h-full px-4 pb-2 pt-1 gap-1">
+              {me.hand.map((card, index) => {
+                const offset = index - (me.hand.length - 1) / 2;
+                const rotation = me.hand.length > 5 ? offset * 3 : 0;
+                const translateY = me.hand.length > 5 ? Math.abs(offset) * 4 : 0;
+                const typeUsed = !!me.cardsPlayedByType[card.type];
+                const isStaged = me.pendingSpells.some(s => s.instanceId === card.instanceId);
+                const canAfford = me.aether >= card.cost;
+                const artifactLocked = card.type === 'artifact' && me.artifactSlot !== null && me.artifactSlotTurns < 2;
+                const fieldFull = card.type === 'character' && me.field.length >= 4;
+                const playable = isMyTurn && gameState.phase === 'main' && canAfford && !typeUsed && !artifactLocked && !fieldFull;
+                const canSellFromHand = isMyTurn && (gameState.phase === 'main' || gameState.phase === 'buy');
+                const rarityMult = card.rarity === 'legendary' || card.rarity === 'secret' ? 50 : card.rarity === 'rare' ? 35 : 20;
+                const handSellPrice = Math.max(10, card.cost * rarityMult);
+                const isDraggableArtifact = card.type === 'artifact' && playable;
+
+                return (
+                  <div key={card.instanceId}
+                       style={{ transform: `rotate(${rotation}deg) translateY(${translateY}px)` }}
+                       className="transition-transform duration-200 relative"
+                       draggable={isDraggableArtifact}
+                       onDragStart={(e) => {
+                         if (isDraggableArtifact) {
+                           e.dataTransfer.setData('artifactCardId', card.instanceId);
+                           e.dataTransfer.effectAllowed = 'move';
+                         }
+                       }}>
+                    <HandCardUI
+                      card={card}
+                      playable={playable}
+                      staged={isStaged}
+                      onClick={() => handleCardClick(card)}
+                    />
+                    {isDraggableArtifact && (
+                      <div className="absolute bottom-0 inset-x-0 flex items-center justify-center pb-0.5 pointer-events-none"
+                           style={{ background: 'linear-gradient(0deg, rgba(200,140,60,0.25), transparent)' }}>
+                        <span className="text-[5px] font-display uppercase tracking-wider"
+                              style={{ color: 'rgba(200,140,60,0.7)' }}>drag to equip</span>
+                      </div>
+                    )}
+                    {canSellFromHand && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); sellHandCard(card.instanceId); }}
+                        title={`Discard for ${handSellPrice}g`}
+                        className="absolute -top-1 -right-1 w-5 h-5 flex items-center justify-center text-[7px] font-bold hover:opacity-90 transition-opacity z-20"
+                        style={{
+                          background: 'rgba(80,40,0,0.97)',
+                          border: '1px solid rgba(201,162,39,0.6)',
+                          color: '#c9a227',
+                          boxShadow: '0 0 4px rgba(201,162,39,0.3)',
+                        }}
+                      >
+                        $
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {me.hand.length === 0 && (
+                <div className="font-display text-lg tracking-[0.4em] uppercase select-none mb-4"
+                     style={{ color: 'rgba(74,48,0,0.4)' }}>
+                  — Hand Empty —
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
