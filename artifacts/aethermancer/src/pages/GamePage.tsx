@@ -13,8 +13,11 @@ import { SHOP_ITEMS, ShopItemTemplate, CARD_TEMPLATES } from '../lib/cards';
 import { CardArt } from '../components/game/CardArt';
 
 // ── Tab → type mapping ────────────────────────────────────────────────────
-const TAB_TYPE_MAP: Record<string, ShopItemTemplate['type']> = {
-  items: 'item', stat: 'stat', perks: 'perk', cards: 'card',
+// Perks tab shows both 'stat' (passive field buffs) and 'perk' (permanent player upgrades)
+const SHOP_TAB_TYPES: Record<string, ShopItemTemplate['type'][]> = {
+  items: ['item'],
+  perks: ['stat', 'perk'],
+  cards: ['card'],
 };
 
 // ── Card type colors (MTG-style) ──────────────────────────────────────────
@@ -615,13 +618,14 @@ export default function GamePage() {
   const [, setLocation] = useLocation();
   const {
     gameState, dispatch, playCard, stageSpell, sellArtifact, sellCreature, sellHandCard, attackWith,
-    buyItem, useInventoryItem, endPhase, pickDraftCard, achievementToast, combatAnim, announcement,
+    buyItem, useInventoryItem, equipInventoryItem, endPhase, pickDraftCard, achievementToast, combatAnim, announcement,
     shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft,
   } = useGame();
   const { animatedBattlefield } = useLobby();
 
   const [countdown, setCountdown] = useState<number | null>(3);
-  const [shopTab, setShopTab] = useState<'items' | 'stat' | 'perks' | 'cards'>('items');
+  const [shopTab, setShopTab] = useState<'items' | 'perks' | 'cards'>('items');
+  const [invTab, setInvTab] = useState<'items' | 'perks'>('items');
   const [logOpen, setLogOpen] = useState(false);
   const [isSpectating, setIsSpectating] = useState(false);
   const [relicDragOver, setRelicDragOver] = useState(false);
@@ -749,7 +753,7 @@ export default function GamePage() {
   };
 
   const visibleShopItems = SHOP_ITEMS.filter(i =>
-    i.type === TAB_TYPE_MAP[shopTab] && shopRotationIds.includes(i.id)
+    (SHOP_TAB_TYPES[shopTab] || []).includes(i.type) && shopRotationIds.includes(i.id)
   );
 
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
@@ -1039,9 +1043,13 @@ export default function GamePage() {
             const handleRelicDrop = (e: React.DragEvent) => {
               e.preventDefault();
               setRelicDragOver(false);
+              if (!canDrop) return;
+              // Accept artifact cards from hand
               const cardId = e.dataTransfer.getData('artifactCardId');
-              if (!cardId || !canDrop) return;
-              playCard(cardId);
+              if (cardId) { playCard(cardId); return; }
+              // Accept items from inventory
+              const invId = e.dataTransfer.getData('inventoryItemId');
+              if (invId) { equipInventoryItem(invId); return; }
             };
 
             return (
@@ -1308,7 +1316,7 @@ export default function GamePage() {
             )}
 
             <div className="flex shrink-0" style={{ borderBottom: '1px solid #2a1e0a' }}>
-              {(['items','stat','perks','cards'] as const).map(tab => (
+              {(['items','perks','cards'] as const).map(tab => (
                 <button
                   key={tab}
                   onClick={() => { sounds.play('uiClick'); setShopTab(tab); }}
@@ -1319,7 +1327,7 @@ export default function GamePage() {
                     color: shopTab === tab ? '#c9a227' : '#5a4020',
                   }}
                 >
-                  {tab === 'stat' ? 'Stats' : tab}
+                  {tab}
                 </button>
               ))}
             </div>
@@ -1334,33 +1342,61 @@ export default function GamePage() {
                 const canAfford = me.gold >= item.cost;
                 const owned = isOwnedItem(item);
                 const disabled = !canAfford || owned || gameState.phase !== 'buy';
+                // Card frame colours per sub-type
+                const isPerk = item.type === 'perk';
+                const isStat = item.type === 'stat';
+                const frameGlow = isPerk ? 'rgba(120,60,220,0.5)' : isStat ? 'rgba(60,160,220,0.5)' : 'rgba(200,140,60,0.5)';
+                const frameBar  = isPerk ? '#3a1860' : isStat ? '#143060' : '#3a2800';
+                const frameBg   = isPerk ? '#130a20' : isStat ? '#080f1e' : '#130a00';
+                const typeLabel = isPerk ? 'PERK' : isStat ? 'PASSIVE' : 'ITEM';
                 return (
                   <div key={item.id}
-                       className="flex flex-col gap-1.5 relative p-2"
+                       className="relative flex flex-col overflow-hidden"
                        style={{
-                         background: owned ? 'rgba(74,48,0,0.08)' : canAfford ? 'rgba(20,14,6,0.6)' : 'rgba(12,8,4,0.4)',
-                         border: `1px solid ${owned ? 'rgba(201,162,39,0.25)' : canAfford ? 'rgba(74,48,0,0.5)' : 'rgba(40,28,10,0.3)'}`,
-                         opacity: canAfford || owned ? 1 : 0.5,
+                         background: frameBg,
+                         border: `1px solid ${owned ? 'rgba(201,162,39,0.35)' : canAfford ? frameGlow : 'rgba(30,20,10,0.5)'}`,
+                         boxShadow: canAfford && !owned ? `0 0 8px ${frameGlow}` : 'none',
+                         opacity: canAfford || owned ? 1 : 0.45,
                        }}>
-                    <div className="flex justify-between items-start gap-2">
-                      <span className="font-display font-bold text-xs leading-tight" style={{ color: '#d4b870' }}>{item.name}</span>
-                      <div className="flex flex-col items-end shrink-0 gap-0.5">
-                        <span className="text-xs font-display font-bold px-1.5 py-0.5"
-                              style={{ color: '#c9a227', background: 'rgba(74,48,0,0.4)', border: '1px solid rgba(74,48,0,0.5)' }}>
-                          {item.cost.toLocaleString()}g
-                        </span>
-                        {item.stackable && <span className="text-[7px] font-display" style={{ color: '#5db860' }}>STACKABLE</span>}
-                        {owned && <span className="text-[7px] font-display" style={{ color: '#c9a227' }}>OWNED</span>}
-                      </div>
+                    {/* Card header bar */}
+                    <div className="flex items-center justify-between px-2 py-1" style={{ background: frameBar }}>
+                      <span className="font-display font-bold text-[9px] leading-tight truncate" style={{ color: '#e8d080', maxWidth: 110 }}>
+                        {item.name}
+                      </span>
+                      <span className="font-display font-bold text-[8px] ml-1 shrink-0"
+                            style={{ color: '#c9a227', background: 'rgba(0,0,0,0.4)', padding: '0 4px' }}>
+                        {item.cost.toLocaleString()}g
+                      </span>
                     </div>
-                    <p className="text-[9px] leading-tight italic" style={{ color: '#8a7050' }}>{item.description}</p>
+                    {/* Type badge row */}
+                    <div className="flex items-center gap-1 px-2 pt-1">
+                      <span className="text-[7px] font-display font-bold uppercase tracking-wider px-1 rounded-sm"
+                            style={{
+                              background: isPerk ? 'rgba(120,60,220,0.2)' : isStat ? 'rgba(60,160,220,0.2)' : 'rgba(200,140,60,0.2)',
+                              color: isPerk ? '#b070ff' : isStat ? '#60b0ff' : '#c9a227',
+                              border: `1px solid ${isPerk ? 'rgba(120,60,220,0.3)' : isStat ? 'rgba(60,160,220,0.3)' : 'rgba(200,140,60,0.3)'}`,
+                            }}>
+                        {typeLabel}
+                      </span>
+                      {item.stackable && (
+                        <span className="text-[7px] font-display uppercase" style={{ color: '#5db860' }}>STACKABLE</span>
+                      )}
+                      {owned && (
+                        <span className="text-[7px] font-display uppercase ml-auto" style={{ color: '#c9a227' }}>OWNED</span>
+                      )}
+                    </div>
+                    {/* Description */}
+                    <p className="px-2 pb-1.5 pt-0.5 text-[8px] leading-snug italic" style={{ color: '#8a7050' }}>
+                      {item.description}
+                    </p>
+                    {/* Buy button */}
                     <button
                       disabled={disabled}
                       onClick={() => buyItem(item.id)}
-                      className="btn-fantasy py-1 text-[9px] w-full"
+                      className="btn-fantasy py-0.5 text-[8px] w-full rounded-none"
                       style={owned ? { borderColor: 'rgba(74,48,0,0.3)', color: '#5a4020', cursor: 'not-allowed' } : {}}
                     >
-                      {owned ? 'Already Owned' : gameState.phase !== 'buy' ? 'Buy Phase Only' : !canAfford ? 'Insufficient Gold' : 'Purchase'}
+                      {owned ? 'Owned' : gameState.phase !== 'buy' ? 'Buy Phase Only' : !canAfford ? 'Need Gold' : 'Purchase'}
                     </button>
                   </div>
                 );
@@ -1384,6 +1420,7 @@ export default function GamePage() {
               boxShadow: '8px 0 24px rgba(0,0,0,0.8)',
             }}
           >
+            {/* Header */}
             <div className="flex items-center justify-between px-3 py-2 shrink-0"
                  style={{ background: 'linear-gradient(180deg, #110d07, #0d0906)', borderBottom: '1px solid #3a2800' }}>
               <h3 className="font-display text-sm font-bold flex items-center gap-2" style={{ color: '#c9a227', letterSpacing: '0.12em' }}>
@@ -1394,44 +1431,164 @@ export default function GamePage() {
                       style={{ color: '#5a4020' }}>✕</button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-2">
-              <div className="grid grid-cols-2 gap-2">
-                {[...Array(8)].map((_, i) => {
-                  const item = me.inventory[i];
-                  const isPassive = item?.effectKey === 'ironheart';
-                  const isClickable = item && isMyTurn && gameState.phase === 'main' && !isPassive;
+            {/* Tabs */}
+            <div className="flex shrink-0" style={{ borderBottom: '1px solid #2a1e0a' }}>
+              {(['items', 'perks'] as const).map(t => (
+                <button key={t}
+                  onClick={() => setInvTab(t)}
+                  className="flex-1 py-1.5 text-[9px] font-display uppercase tracking-wider transition-all border-b-2"
+                  style={{
+                    borderColor: invTab === t ? '#c9a227' : 'transparent',
+                    background: invTab === t ? 'rgba(201,162,39,0.08)' : 'transparent',
+                    color: invTab === t ? '#c9a227' : '#5a4020',
+                  }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            {/* ── Items tab — card grid ── */}
+            {invTab === 'items' && (
+              <div className="flex-1 overflow-y-auto p-2">
+                {(() => {
+                  // Show only non-stat items (stat items appear in Perks tab)
+                  const invItems = me.inventory.filter(i => i.type !== 'stat');
+                  if (invItems.length === 0) {
+                    return (
+                      <div className="text-center py-8 font-display text-xs italic" style={{ color: '#5a4020' }}>
+                        Your satchel is empty.<br />Buy items from the shop.
+                      </div>
+                    );
+                  }
                   return (
-                    <div key={i}
-                         onClick={() => item && handleInventoryClick(item)}
-                         className="h-20 flex flex-col items-center justify-center p-1.5 text-center transition-all"
-                         style={{
-                           border: `1px solid ${!item ? 'rgba(40,28,10,0.3)' : isPassive ? 'rgba(201,162,39,0.3)' : isClickable ? 'rgba(201,162,39,0.5)' : 'rgba(74,48,0,0.4)'}`,
-                           background: !item ? 'rgba(8,5,2,0.3)' : isPassive ? 'rgba(74,48,0,0.12)' : isClickable ? 'rgba(74,48,0,0.2)' : 'rgba(14,10,4,0.4)',
-                           cursor: isClickable ? 'pointer' : 'default',
-                         }}>
-                      {item ? (
-                        <>
-                          <Package size={16} style={{ color: '#c9a227', marginBottom: 4 }} />
-                          <span className="text-[8px] font-display font-bold leading-tight text-center" style={{ color: '#d4b870' }}>
-                            {item.name}
-                          </span>
-                          {isPassive && <span className="text-[7px] font-display mt-0.5" style={{ color: '#c9a227' }}>PASSIVE</span>}
-                          {!isPassive && isMyTurn && gameState.phase === 'main' && (
-                            <span className="text-[7px] font-display mt-0.5" style={{ color: '#9aaa60' }}>USE</span>
-                          )}
-                        </>
-                      ) : (
-                        <span className="text-[9px] font-display" style={{ color: 'rgba(74,48,0,0.25)' }}>—</span>
-                      )}
+                    <div className="flex flex-col gap-2">
+                      {invItems.map(item => {
+                        const isStatItem = item.type === 'stat';
+                        const isPassive = item.effectKey === 'ironheart' || isStatItem;
+                        const canEquip = !isPassive && isMyTurn && gameState.phase === 'main';
+                        const canEquipAsRelic = isMyTurn && gameState.phase === 'main'
+                          && !(me.artifactSlot && me.artifactSlotTurns < 2);
+                        const effectivelyDraggable = canEquipAsRelic;
+                        return (
+                          <div key={item.instanceId}
+                               draggable={effectivelyDraggable}
+                               onDragStart={(e) => {
+                                 if (effectivelyDraggable) {
+                                   e.dataTransfer.setData('inventoryItemId', item.instanceId);
+                                   e.dataTransfer.effectAllowed = 'move';
+                                 }
+                               }}
+                               className="relative flex flex-col overflow-hidden transition-transform"
+                               style={{
+                                 background: '#0d0800',
+                                 border: `1px solid ${effectivelyDraggable ? 'rgba(200,140,60,0.6)' : 'rgba(74,48,0,0.4)'}`,
+                                 boxShadow: effectivelyDraggable ? '0 0 8px rgba(200,140,60,0.3)' : 'none',
+                                 cursor: effectivelyDraggable ? 'grab' : canEquip ? 'pointer' : 'default',
+                               }}
+                               onClick={() => canEquip && handleInventoryClick(item)}>
+                            {/* Card header */}
+                            <div className="flex items-center justify-between px-2 py-1"
+                                 style={{ background: '#2a1600', borderBottom: '1px solid rgba(74,48,0,0.5)' }}>
+                              <span className="font-display font-bold text-[9px] leading-tight truncate"
+                                    style={{ color: '#e8d080', maxWidth: 120 }}>
+                                {item.name}
+                              </span>
+                              <Package size={9} style={{ color: '#c9a227', flexShrink: 0, marginLeft: 4 }} />
+                            </div>
+                            {/* Type badge */}
+                            <div className="px-2 pt-1 flex items-center gap-1">
+                              <span className="text-[7px] font-display uppercase tracking-wider px-1 rounded-sm"
+                                    style={{
+                                      background: 'rgba(200,140,60,0.15)',
+                                      color: '#c9a227',
+                                      border: '1px solid rgba(200,140,60,0.25)',
+                                    }}>
+                                {isPassive ? 'PASSIVE' : 'ITEM'}
+                              </span>
+                              {effectivelyDraggable && (
+                                <span className="text-[7px] font-display uppercase ml-auto" style={{ color: 'rgba(200,140,60,0.6)' }}>
+                                  drag to equip
+                                </span>
+                              )}
+                            </div>
+                            {/* Description */}
+                            <p className="px-2 pb-2 pt-0.5 text-[8px] leading-snug italic" style={{ color: '#7a6040' }}>
+                              {item.description}
+                            </p>
+                            {/* Action hint */}
+                            {canEquip && !effectivelyDraggable && (
+                              <div className="px-2 pb-1 text-[7px] font-display text-center"
+                                   style={{ color: '#9aaa60' }}>
+                                Click to use
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* ── Perks tab — owned perks + stat items ── */}
+            {invTab === 'perks' && (
+              <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1.5">
+                {/* Stat items (passive field buffs) */}
+                {me.inventory.filter(i => i.type === 'stat').map(item => (
+                  <div key={item.instanceId} className="flex flex-col overflow-hidden"
+                       style={{ background: '#080f1e', border: '1px solid rgba(60,160,220,0.25)' }}>
+                    <div className="flex items-center gap-1.5 px-2 py-1"
+                         style={{ background: '#143060', borderBottom: '1px solid rgba(60,160,220,0.2)' }}>
+                      <Activity size={9} style={{ color: '#60b0ff', flexShrink: 0 }} />
+                      <span className="font-display font-bold text-[9px] truncate" style={{ color: '#90d0ff' }}>
+                        {item.name}
+                      </span>
+                      <span className="text-[7px] font-display ml-auto shrink-0 uppercase"
+                            style={{ color: 'rgba(96,176,255,0.6)' }}>ACTIVE</span>
+                    </div>
+                    <p className="px-2 py-1 text-[8px] italic leading-snug" style={{ color: '#5080a0' }}>
+                      {item.description}
+                    </p>
+                  </div>
+                ))}
+                {/* Perk items (permanent player upgrades) */}
+                {me.perks.map((perkKey, idx) => {
+                  const perkDef = SHOP_ITEMS.find(i => i.effectKey === perkKey);
+                  if (!perkDef) return null;
+                  return (
+                    <div key={idx} className="flex flex-col overflow-hidden"
+                         style={{ background: '#130a20', border: '1px solid rgba(120,60,220,0.25)' }}>
+                      <div className="flex items-center gap-1.5 px-2 py-1"
+                           style={{ background: '#3a1860', borderBottom: '1px solid rgba(120,60,220,0.2)' }}>
+                        <Sparkles size={9} style={{ color: '#b070ff', flexShrink: 0 }} />
+                        <span className="font-display font-bold text-[9px] truncate" style={{ color: '#d090ff' }}>
+                          {perkDef.name}
+                        </span>
+                        <span className="text-[7px] font-display ml-auto shrink-0 uppercase"
+                              style={{ color: 'rgba(176,112,255,0.6)' }}>PERK</span>
+                      </div>
+                      <p className="px-2 py-1 text-[8px] italic leading-snug" style={{ color: '#7050a0' }}>
+                        {perkDef.description}
+                      </p>
                     </div>
                   );
                 })}
+                {me.inventory.filter(i => i.type === 'stat').length === 0 && me.perks.length === 0 && (
+                  <div className="text-center py-8 font-display text-xs italic" style={{ color: '#5a4020' }}>
+                    No perks yet.<br />Buy from the Perks tab in the shop.
+                  </div>
+                )}
               </div>
-            </div>
+            )}
 
+            {/* Footer hint */}
             <div className="px-3 py-2 shrink-0 text-[9px] italic"
                  style={{ color: '#5a4020', borderTop: '1px solid rgba(74,48,0,0.3)', background: 'rgba(8,5,2,0.5)' }}>
-              Click an item during your <span style={{ color: '#c9a227' }}>Main Phase</span> to invoke it.
+              {invTab === 'items'
+                ? <>Drag item to <span style={{ color: '#c9a227' }}>Relic Slot</span> to equip, or click to use.</>
+                : <>Perks &amp; passives are always active.</>
+              }
             </div>
           </motion.div>
         )}

@@ -131,7 +131,8 @@ export type GameAction =
   | { type: 'GIVE_STARTING_CARDS'; payload: { playerId: number; cards: CardInstance[] } }
   | { type: 'STEAL_GOLD'; payload: { fromPlayerId: number; toPlayerId: number; amount: number } }
   | { type: 'RESET_BONUS_GOLD'; payload: { playerId: number } }
-  | { type: 'SELL_HAND_CARD'; payload: { playerId: number; instanceId: string } };
+  | { type: 'SELL_HAND_CARD'; payload: { playerId: number; instanceId: string } }
+  | { type: 'EQUIP_INVENTORY_ITEM'; payload: { playerId: number; instanceId: string } };
 
 export const initialGameState: GameState = {
   phase: 'countdown',
@@ -532,15 +533,71 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         players: state.players.map(p => {
           if (p.id !== action.payload.playerId || !p.artifactSlot) return p;
           const sellPrice = p.artifactSlot.cost * 75;
+          // Also remove statBuff if this artifact came from a stat item
+          const removedEffect = p.artifactSlot.effect;
+          const newStatBuffs = removedEffect
+            ? p.statBuffs.filter((b, idx) => {
+                // Remove at most one occurrence
+                const firstIdx = p.statBuffs.indexOf(removedEffect);
+                return idx !== firstIdx;
+              })
+            : p.statBuffs;
           return {
             ...p,
             field: applyAuraToField(p.field, p.artifactSlot.effect, -1),
             artifactSlot: null, artifactSlotTurns: 0,
             gold: p.gold + sellPrice,
             goldEarnedThisGame: (p.goldEarnedThisGame || 0) + sellPrice,
+            statBuffs: newStatBuffs,
           };
         }),
       };
+
+    case 'EQUIP_INVENTORY_ITEM': {
+      const { playerId, instanceId } = action.payload;
+      return {
+        ...state,
+        players: state.players.map(p => {
+          if (p.id !== playerId) return p;
+          const item = p.inventory.find(i => i.instanceId === instanceId);
+          if (!item) return p;
+          // Blocked if current artifact slot is locked
+          if (p.artifactSlot && p.artifactSlotTurns < 2) return p;
+          // Undo old artifact aura
+          const newField = applyAuraToField(p.field, p.artifactSlot?.effect, -1);
+          // Remove old artifact statBuff if applicable
+          let newStatBuffs = p.statBuffs;
+          if (p.artifactSlot?.effect) {
+            const firstIdx = p.statBuffs.indexOf(p.artifactSlot.effect);
+            if (firstIdx !== -1) {
+              newStatBuffs = newStatBuffs.filter((_, i) => i !== firstIdx);
+            }
+          }
+          // If this is a stat item, its effectKey was applied to statBuffs on purchase —
+          // we keep it there; the CardInstance.effect field drives aura logic.
+          // If it's a consumable item type, we just display it in the slot without re-firing.
+          const newCard: CardInstance = {
+            instanceId: item.instanceId,
+            templateId: item.itemId,
+            name: item.name,
+            description: item.description,
+            type: 'artifact',
+            cost: 0,
+            effect: item.effectKey,
+            keywords: [],
+            rarity: 'common',
+          };
+          return {
+            ...p,
+            inventory: p.inventory.filter(i => i.instanceId !== instanceId),
+            artifactSlot: newCard,
+            artifactSlotTurns: 0,
+            field: newField,
+            statBuffs: newStatBuffs,
+          };
+        }),
+      };
+    }
 
     case 'SELL_CREATURE': {
       const { playerId, instanceId } = action.payload;

@@ -21,6 +21,7 @@ interface GameContextType {
   attackWith: (attackerInstanceId: string, targetPlayerId: number, targetInstanceId?: string) => void;
   buyItem: (shopItemId: string) => void;
   useInventoryItem: (inventoryInstanceId: string, targetId?: string) => void;
+  equipInventoryItem: (instanceId: string) => void;
   endPhase: () => void;
   pickDraftCard: (template: CardTemplate) => void;
   achievements: Achievement[];
@@ -332,6 +333,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'DAMAGE', payload: { targetPlayerId: player.id, targetInstanceId: targetId, amount: -2 } });
       }
     }
+  };
+
+  // ── Equip inventory item to relic slot ───────────────────────────────────
+  const equipInventoryItem = (instanceId: string) => {
+    const player = gameState.players[gameState.currentPlayerIndex];
+    const item = player.inventory.find(i => i.instanceId === instanceId);
+    if (!item) return;
+    if (player.artifactSlot && player.artifactSlotTurns < 2) return;
+    dispatch({ type: 'EQUIP_INVENTORY_ITEM', payload: { playerId: player.id, instanceId } });
+    dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} equipped ${item.name} as a relic.`, type: 'other' } });
+    sounds.play('uiClick');
   };
 
   // ── Sell ──────────────────────────────────────────────────────────────────
@@ -934,7 +946,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   return (
     <GameContext.Provider value={{
       gameState, dispatch, playCard, stageSpell, sellArtifact, sellCreature, sellHandCard, attackWith,
-      buyItem, useInventoryItem, endPhase, pickDraftCard,
+      buyItem, useInventoryItem, equipInventoryItem, endPhase, pickDraftCard,
       achievements, achievementToast, combatAnim, announcement,
       shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft,
     }}>
