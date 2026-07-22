@@ -602,7 +602,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     players: typeof gameState.players,
   ) {
     const affordable = cp.hand
-      .filter(c => c.cost <= cp.aether && !cp.cardsPlayedByType[c.type]);
+      .filter(c =>
+        c.cost <= cp.aether &&
+        !cp.cardsPlayedByType[c.type] &&
+        !(c.type === 'character' && cp.field.length >= 4) &&
+        !(c.type === 'artifact' && cp.artifactSlot !== null)
+      );
 
     if (affordable.length === 0) return null;
 

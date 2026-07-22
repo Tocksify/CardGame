@@ -11,7 +11,7 @@ export interface Achievement {
 export const DEFAULT_ACHIEVEMENTS: Achievement[] = [
   { id: 'first_win', name: 'First Blood', description: 'Win your first game', icon: 'trophy', unlocked: false },
   { id: 'play_10_cards', name: 'Card Slinger', description: 'Play 10 cards in a single game', icon: 'layers', unlocked: false, progress: 0, target: 10 },
-  { id: 'earn_50_gold', name: 'Golden Age', description: 'Earn 50 gold in a single game', icon: 'coins', unlocked: false, progress: 0, target: 50 },
+  { id: 'earn_50_gold', name: 'Golden Age', description: 'Earn 2,000 gold in a single game', icon: 'coins', unlocked: false, progress: 0, target: 2000 },
   { id: 'kill_5_creatures', name: 'Executioner', description: 'Destroy 5 enemy creatures in one game', icon: 'swords', unlocked: false, progress: 0, target: 5 },
   { id: 'evolve_creature', name: 'Aethermancer\'s Pride', description: 'Evolve a creature', icon: 'sparkles', unlocked: false },
   { id: 'win_no_damage', name: 'Untouchable', description: 'Win a game without taking any damage', icon: 'shield', unlocked: false },
