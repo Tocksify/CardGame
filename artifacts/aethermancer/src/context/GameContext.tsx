@@ -17,6 +17,7 @@ interface GameContextType {
   stageSpell: (cardInstanceId: string, targetId?: string) => void;
   sellArtifact: () => void;
   sellCreature: (instanceId: string) => void;
+  sellHandCard: (instanceId: string) => void;
   attackWith: (attackerInstanceId: string, targetPlayerId: number, targetInstanceId?: string) => void;
   buyItem: (shopItemId: string) => void;
   useInventoryItem: (inventoryInstanceId: string, targetId?: string) => void;
@@ -351,6 +352,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const sellPrice = creature.cost * rarityMult;
     dispatch({ type: 'SELL_CREATURE', payload: { playerId: player.id, instanceId } });
     dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} sold ${creature.name} for ${sellPrice}g.`, type: 'gold' } });
+    sounds.play('gold');
+  };
+
+  const sellHandCard = (instanceId: string) => {
+    const player = gameState.players[gameState.currentPlayerIndex];
+    const card = player.hand.find(c => c.instanceId === instanceId);
+    if (!card) return;
+    const rarityMult = card.rarity === 'legendary' || card.rarity === 'secret' ? 50 : card.rarity === 'rare' ? 35 : 20;
+    const sellPrice = Math.max(10, card.cost * rarityMult);
+    dispatch({ type: 'SELL_HAND_CARD', payload: { playerId: player.id, instanceId } });
+    dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} discarded ${card.name} for ${sellPrice}g.`, type: 'gold' } });
     sounds.play('gold');
   };
 
@@ -716,35 +728,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           triggerAchievement('earn_50_gold', goldGain);
         }
 
-        // Draft mode: show options to human, auto-pick for AI
-        if (state.gameMode === 'draft') {
-          const options = generateDraftOptions();
-          if (cp.isHuman) {
-            sounds.play('draft');
-            dispatchRef.current({ type: 'SET_DRAFT_OPTIONS', payload: options });
-          } else {
-            // AI pick: based on difficulty
-            let best: CardTemplate;
-            if (state.difficulty === 'Novice' || state.difficulty === 'Easy') {
-              best = options[Math.floor(Math.random() * options.length)];
-            } else {
-              best = options.sort((a, b) => (b.cost || 0) - (a.cost || 0))[0];
-            }
-            if (best) {
-              const cardInst = { ...best, instanceId: `card_${generateId()}` };
-              dispatchRef.current({ type: 'GIVE_CARDS', payload: { playerId: cp.id, cards: [cardInst] } });
-            } else {
-              dispatchRef.current({ type: 'ADVANCE_PHASE' });
-            }
-          }
-        } else {
-          // 8-card mode: draw 2 cards per turn from pool (no starting hand)
-          const drawCount = 2 + (cp.perks.includes('perk_draw_1') ? 1 : 0) +
-            (cp.artifactSlot?.effect === 'aura_draw_1' ? 1 : 0);
-          const drawn = drawFromPool(drawCount).map(t => ({ ...t, instanceId: `card_${generateId()}` }));
-          dispatchRef.current({ type: 'GIVE_CARDS', payload: { playerId: cp.id, cards: drawn } });
-          sounds.play('draw');
-        }
+        // Both modes: draw 2 cards per turn from pool
+        const drawCount = 2 + (cp.perks.includes('perk_draw_1') ? 1 : 0) +
+          (cp.artifactSlot?.effect === 'aura_draw_1' ? 1 : 0);
+        const drawn = drawFromPool(drawCount).map(t => ({ ...t, instanceId: `card_${generateId()}` }));
+        dispatchRef.current({ type: 'GIVE_CARDS', payload: { playerId: cp.id, cards: drawn } });
+        sounds.play('draw');
       }, 600);
       return;
     }
@@ -781,86 +770,99 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (!currentPlayer.isHuman) {
-        gameLoopRef.current = setTimeout(() => {
+        // Novice: sometimes skip combat entirely (decide once upfront)
+        const skipCombat = currentPlayer.difficulty === 'Novice' && Math.random() < 0.3;
+
+        const runAiCombatLoop = () => {
           const state = stateRef.current;
           const cp = state.players[state.currentPlayerIndex];
-          if (!cp) return;
-          const diff = state.difficulty;
+          if (!cp || cp.isHuman || state.phase !== 'combat') return;
 
-          // Novice: sometimes skip combat entirely
-          if (diff === 'Novice' && Math.random() < 0.3) {
+          if (skipCombat) {
             dispatchRef.current({ type: 'ADVANCE_PHASE' });
             return;
           }
 
+          const diff = state.difficulty;
           const untapped = cp.field.filter(c => !c.tapped && !c.hasAttackedThisTurn && !c.stunned);
-          if (untapped.length > 0) {
-            const targetHuman = state.players.find(p => p.isHuman && p.hp > 0);
-            if (targetHuman) {
-              const attacker = untapped[0];
-              const target = chooseAiAttackTarget(cp, diff, state.players);
-              if (!target) { dispatchRef.current({ type: 'ADVANCE_PHASE' }); return; }
 
-              const dmg = attacker.currentAtk + attacker.tempAtkBonus;
-
-              // Kill-steal: if this attack would kill the human hero, take 40% of their gold first
-              if (!target.targetInstanceId) {
-                const resist = targetHuman.perks.includes('perk_resist_1') ? 1 : 0;
-                const effectiveDmg = Math.max(0, dmg - resist);
-                const wouldKill = targetHuman.hp - effectiveDmg <= 0 &&
-                  !(targetHuman.perks.includes('perk_undying') && !targetHuman.undyingUsed);
-                if (wouldKill && targetHuman.gold > 0) {
-                  const stolen = Math.floor(targetHuman.gold * 0.4);
-                  if (stolen > 0) {
-                    dispatchRef.current({ type: 'STEAL_GOLD', payload: { fromPlayerId: targetHuman.id, toPlayerId: cp.id, amount: stolen } });
-                    dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name} plundered ${stolen}g from ${targetHuman.name}!`, type: 'gold' } });
-                  }
-                }
-              }
-
-              dispatchRef.current({
-                type: 'ATTACK',
-                payload: {
-                  attackerPlayerId: cp.id,
-                  attackerInstanceId: attacker.instanceId,
-                  targetPlayerId: target.targetPlayerId,
-                  targetInstanceId: target.targetInstanceId,
-                  damageOverride: dmg,
-                },
-              });
-
-              // AI status on hit
-              if (target.targetInstanceId) {
-                if (attacker.keywords?.includes('poison_on_hit') || cp.statBuffs.includes('plague_standard')) {
-                  if (!targetHuman.perks.includes('perk_poison_immune')) {
-                    dispatchRef.current({ type: 'APPLY_POISON', payload: { playerId: targetHuman.id, instanceId: target.targetInstanceId, stacks: 2 } });
-                  }
-                }
-                if (attacker.keywords?.includes('stun_on_hit') || cp.statBuffs.includes('frost_mantle')) {
-                  if (!targetHuman.perks.includes('perk_stun_immune')) {
-                    dispatchRef.current({ type: 'APPLY_STUN', payload: { playerId: targetHuman.id, instanceId: target.targetInstanceId, turns: 1 } });
-                  }
-                }
-                // AI kill bonus
-                const tgtCreature = targetHuman.field.find(c => c.instanceId === target.targetInstanceId);
-                if (tgtCreature && tgtCreature.currentDef <= dmg) {
-                  dispatchRef.current({ type: 'ADD_GOLD', payload: { playerId: cp.id, amount: 50 } });
-                  dispatchRef.current({ type: 'RECORD_KILL', payload: { playerId: cp.id } });
-                  if (attacker.keywords?.includes('heal_on_kill')) {
-                    dispatchRef.current({ type: 'HEAL', payload: { targetPlayerId: cp.id, amount: 2 } });
-                  }
-                }
-              }
-
-              dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name} attacks for ${dmg} damage!`, type: 'damage' } });
-              sounds.play('attack');
-            } else {
-              dispatchRef.current({ type: 'ADVANCE_PHASE' });
-            }
-          } else {
+          if (untapped.length === 0) {
             dispatchRef.current({ type: 'ADVANCE_PHASE' });
+            return;
           }
-        }, 900);
+
+          const targetHuman = state.players.find(p => p.isHuman && p.hp > 0);
+          if (!targetHuman) {
+            dispatchRef.current({ type: 'ADVANCE_PHASE' });
+            return;
+          }
+
+          const attacker = untapped[0];
+          const target = chooseAiAttackTarget(cp, diff, state.players);
+          if (!target) {
+            dispatchRef.current({ type: 'ADVANCE_PHASE' });
+            return;
+          }
+
+          const dmg = attacker.currentAtk + attacker.tempAtkBonus;
+
+          // Kill-steal: if this attack would kill the human hero, take 40% of their gold first
+          if (!target.targetInstanceId) {
+            const resist = targetHuman.perks.includes('perk_resist_1') ? 1 : 0;
+            const effectiveDmg = Math.max(0, dmg - resist);
+            const wouldKill = targetHuman.hp - effectiveDmg <= 0 &&
+              !(targetHuman.perks.includes('perk_undying') && !targetHuman.undyingUsed);
+            if (wouldKill && targetHuman.gold > 0) {
+              const stolen = Math.floor(targetHuman.gold * 0.4);
+              if (stolen > 0) {
+                dispatchRef.current({ type: 'STEAL_GOLD', payload: { fromPlayerId: targetHuman.id, toPlayerId: cp.id, amount: stolen } });
+                dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name} plundered ${stolen}g from ${targetHuman.name}!`, type: 'gold' } });
+              }
+            }
+          }
+
+          dispatchRef.current({
+            type: 'ATTACK',
+            payload: {
+              attackerPlayerId: cp.id,
+              attackerInstanceId: attacker.instanceId,
+              targetPlayerId: target.targetPlayerId,
+              targetInstanceId: target.targetInstanceId,
+              damageOverride: dmg,
+            },
+          });
+
+          // AI status on hit
+          if (target.targetInstanceId) {
+            if (attacker.keywords?.includes('poison_on_hit') || cp.statBuffs.includes('plague_standard')) {
+              if (!targetHuman.perks.includes('perk_poison_immune')) {
+                dispatchRef.current({ type: 'APPLY_POISON', payload: { playerId: targetHuman.id, instanceId: target.targetInstanceId, stacks: 2 } });
+              }
+            }
+            if (attacker.keywords?.includes('stun_on_hit') || cp.statBuffs.includes('frost_mantle')) {
+              if (!targetHuman.perks.includes('perk_stun_immune')) {
+                dispatchRef.current({ type: 'APPLY_STUN', payload: { playerId: targetHuman.id, instanceId: target.targetInstanceId, turns: 1 } });
+              }
+            }
+            // AI kill bonus
+            const tgtCreature = targetHuman.field.find(c => c.instanceId === target.targetInstanceId);
+            if (tgtCreature && tgtCreature.currentDef <= dmg) {
+              dispatchRef.current({ type: 'ADD_GOLD', payload: { playerId: cp.id, amount: 50 } });
+              dispatchRef.current({ type: 'RECORD_KILL', payload: { playerId: cp.id } });
+              if (attacker.keywords?.includes('heal_on_kill')) {
+                dispatchRef.current({ type: 'HEAL', payload: { targetPlayerId: cp.id, amount: 2 } });
+              }
+            }
+          }
+
+          dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name} attacks for ${dmg} damage!`, type: 'damage' } });
+          sounds.play('attack');
+
+          // Schedule the next card's attack
+          gameLoopRef.current = setTimeout(runAiCombatLoop, 700);
+        };
+
+        gameLoopRef.current = setTimeout(runAiCombatLoop, 900);
       }
       return;
     }
@@ -912,7 +914,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <GameContext.Provider value={{
-      gameState, dispatch, playCard, stageSpell, sellArtifact, sellCreature, attackWith,
+      gameState, dispatch, playCard, stageSpell, sellArtifact, sellCreature, sellHandCard, attackWith,
       buyItem, useInventoryItem, endPhase, pickDraftCard,
       achievements, achievementToast, combatAnim, announcement,
       shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft,

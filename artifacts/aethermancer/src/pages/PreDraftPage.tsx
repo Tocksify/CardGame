@@ -1,14 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGame } from '../context/GameContext';
-import { CARD_TEMPLATES, CardTemplate, drawFromPool, generateDraftOptions } from '../lib/cards';
+import { CardTemplate, generateDraftOptions } from '../lib/cards';
 import { generateId } from '../store/gameStore';
 import { sounds } from '../lib/sounds';
 import { CardArt } from '../components/game/CardArt';
 import { Swords, ShieldAlert, Zap, Package, Sparkles } from 'lucide-react';
 
-const PICK_COUNT = 3;
+const TOTAL_PICKS = 3; // How many cards the player drafts in total
 
 const TYPE_FRAME: Record<string, { bg: string; bar: string; icon: React.ReactNode }> = {
   character:   { bg: '#0e1f3d', bar: '#1a3a6e', icon: <Swords size={8} /> },
@@ -18,9 +18,9 @@ const TYPE_FRAME: Record<string, { bg: string; bar: string; icon: React.ReactNod
 };
 
 function rarityBorder(rarity?: string): string {
-  if (rarity === 'secret')    return 'border-purple-400 shadow-[0_0_8px_rgba(160,80,220,0.7)]';
-  if (rarity === 'legendary') return 'border-amber-400 shadow-[0_0_8px_rgba(255,180,0,0.8)]';
-  if (rarity === 'rare')      return 'border-blue-400 shadow-[0_0_5px_rgba(80,140,220,0.6)]';
+  if (rarity === 'secret')    return 'border-purple-400 shadow-[0_0_14px_rgba(160,80,220,0.8)]';
+  if (rarity === 'legendary') return 'border-amber-400 shadow-[0_0_14px_rgba(255,180,0,0.9)]';
+  if (rarity === 'rare')      return 'border-blue-400 shadow-[0_0_8px_rgba(80,140,220,0.7)]';
   return 'border-[#4a3000]/70';
 }
 
@@ -34,44 +34,45 @@ function rarityLabel(rarity?: string): string {
 export default function PreDraftPage() {
   const [, setLocation] = useLocation();
   const { gameState, dispatch } = useGame();
-  const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  // Sort: legendary/secret first, then rare, then common; alphabetical within tier
-  const sortedCards = [...CARD_TEMPLATES].sort((a, b) => {
-    const tierOrder = { secret: 0, legendary: 1, rare: 2, common: 3 };
-    const ta = tierOrder[a.rarity ?? 'common'];
-    const tb = tierOrder[b.rarity ?? 'common'];
-    if (ta !== tb) return ta - tb;
-    return a.name.localeCompare(b.name);
-  });
+  const [round, setRound] = useState(0);                         // 0-based current round
+  const [options, setOptions] = useState<CardTemplate[]>([]);    // 3 cards to choose from
+  const [picked, setPicked] = useState<CardTemplate[]>([]);      // cards chosen so far
+  const [chosen, setChosen] = useState<CardTemplate | null>(null); // just-picked (for animation)
 
-  const toggleCard = (templateId: string) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(templateId)) {
-        next.delete(templateId);
-        sounds.play('uiClick');
-      } else if (next.size < PICK_COUNT) {
-        next.add(templateId);
-        sounds.play('draft');
+  // Generate first set of options on mount
+  useEffect(() => {
+    setOptions(generateDraftOptions());
+  }, []);
+
+  const handlePick = (card: CardTemplate) => {
+    sounds.play('draft');
+    setChosen(card);
+
+    setTimeout(() => {
+      const newPicked = [...picked, card];
+      setPicked(newPicked);
+      setChosen(null);
+
+      if (newPicked.length < TOTAL_PICKS) {
+        // More rounds — generate fresh options
+        setOptions(generateDraftOptions());
+        setRound(r => r + 1);
+      } else {
+        // All picks done — start the game
+        finishDraft(newPicked);
       }
-      return next;
-    });
+    }, 380);
   };
 
-  const handleBeginBattle = () => {
-    if (selected.size !== PICK_COUNT) return;
-    sounds.play('uiClick');
-
+  const finishDraft = (finalPicked: CardTemplate[]) => {
     const makeInst = (tpl: CardTemplate) => ({ ...tpl, instanceId: `card_${generateId()}` });
 
-    // Give human player their picked cards
     const humanPlayer = gameState.players.find(p => p.isHuman);
     if (humanPlayer) {
-      const pickedTemplates = sortedCards.filter(c => selected.has(c.templateId));
       dispatch({
         type: 'GIVE_STARTING_CARDS',
-        payload: { playerId: humanPlayer.id, cards: pickedTemplates.map(makeInst) },
+        payload: { playerId: humanPlayer.id, cards: finalPicked.map(makeInst) },
       });
     }
 
@@ -84,169 +85,200 @@ export default function PreDraftPage() {
     setLocation('/game');
   };
 
-  const remaining = PICK_COUNT - selected.size;
-  const ready = selected.size === PICK_COUNT;
+  const currentRound = picked.length; // how many picks done
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-background text-foreground overflow-hidden"
-         style={{ fontFamily: "'IM Fell English', Georgia, serif" }}>
-
+    <div
+      className="min-h-[100dvh] flex flex-col bg-background text-foreground overflow-hidden"
+      style={{ fontFamily: "'IM Fell English', Georgia, serif" }}
+    >
       {/* Header */}
-      <div className="shrink-0 px-6 pt-6 pb-3 flex items-start justify-between gap-4"
-           style={{ background: 'linear-gradient(180deg, #100b06 0%, #0d0906 100%)', borderBottom: '2px solid #3a2800' }}>
-        <div>
-          <div className="text-[10px] font-display uppercase tracking-[0.5em] mb-1" style={{ color: '#7a6040' }}>
-            Pre-Game
-          </div>
-          <h1 className="text-3xl font-display font-black" style={{ color: '#c9a227', letterSpacing: '0.08em' }}>
-            DRAFT YOUR STARTING HAND
-          </h1>
-          <p className="text-xs mt-1" style={{ color: '#7a6040' }}>
-            Choose exactly {PICK_COUNT} cards to begin with. Each turn you'll draft one more.
-          </p>
+      <div
+        className="shrink-0 px-6 pt-6 pb-4 text-center"
+        style={{
+          background: 'linear-gradient(180deg, #100b06 0%, #0d0906 100%)',
+          borderBottom: '2px solid #3a2800',
+        }}
+      >
+        <div className="text-[10px] font-display uppercase tracking-[0.5em] mb-1" style={{ color: '#7a6040' }}>
+          Pre-Game Draft
         </div>
+        <h1 className="text-3xl font-display font-black mb-2" style={{ color: '#c9a227', letterSpacing: '0.08em' }}>
+          CHOOSE YOUR STARTING HAND
+        </h1>
+        <p className="text-xs" style={{ color: '#7a6040' }}>
+          Pick 1 of 3 cards each round — you'll draft {TOTAL_PICKS} cards total to begin with.
+        </p>
 
-        <div className="flex flex-col items-end gap-2 shrink-0">
-          {/* Pick counter */}
-          <div className="flex gap-1.5 items-center">
-            {Array.from({ length: PICK_COUNT }).map((_, i) => (
-              <div key={i} className="w-5 h-5 border-2 flex items-center justify-center"
-                   style={{
-                     borderColor: i < selected.size ? '#c9a227' : 'rgba(74,48,0,0.4)',
-                     background: i < selected.size ? 'rgba(201,162,39,0.15)' : 'transparent',
-                   }}>
-                {i < selected.size && <div className="w-2.5 h-2.5 rounded-full" style={{ background: '#c9a227' }} />}
-              </div>
-            ))}
-          </div>
-          <div className="text-xs font-display" style={{ color: remaining > 0 ? '#c9a227' : '#5db860' }}>
-            {remaining > 0 ? `Pick ${remaining} more` : 'Ready!'}
-          </div>
-
-          <AnimatePresence>
-            {ready && (
-              <motion.button
-                initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-                onClick={handleBeginBattle}
-                className="mt-1 px-6 py-2.5 font-display font-bold text-sm uppercase tracking-widest transition-all"
-                style={{
-                  background: 'linear-gradient(135deg, #c9a227, #a07018)',
-                  color: '#080503',
-                  border: '2px solid #e0c040',
-                  boxShadow: '0 0 20px rgba(201,162,39,0.5)',
-                }}
-              >
-                ⚔ BEGIN BATTLE
-              </motion.button>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
-
-      {/* Card Grid */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="grid gap-2"
-             style={{ gridTemplateColumns: 'repeat(8, minmax(0, 1fr))' }}>
-          {sortedCards.map(card => {
-            const frame = TYPE_FRAME[card.type] || TYPE_FRAME.character;
-            const isSelected = selected.has(card.templateId);
-            const isDisabled = !isSelected && selected.size >= PICK_COUNT;
-
+        {/* Round pips */}
+        <div className="flex items-center justify-center gap-3 mt-4">
+          {Array.from({ length: TOTAL_PICKS }).map((_, i) => {
+            const isDone = i < picked.length;
+            const isCurrent = i === picked.length;
             return (
-              <motion.div
-                key={card.templateId}
-                whileHover={!isDisabled ? { scale: 1.08, y: -4, zIndex: 60 } : {}}
-                onClick={() => !isDisabled && toggleCard(card.templateId)}
-                className={`relative flex flex-col overflow-hidden border-2 transition-all duration-150
-                  ${isDisabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
-                  ${isSelected ? 'border-amber-400 shadow-[0_0_14px_rgba(201,162,39,0.9)]' : rarityBorder(card.rarity)}
-                `}
-                style={{
-                  background: isSelected ? `linear-gradient(180deg, ${frame.bar}44, ${frame.bg})` : frame.bg,
-                  height: 120,
-                }}
-              >
-                {/* Selected overlay */}
-                {isSelected && (
-                  <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none"
-                       style={{ background: 'rgba(201,162,39,0.12)' }}>
-                    <div className="text-amber-400 text-lg font-display font-black"
-                         style={{ textShadow: '0 0 8px rgba(201,162,39,0.8)' }}>✓</div>
-                  </div>
+              <div key={i} className="flex flex-col items-center gap-1">
+                <div
+                  className="w-8 h-8 border-2 flex items-center justify-center transition-all duration-300"
+                  style={{
+                    borderColor: isDone ? '#5db860' : isCurrent ? '#c9a227' : 'rgba(74,48,0,0.35)',
+                    background: isDone ? 'rgba(93,184,96,0.15)' : isCurrent ? 'rgba(201,162,39,0.1)' : 'transparent',
+                    boxShadow: isCurrent ? '0 0 12px rgba(201,162,39,0.4)' : 'none',
+                  }}
+                >
+                  {isDone
+                    ? <span className="text-[13px]" style={{ color: '#5db860' }}>✓</span>
+                    : <span className="text-xs font-display font-bold" style={{ color: isCurrent ? '#c9a227' : 'rgba(74,48,0,0.4)' }}>{i + 1}</span>
+                  }
+                </div>
+                {isDone && picked[i] && (
+                  <span className="text-[7px] font-display max-w-[64px] text-center truncate" style={{ color: '#5db860' }}>
+                    {picked[i].name}
+                  </span>
                 )}
-
-                {/* Card type bar */}
-                <div className="h-4 flex items-center justify-between px-0.5 shrink-0"
-                     style={{ background: `${frame.bar}ee` }}>
-                  <span className="text-[5px] font-display font-bold text-amber-100 truncate leading-none">{card.name}</span>
-                  <span className="text-[5px] font-bold text-white shrink-0 ml-0.5">{card.cost}</span>
-                </div>
-
-                {/* Art */}
-                <div className="h-12 w-full shrink-0">
-                  <CardArt templateId={card.templateId} type={card.type} artTheme={(card as any).artTheme} />
-                </div>
-
-                {/* Description area */}
-                <div className="flex-1 px-0.5 py-0.5 overflow-hidden"
-                     style={{ background: 'linear-gradient(180deg, #1a1208, #120e06)' }}>
-                  <div className={`text-[4.5px] font-display uppercase leading-none mb-0.5 ${rarityLabel(card.rarity)}`}>
-                    {card.type} · {card.rarity}
-                    {card.atk !== undefined && ` · ${card.atk}/${card.def}`}
-                  </div>
-                  <p className="text-[4.5px] leading-tight" style={{ color: '#a89060' }}>
-                    {card.description?.slice(0, 50)}{(card.description?.length ?? 0) > 50 ? '…' : ''}
-                  </p>
-                </div>
-
-                {/* Stats footer */}
-                {card.type === 'character' && (
-                  <div className="h-3.5 flex items-center justify-between px-0.5 shrink-0"
-                       style={{ background: '#0e0a05', borderTop: '1px solid rgba(74,48,0,0.4)' }}>
-                    <span className="text-[6px] font-bold" style={{ color: '#e8a030' }}>⚔{card.atk}</span>
-                    <span className="text-[6px] font-bold" style={{ color: '#5db860' }}>🛡{card.def}</span>
-                  </div>
-                )}
-              </motion.div>
+              </div>
             );
           })}
         </div>
+
+        {currentRound < TOTAL_PICKS && (
+          <div className="text-xs font-display mt-2" style={{ color: '#c9a227' }}>
+            Round {currentRound + 1} of {TOTAL_PICKS} — choose one card
+          </div>
+        )}
       </div>
 
-      {/* Bottom bar: selected cards */}
-      <div className="shrink-0 px-4 py-3 flex items-center gap-3 flex-wrap"
-           style={{ background: '#080504', borderTop: '2px solid #3a2800' }}>
+      {/* Draft options */}
+      <div className="flex-1 flex items-center justify-center px-6">
+        <AnimatePresence mode="wait">
+          {options.length > 0 && currentRound < TOTAL_PICKS && (
+            <motion.div
+              key={round}
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -24 }}
+              transition={{ duration: 0.28 }}
+              className="flex gap-8 items-start justify-center flex-wrap"
+            >
+              {options.map(card => {
+                const frame = TYPE_FRAME[card.type] || TYPE_FRAME.character;
+                const isBeingPicked = chosen?.templateId === card.templateId;
+
+                return (
+                  <motion.div
+                    key={card.templateId}
+                    whileHover={{ scale: 1.07, y: -10 }}
+                    animate={isBeingPicked ? { scale: 1.12, opacity: 0 } : { scale: 1, opacity: 1 }}
+                    transition={{ duration: 0.35 }}
+                    onClick={() => !chosen && handlePick(card)}
+                    className={`relative flex flex-col overflow-hidden border-2 cursor-pointer ${rarityBorder(card.rarity)}`}
+                    style={{
+                      background: frame.bg,
+                      width: 168,
+                      height: 240,
+                      boxShadow: card.rarity === 'legendary'
+                        ? '0 0 24px rgba(201,162,39,0.5)'
+                        : card.rarity === 'secret'
+                          ? '0 0 24px rgba(160,80,220,0.5)'
+                          : card.rarity === 'rare'
+                            ? '0 0 16px rgba(80,140,220,0.4)'
+                            : 'none',
+                    }}
+                  >
+                    {/* Name + cost bar */}
+                    <div
+                      className="h-9 flex items-center justify-between px-2 shrink-0"
+                      style={{ background: `${frame.bar}ee` }}
+                    >
+                      <span className="text-[11px] font-display font-bold text-amber-100 truncate leading-tight">
+                        {card.name}
+                      </span>
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] text-white shrink-0 ml-1"
+                        style={{ background: '#2a1a00', border: '1px solid #c9a227', boxShadow: '0 0 5px rgba(201,162,39,0.5)' }}
+                      >
+                        {card.cost}
+                      </div>
+                    </div>
+
+                    {/* Art */}
+                    <div className="h-24 w-full shrink-0">
+                      <CardArt templateId={card.templateId} type={card.type} artTheme={(card as any).artTheme} />
+                    </div>
+
+                    {/* Type + rarity bar */}
+                    <div className="h-5 flex items-center px-2" style={{ background: `${frame.bar}99` }}>
+                      <span className={`text-[7px] font-display uppercase tracking-widest ${rarityLabel(card.rarity)}`}>
+                        {card.type} · {card.rarity}
+                        {card.atk !== undefined && ` · ${card.atk}/${card.def}`}
+                      </span>
+                    </div>
+
+                    {/* Description */}
+                    <div
+                      className="flex-1 p-2 text-[8px] leading-tight overflow-hidden"
+                      style={{ background: 'linear-gradient(180deg, #1c1508 0%, #120e06 100%)', color: '#cbb888' }}
+                    >
+                      {card.description}
+                    </div>
+
+                    {/* Stats footer for characters */}
+                    {card.type === 'character' && (
+                      <div
+                        className="h-7 flex items-center justify-between px-2 shrink-0"
+                        style={{ background: '#0e0a05', borderTop: '1px solid rgba(74,48,0,0.5)' }}
+                      >
+                        <div className="flex items-center gap-1 font-display font-bold text-[12px]" style={{ color: '#e8a030' }}>
+                          <Swords size={10} />{card.atk}
+                        </div>
+                        <div className="flex items-center gap-1 font-display font-bold text-[12px]" style={{ color: '#5db860' }}>
+                          <ShieldAlert size={10} />{card.def}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Select footer */}
+                    <div
+                      className="h-7 flex items-center justify-center text-[9px] font-display font-bold uppercase tracking-widest"
+                      style={{
+                        background: 'rgba(201,162,39,0.1)',
+                        borderTop: '1px solid rgba(74,48,0,0.4)',
+                        color: '#c9a227',
+                      }}
+                    >
+                      ✦ SELECT
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Footer — picked cards summary */}
+      <div
+        className="shrink-0 px-4 py-3 flex items-center gap-3 flex-wrap"
+        style={{ background: '#080504', borderTop: '2px solid #3a2800', minHeight: 56 }}
+      >
         <span className="text-[9px] font-display uppercase tracking-widest" style={{ color: '#7a6040' }}>
-          Selected:
+          Drafted:
         </span>
-        {sortedCards.filter(c => selected.has(c.templateId)).map(card => (
-          <div key={card.templateId}
-               onClick={() => toggleCard(card.templateId)}
-               className="flex items-center gap-1 px-2 py-0.5 border cursor-pointer hover:opacity-70 transition-opacity"
-               style={{ borderColor: 'rgba(201,162,39,0.5)', background: 'rgba(201,162,39,0.08)' }}>
-            <span className="text-[9px] font-display font-bold" style={{ color: '#c9a227' }}>{card.name}</span>
-            <span className="text-[7px]" style={{ color: 'rgba(180,50,50,0.7)' }}>✕</span>
-          </div>
-        ))}
-        {selected.size === 0 && (
-          <span className="text-[9px] italic" style={{ color: 'rgba(74,48,0,0.4)' }}>None selected yet</span>
+        {picked.map((card, i) => {
+          const frame = TYPE_FRAME[card.type] || TYPE_FRAME.character;
+          return (
+            <div
+              key={i}
+              className="flex items-center gap-1.5 px-2 py-1 border"
+              style={{ borderColor: 'rgba(93,184,96,0.5)', background: 'rgba(93,184,96,0.06)' }}
+            >
+              <span className="text-[9px] font-display font-bold" style={{ color: '#5db860' }}>{card.name}</span>
+              <span className="text-[7px] font-display" style={{ color: 'rgba(93,184,96,0.5)' }}>✓</span>
+            </div>
+          );
+        })}
+        {picked.length === 0 && (
+          <span className="text-[9px] italic" style={{ color: 'rgba(74,48,0,0.4)' }}>None drafted yet</span>
         )}
-        <div className="ml-auto">
-          <button
-            onClick={handleBeginBattle}
-            disabled={!ready}
-            className="px-5 py-2 font-display font-bold text-xs uppercase tracking-widest transition-all"
-            style={{
-              background: ready ? 'linear-gradient(135deg, #c9a227, #a07018)' : 'rgba(74,48,0,0.3)',
-              color: ready ? '#080503' : 'rgba(74,48,0,0.5)',
-              border: `2px solid ${ready ? '#e0c040' : 'rgba(74,48,0,0.3)'}`,
-              boxShadow: ready ? '0 0 15px rgba(201,162,39,0.4)' : 'none',
-              cursor: ready ? 'pointer' : 'not-allowed',
-            }}
-          >
-            {ready ? '⚔ Begin Battle' : `Pick ${remaining} more…`}
-          </button>
-        </div>
       </div>
     </div>
   );

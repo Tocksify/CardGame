@@ -130,7 +130,8 @@ export type GameAction =
   | { type: 'MARK_DEAD'; payload: { playerId: number } }
   | { type: 'GIVE_STARTING_CARDS'; payload: { playerId: number; cards: CardInstance[] } }
   | { type: 'STEAL_GOLD'; payload: { fromPlayerId: number; toPlayerId: number; amount: number } }
-  | { type: 'RESET_BONUS_GOLD'; payload: { playerId: number } };
+  | { type: 'RESET_BONUS_GOLD'; payload: { playerId: number } }
+  | { type: 'SELL_HAND_CARD'; payload: { playerId: number; instanceId: string } };
 
 export const initialGameState: GameState = {
   phase: 'countdown',
@@ -781,6 +782,27 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           p.id === action.payload.playerId ? { ...p, bonusGoldPending: 0 } : p
         ),
       };
+
+    case 'SELL_HAND_CARD': {
+      const { playerId, instanceId } = action.payload;
+      return {
+        ...state,
+        players: state.players.map(p => {
+          if (p.id !== playerId) return p;
+          const card = p.hand.find(c => c.instanceId === instanceId);
+          if (!card) return p;
+          const rarityMult = card.rarity === 'legendary' || card.rarity === 'secret' ? 50
+            : card.rarity === 'rare' ? 35 : 20;
+          const sellPrice = Math.max(10, card.cost * rarityMult);
+          return {
+            ...p,
+            hand: p.hand.filter(c => c.instanceId !== instanceId),
+            gold: p.gold + sellPrice,
+            goldEarnedThisGame: (p.goldEarnedThisGame || 0) + sellPrice,
+          };
+        }),
+      };
+    }
 
     default:
       return state;

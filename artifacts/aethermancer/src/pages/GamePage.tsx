@@ -396,6 +396,17 @@ const PlayerZone = ({
           </AnimatePresence>
         </div>
 
+        {/* Artifact slot — shown only for the local player, placed left of field */}
+        {isMe && (
+          <ArtifactSlotUI
+            artifact={player.artifactSlot ?? null}
+            turnsInSlot={player.artifactSlotTurns}
+            isMe={isMe}
+            canSell={isMyTurn && phase === 'main'}
+            onSell={onSellArtifact}
+          />
+        )}
+
         {/* Field cards area */}
         {player.field.length > 0 && (
           <div className={`flex ${cfg.cardArea} overflow-hidden`} style={{ maxWidth: cfg.horizontal ? undefined : 120, maxHeight: cfg.horizontal ? undefined : 200 }}>
@@ -438,15 +449,6 @@ const PlayerZone = ({
             <span className="text-[7px] font-display uppercase" style={{ color: `${crestColor}30` }}>Empty</span>
           </div>
         )}
-
-        {/* Artifact slot — shown for all players */}
-        <ArtifactSlotUI
-          artifact={player.artifactSlot ?? null}
-          turnsInSlot={player.artifactSlotTurns}
-          isMe={isMe}
-          canSell={isMyTurn && phase === 'main'}
-          onSell={onSellArtifact}
-        />
       </div>
     </div>
   );
@@ -612,7 +614,7 @@ const PendingSpellBadge = ({ spell }: { spell: { name: string; targetId?: string
 export default function GamePage() {
   const [, setLocation] = useLocation();
   const {
-    gameState, dispatch, playCard, stageSpell, sellArtifact, sellCreature, attackWith,
+    gameState, dispatch, playCard, stageSpell, sellArtifact, sellCreature, sellHandCard, attackWith,
     buyItem, useInventoryItem, endPhase, pickDraftCard, achievementToast, combatAnim, announcement,
     shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft,
   } = useGame();
@@ -1031,23 +1033,40 @@ export default function GamePage() {
               const rotation = me.hand.length > 5 ? offset * 3 : 0;
               const translateY = me.hand.length > 5 ? Math.abs(offset) * 4 : 0;
               const typeUsed = !!me.cardsPlayedByType[card.type];
-              // Only mark this specific card as staged if its instanceId is in pendingSpells
               const isStaged = me.pendingSpells.some(s => s.instanceId === card.instanceId);
               const canAfford = me.aether >= card.cost;
               const artifactLocked = card.type === 'artifact' && me.artifactSlot !== null && me.artifactSlotTurns < 2;
               const fieldFull = card.type === 'character' && me.field.length >= 4;
               const playable = isMyTurn && gameState.phase === 'main' && canAfford && !typeUsed && !artifactLocked && !fieldFull;
+              const canSellFromHand = isMyTurn && (gameState.phase === 'main' || gameState.phase === 'buy');
+              const rarityMult = card.rarity === 'legendary' || card.rarity === 'secret' ? 50 : card.rarity === 'rare' ? 35 : 20;
+              const handSellPrice = Math.max(10, card.cost * rarityMult);
 
               return (
                 <div key={card.instanceId}
                      style={{ transform: `rotate(${rotation}deg) translateY(${translateY}px)` }}
-                     className="transition-transform duration-200">
+                     className="transition-transform duration-200 relative">
                   <HandCardUI
                     card={card}
                     playable={playable}
                     staged={isStaged}
                     onClick={() => handleCardClick(card)}
                   />
+                  {canSellFromHand && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); sellHandCard(card.instanceId); }}
+                      title={`Discard for ${handSellPrice}g`}
+                      className="absolute -top-1 -right-1 w-5 h-5 flex items-center justify-center text-[7px] font-bold hover:opacity-90 transition-opacity z-20"
+                      style={{
+                        background: 'rgba(80,40,0,0.97)',
+                        border: '1px solid rgba(201,162,39,0.6)',
+                        color: '#c9a227',
+                        boxShadow: '0 0 4px rgba(201,162,39,0.3)',
+                      }}
+                    >
+                      $
+                    </button>
+                  )}
                 </div>
               );
             })}
