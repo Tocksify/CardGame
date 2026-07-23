@@ -107,13 +107,13 @@ const ArenaCardUI = ({
       <div className="h-[7%] w-full flex items-center px-1" style={{ background: `${frame.bar}99` }}>
         <span className="text-[9px] text-amber-200/80 font-display uppercase tracking-widest truncate leading-none">{card.type}</span>
       </div>
-      <div className="flex-1 px-1 py-0.5 text-[9px] leading-tight overflow-hidden"
-           style={{ background: 'linear-gradient(180deg, #1a1208 0%, #120e06 100%)', color: '#c8b888' }}>
+      <div className="flex-1 px-1 py-0.5 text-[9px] leading-tight overflow-y-auto scrollbar-thin"
+           style={{ background: 'linear-gradient(180deg, #1a1208 0%, #120e06 100%)', color: '#c8b888', minHeight: 0 }}>
         {card.description}
         {isEvolved && <div className="text-amber-400 font-bold text-[9px] mt-0.5">✦ EVOLVED</div>}
         <EvoProgress card={fc} />
       </div>
-      <div className="h-[14%] flex items-center justify-between px-1"
+      <div className="h-[14%] flex-shrink-0 flex items-center justify-between px-1"
            style={{ background: 'linear-gradient(180deg, #0e0a05, #080603)', borderTop: '1px solid rgba(74,48,0,0.5)' }}>
         {card.type === 'character' ? (
           <>
@@ -250,11 +250,11 @@ const HandCardUI = ({
       <div className="h-[7%] flex items-center px-1.5" style={{ background: `${frame.bar}bb` }}>
         <span className="text-[10px] text-amber-100/80 font-display uppercase tracking-widest">{card.type}</span>
       </div>
-      <div className="flex-1 p-1.5 text-[11px] leading-snug overflow-hidden"
-           style={{ background: 'linear-gradient(180deg, #1c1508 0%, #120e06 100%)', color: '#cbb888' }}>
+      <div className="flex-1 p-1.5 text-[11px] leading-snug overflow-y-auto scrollbar-thin"
+           style={{ background: 'linear-gradient(180deg, #1c1508 0%, #120e06 100%)', color: '#cbb888', minHeight: 0 }}>
         {card.description}
       </div>
-      <div className="h-[12%] flex items-center justify-between px-1.5"
+      <div className="h-[12%] flex-shrink-0 flex items-center justify-between px-1.5"
            style={{ background: 'linear-gradient(180deg, #0e0a05, #070503)', borderTop: '1px solid rgba(74,48,0,0.5)' }}>
         {card.type === 'character' ? (
           <>

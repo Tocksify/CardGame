@@ -795,6 +795,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           else if (item.effectKey === 'heal_8_hero') newHp = Math.min(p.maxHp, p.hp + 8);
           else if (item.effectKey === 'heal_20_hero') newHp = Math.min(p.maxHp, p.hp + 20);
           else if (item.effectKey === 'heal_35_hero') newHp = Math.min(p.maxHp, p.hp + 35);
+          else if (item.effectKey === 'heal_15_self') newHp = Math.min(p.maxHp, p.hp + 15);
+          else if (item.effectKey === 'heal_all_chars_3')
+            newField = newField.map(c => ({ ...c, currentDef: c.currentDef + 3 }));
           else if (item.effectKey === 'cure_poison' && targetId)
             newField = newField.map(c => c.instanceId === targetId ? { ...c, poisonStacks: 0 } : c);
           else if (item.effectKey === 'cure_stun' && targetId)

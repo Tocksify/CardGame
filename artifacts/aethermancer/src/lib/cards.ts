@@ -673,14 +673,14 @@ export function generateDeck(): CardTemplate[] {
 
 export const SHOP_ITEMS: ShopItemTemplate[] = [
   // ── Items ─────────────────────────────────────────────────────────────────
-  { id: 'hp1',  name: 'Healing Potion',      type: 'item', cost: 200,  description: 'Restore 20 HP to your hero.', effectKey: 'heal_20_hero', stackable: true },
+  { id: 'hp1',  name: 'Healing Potion',      type: 'item', cost: 200,  description: 'Restore 20 HP to yourself.', effectKey: 'heal_20_hero', stackable: true },
   { id: 'i1',   name: 'Aether Shard',        type: 'item', cost: 400,  description: 'Give any character +2 ATK permanently.', effectKey: 'perm_atk_2' },
   { id: 'i2',   name: 'Crystal Ward',        type: 'item', cost: 500,  description: 'Give any character +4 DEF permanently.', effectKey: 'perm_def_4' },
   { id: 'i3',   name: 'Mana Infusion',       type: 'item', cost: 600,  description: 'Gain 3 extra Aether this turn.', effectKey: 'temp_aether_3' },
   { id: 'i4',   name: 'Elixir of Fortune',   type: 'item', cost: 350,  description: 'Draw 2 extra cards from the pool.', effectKey: 'draw_2' },
   { id: 'i5',   name: 'Battle Serum',        type: 'item', cost: 450,  description: 'Give any character +1 ATK and +1 DEF permanently.', effectKey: 'perm_stats_1_1' },
   { id: 'i6',   name: 'Void Essence',        type: 'item', cost: 750,  description: 'Instantly destroy a target character on the enemy field.', effectKey: 'destroy_target_creature' },
-  { id: 'i7',   name: 'Phoenix Feather',     type: 'item', cost: 550,  description: 'Restore 8 HP to your hero.', effectKey: 'heal_8_hero' },
+  { id: 'i7',   name: 'Phoenix Feather',     type: 'item', cost: 550,  description: 'Restore 8 HP to yourself.', effectKey: 'heal_8_hero' },
   { id: 'i8',   name: 'Antidote',            type: 'item', cost: 300,  description: 'Remove all poison from a character.', effectKey: 'cure_poison', stackable: true },
   { id: 'i9',   name: 'Venom Vial',          type: 'item', cost: 400,  description: 'Apply 5 poison stacks to any target character.', effectKey: 'apply_poison_5' },
   { id: 'i10',  name: 'Thunder Orb',         type: 'item', cost: 500,  description: 'Stun an enemy character for 2 turns.', effectKey: 'stun_2_turns' },
@@ -692,7 +692,9 @@ export const SHOP_ITEMS: ShopItemTemplate[] = [
   { id: 'i15',  name: 'Greater Shard',       type: 'item', cost: 550,  description: 'Give any character +3 ATK permanently.', effectKey: 'perm_atk_3' },
   { id: 'i16',  name: 'Smoke Pellet',        type: 'item', cost: 350,  description: 'Stun an enemy character for 1 turn.', effectKey: 'stun_1_turn', stackable: true },
   { id: 'i17',  name: 'Cure-All Tonic',      type: 'item', cost: 400,  description: 'Remove all stun from a friendly character.', effectKey: 'cure_stun', stackable: true },
-  { id: 'i18',  name: 'Grand Elixir',        type: 'item', cost: 800,  description: 'Restore 35 HP to your hero.', effectKey: 'heal_35_hero', stackable: true },
+  { id: 'i18',  name: 'Grand Elixir',        type: 'item', cost: 800,  description: 'Restore 35 HP to yourself.', effectKey: 'heal_35_hero', stackable: true },
+  { id: 'i19',  name: 'Restoration Wave',   type: 'item', cost: 550,  description: 'Restore 3 DEF to ALL friendly characters on your field.', effectKey: 'heal_all_chars_3', stackable: true },
+  { id: 'i20',  name: 'Soulbound Draught',  type: 'item', cost: 450,  description: 'Restore 15 HP to yourself.', effectKey: 'heal_15_self', stackable: true },
 
   // ── Stat items ────────────────────────────────────────────────────────────
   { id: 'st2',  name: 'Tempest Sigil',       type: 'stat', cost: 700,  description: 'Your characters deal +1 bonus damage on first attack each turn.', effectKey: 'stormrazor' },
