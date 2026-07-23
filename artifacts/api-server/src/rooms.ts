@@ -16,6 +16,10 @@ export interface Room {
   gameMode: '8card' | 'draft';
   hostId: string;
   createdAt: number;
+  /** Players who have finished the 3-card draft pick (draft mode only) */
+  draftReadyPlayers: Set<string>;
+  /** Server-side timer handle for the 20s draft wait */
+  draftTimerHandle?: ReturnType<typeof setTimeout>;
 }
 
 const rooms = new Map<string, Room>();
@@ -30,6 +34,7 @@ export function createRoom(code: string, hostSocketId: string, hostName: string)
     gameMode: '8card',
     hostId: hostSocketId,
     createdAt: Date.now(),
+    draftReadyPlayers: new Set(),
   };
   rooms.set(code, room);
   return room;
@@ -51,6 +56,7 @@ export function leaveRoom(socketId: string): { room: Room | null; code: string }
     if (idx === -1) continue;
     room.players.splice(idx, 1);
     if (room.players.length === 0) {
+      if (room.draftTimerHandle) clearTimeout(room.draftTimerHandle);
       rooms.delete(code);
       return { room: null, code };
     }
@@ -89,6 +95,8 @@ export function updateRoomSettings(
 }
 
 export function deleteRoom(code: string): void {
+  const room = rooms.get(code);
+  if (room?.draftTimerHandle) clearTimeout(room.draftTimerHandle);
   rooms.delete(code);
 }
 
@@ -96,6 +104,9 @@ export function deleteRoom(code: string): void {
 export function cleanStaleRooms(): void {
   const cutoff = Date.now() - 2 * 60 * 60 * 1000;
   for (const [code, room] of rooms) {
-    if (room.createdAt < cutoff) rooms.delete(code);
+    if (room.createdAt < cutoff) {
+      if (room.draftTimerHandle) clearTimeout(room.draftTimerHandle);
+      rooms.delete(code);
+    }
   }
 }

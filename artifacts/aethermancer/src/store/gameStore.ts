@@ -96,7 +96,7 @@ export interface GameState {
 }
 
 export type GameAction =
-  | { type: 'START_GAME'; payload: { players: Player[]; gameMode: GameMode; matchType: MatchType; ranked: boolean; difficulty: AiDifficulty } }
+  | { type: 'START_GAME'; payload: { players: Player[]; gameMode: GameMode; matchType: MatchType; ranked: boolean; difficulty: AiDifficulty; startingPlayerIndex?: number } }
   | { type: 'SET_PHASE'; payload: GamePhase }
   | { type: 'ADVANCE_PHASE' }
   | { type: 'END_TURN' }
@@ -185,6 +185,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return {
         ...initialGameState,
         players: action.payload.players,
+        currentPlayerIndex: action.payload.startingPlayerIndex ?? 0,
         gameMode: action.payload.gameMode,
         matchType: action.payload.matchType,
         ranked: action.payload.ranked,

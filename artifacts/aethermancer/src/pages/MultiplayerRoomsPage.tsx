@@ -4,10 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { sounds } from '../lib/sounds';
 import { useLobby } from '../context/LobbyContext';
 import { useGame } from '../context/GameContext';
+import { useMultiplayer, GameStartedPayload, RoomBot } from '../context/MultiplayerContext';
 import { drawFromPool, generateDeck } from '../lib/cards';
 import { generateId } from '../store/gameStore';
 import { ArrowLeft, Plus, Minus, Bot, User, Copy, LogIn, Swords, CheckCheck, Pencil, Wifi, WifiOff, Loader2 } from 'lucide-react';
-import { useRoomSocket, RoomState, RoomBot, GameStartedPayload } from '../hooks/useRoomSocket';
 
 const BOT_NAMES = [
   'Void Herald', 'Storm Arcane', 'Dusk Weaver', 'Iron Sage',
@@ -39,6 +39,12 @@ export default function MultiplayerRoomsPage() {
   const [, setLocation] = useLocation();
   const { setGameMode, setMatchType } = useLobby();
   const { dispatch } = useGame();
+  const {
+    status, roomState, yourSocketId, serverError,
+    setServerError, setRoomState,
+    createRoom, joinRoom, leaveRoom, updateSettings, startGame,
+    setOnGameStarted,
+  } = useMultiplayer();
 
   const [view, setView] = useState<View>(() =>
     localStorage.getItem(USERNAME_KEY) ? 'lobby' : 'username'
@@ -48,32 +54,28 @@ export default function MultiplayerRoomsPage() {
   );
   const [usernameInput, setUsernameInput] = useState(username);
   const [usernameError, setUsernameError] = useState('');
-
   const [joinInput, setJoinInput] = useState('');
   const [joinError, setJoinError] = useState('');
   const [copied, setCopied] = useState(false);
-
-  // Server-synced room state
-  const [roomState, setRoomState] = useState<RoomState | null>(null);
-  const [yourSocketId, setYourSocketId] = useState<string>('');
-  const [serverError, setServerError] = useState('');
   const [isJoining, setIsJoining] = useState(false);
 
   useEffect(() => { setUsernameInput(username); }, [username]);
 
-  const handleRoomState = useCallback((room: RoomState, socketId?: string) => {
-    setRoomState(room);
-    if (socketId) setYourSocketId(socketId);
-    setIsJoining(false);
-    setServerError('');
-  }, []);
+  // When roomState arrives, stop the loading spinner
+  useEffect(() => {
+    if (roomState) setIsJoining(false);
+  }, [roomState]);
 
   const handleGameStarted = useCallback((payload: GameStartedPayload) => {
     const makeCardInstance = (tpl: any) => ({ ...tpl, instanceId: `card_${generateId()}` });
-    const makeHand = () => payload.gameMode === '8card' ? drawFromPool(8).map(makeCardInstance) : [];
+    // 8-card mode: give 6 cards (2 more arrive on first draw phase → makes 8)
+    const makeHand = () => payload.gameMode === '8card' ? drawFromPool(6).map(makeCardInstance) : [];
     const makeDeck = () => generateDeck().map(makeCardInstance);
 
-    // Build players: I am always player 1 (human), others are opponents
+    // Randomize who goes first using the shared seed
+    const totalPlayerCount = payload.players.length + payload.bots.length;
+    const startingPlayerIndex = payload.seed % totalPlayerCount;
+
     const humanNames = deduplicateNames([
       username,
       ...payload.players
@@ -119,38 +121,35 @@ export default function MultiplayerRoomsPage() {
         matchType: 'multiplayer',
         ranked: false,
         difficulty: 'Normal' as const,
+        startingPlayerIndex,
       },
     });
 
     setLocation(payload.gameMode === 'draft' ? '/pre-draft' : '/game');
   }, [username, yourSocketId, setGameMode, setMatchType, dispatch, setLocation]);
 
-  const handleError = useCallback((message: string) => {
-    setServerError(message);
-    setIsJoining(false);
-  }, []);
-
-  const { status, createRoom, joinRoom, leaveRoom, updateSettings, startGame } = useRoomSocket({
-    onRoomState: handleRoomState,
-    onGameStarted: handleGameStarted,
-    onError: handleError,
-  });
+  // Register the GAME_STARTED callback with the persistent context
+  useEffect(() => {
+    setOnGameStarted(handleGameStarted);
+    return () => setOnGameStarted(null);
+  }, [setOnGameStarted, handleGameStarted]);
 
   const isHost = roomState ? roomState.hostId === yourSocketId : false;
 
-  // Derived bots from roomState
   const bots = roomState?.bots ?? [];
   const gameMode = roomState?.gameMode ?? '8card';
   const totalPlayers = (roomState?.players.length ?? 0) + bots.length;
 
-  // Settings updates (host only) — send to server
+  // Host-only: optimistic update then sync to server
   const setBots = (newBots: RoomBot[]) => {
     if (!isHost || !roomState) return;
+    setRoomState({ ...roomState, bots: newBots });
     updateSettings(gameMode, newBots);
   };
 
   const setLocalGameMode = (mode: '8card' | 'draft') => {
     if (!isHost || !roomState) return;
+    setRoomState({ ...roomState, gameMode: mode });
     updateSettings(mode, bots);
   };
 
@@ -212,7 +211,6 @@ export default function MultiplayerRoomsPage() {
     sounds.play('uiClick');
     if (view === 'room') {
       leaveRoom();
-      setRoomState(null);
       setView('lobby');
     } else if (view === 'lobby') {
       setLocation('/');
@@ -467,63 +465,57 @@ export default function MultiplayerRoomsPage() {
           </div>
           <div className="p-4 flex flex-col gap-2">
             {/* Human players from server */}
-            <AnimatePresence>
-              {humanPlayers.map((player) => {
-                const isMe = player.socketId === yourSocketId;
-                const isPlayerHost = player.socketId === roomState.hostId;
-                return (
-                  <motion.div
-                    key={player.socketId}
-                    initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}
-                    className={`flex items-center gap-3 p-3 border ${isMe ? 'border-primary/40 bg-primary/10' : 'border-border bg-secondary/20'}`}
-                  >
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isMe ? 'bg-primary/20 border border-primary/40' : 'bg-secondary border border-border'}`}>
-                      <User size={20} className={isMe ? 'text-primary' : 'text-muted-foreground'} />
-                    </div>
-                    <div>
-                      <div className={`font-semibold ${isMe ? '' : 'text-muted-foreground'}`}>{player.name}</div>
-                      <div className="text-xs text-muted-foreground">{isMe ? 'You' : 'Player'}</div>
-                    </div>
-                    <div className="ml-auto flex items-center gap-2">
-                      {isPlayerHost && (
-                        <span className="text-xs px-2 py-0.5 border border-primary/30 text-primary/70 font-display uppercase tracking-wider">
-                          Host
-                        </span>
-                      )}
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-
-            {/* Bots */}
-            <AnimatePresence>
-              {bots.map((bot) => (
-                <motion.div
-                  key={bot.id}
-                  initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}
-                  className="flex items-center gap-3 p-3 border border-border bg-secondary/20"
+            {humanPlayers.map((player) => {
+              const isMe = player.socketId === yourSocketId;
+              const isPlayerHost = player.socketId === roomState.hostId;
+              return (
+                <div
+                  key={player.socketId}
+                  className={`flex items-center gap-3 p-3 border ${isMe ? 'border-primary/40 bg-primary/10' : 'border-border bg-secondary/20'}`}
                 >
-                  <div className="w-10 h-10 rounded-full bg-secondary border border-border flex items-center justify-center shrink-0">
-                    <Bot size={20} className="text-muted-foreground" />
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isMe ? 'bg-primary/20 border border-primary/40' : 'bg-secondary border border-border'}`}>
+                    <User size={20} className={isMe ? 'text-primary' : 'text-muted-foreground'} />
                   </div>
                   <div>
-                    <div className="font-semibold text-muted-foreground">{bot.name}</div>
-                    <div className="text-xs text-muted-foreground/50">Bot</div>
+                    <div className={`font-semibold ${isMe ? '' : 'text-muted-foreground'}`}>{player.name}</div>
+                    <div className="text-xs text-muted-foreground">{isMe ? 'You' : 'Player'}</div>
                   </div>
-                  {isHost && (
-                    <button
-                      onClick={() => removeBot(bot.id)}
-                      disabled={bots.length <= 1}
-                      className="ml-auto w-8 h-8 flex items-center justify-center border border-border hover:border-red-500/60 text-muted-foreground hover:text-red-400 disabled:opacity-30 transition-colors"
-                      title="Remove bot"
-                    >
-                      <Minus size={13} />
-                    </button>
-                  )}
-                </motion.div>
-              ))}
-            </AnimatePresence>
+                  <div className="ml-auto flex items-center gap-2">
+                    {isPlayerHost && (
+                      <span className="text-xs px-2 py-0.5 border border-primary/30 text-primary/70 font-display uppercase tracking-wider">
+                        Host
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Bots */}
+            {bots.map((bot) => (
+              <div
+                key={bot.id}
+                className="flex items-center gap-3 p-3 border border-border bg-secondary/20"
+              >
+                <div className="w-10 h-10 rounded-full bg-secondary border border-border flex items-center justify-center shrink-0">
+                  <Bot size={20} className="text-muted-foreground" />
+                </div>
+                <div>
+                  <div className="font-semibold text-muted-foreground">{bot.name}</div>
+                  <div className="text-xs text-muted-foreground/50">Bot</div>
+                </div>
+                {isHost && (
+                  <button
+                    onClick={() => removeBot(bot.id)}
+                    disabled={bots.length <= 1}
+                    className="ml-auto w-8 h-8 flex items-center justify-center border border-border hover:border-red-500/60 text-muted-foreground hover:text-red-400 disabled:opacity-30 transition-colors"
+                    title="Remove bot"
+                  >
+                    <Minus size={13} />
+                  </button>
+                )}
+              </div>
+            ))}
 
             {/* Add bot — host only, and only if room has space */}
             {isHost && totalPlayers < 4 && bots.length < 3 && (
@@ -553,7 +545,7 @@ export default function MultiplayerRoomsPage() {
           </div>
           <div className="p-4 flex gap-3">
             {([
-              { key: '8card' as const, label: '8 Card Draw', desc: 'Start with 8 cards. Quick and accessible.' },
+              { key: '8card' as const, label: '8 Card Draw', desc: 'Start with 6 cards + 2 on draw. Quick and accessible.' },
               { key: 'draft' as const, label: '3 Card Draft', desc: 'Pick your starting hand one at a time. More strategic.' },
             ] as const).map(m => (
               <button

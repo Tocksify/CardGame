@@ -5,6 +5,7 @@ import {
   joinRoom,
   leaveRoom,
   getRoomBySocket,
+  getRoomByCode,
   updateRoomSettings,
   deleteRoom,
   Room,
@@ -21,7 +22,8 @@ type ClientMsg =
   | { type: 'JOIN_ROOM'; code: string; name: string }
   | { type: 'LEAVE_ROOM' }
   | { type: 'UPDATE_SETTINGS'; gameMode: '8card' | 'draft'; bots: RoomBot[] }
-  | { type: 'START_GAME' };
+  | { type: 'START_GAME' }
+  | { type: 'PLAYER_DRAFT_DONE' };
 
 function send(ws: WebSocket, msg: object) {
   if (ws.readyState === WebSocket.OPEN) {
@@ -51,6 +53,19 @@ function broadcast(wss: WebSocketServer, room: Room, msg: object) {
 let idCounter = 0;
 function nextId() {
   return `ws_${++idCounter}_${Date.now()}`;
+}
+
+function checkDraftComplete(wss: WebSocketServer, room: Room) {
+  if (room.players.length === 0) {
+    deleteRoom(room.code);
+    return;
+  }
+  const allDone = room.players.every(p => room.draftReadyPlayers.has(p.socketId));
+  if (allDone) {
+    if (room.draftTimerHandle) clearTimeout(room.draftTimerHandle);
+    broadcast(wss, room, { type: 'ALL_DRAFT_DONE' });
+    deleteRoom(room.code);
+  }
 }
 
 export function handleWsConnection(wss: WebSocketServer) {
@@ -135,15 +150,40 @@ export function handleWsConnection(wss: WebSocketServer) {
             return;
           }
           logger.info({ code: room.code }, 'Game started');
+          const seed = Math.floor(Math.random() * 1_000_000);
           const startMsg = {
             type: 'GAME_STARTED',
             gameMode: room.gameMode,
             players: room.players.map(p => ({ socketId: p.socketId, name: p.name })),
             bots: room.bots,
-            seed: Math.floor(Math.random() * 1_000_000),
+            seed,
           };
           broadcast(wss, room, startMsg);
-          deleteRoom(room.code);
+
+          if (room.gameMode === 'draft') {
+            // Keep room alive for draft coordination; start a 20-second server timer
+            room.draftReadyPlayers = new Set();
+            const roomCode = room.code;
+            room.draftTimerHandle = setTimeout(() => {
+              const r = getRoomByCode(roomCode);
+              if (r) {
+                logger.info({ code: roomCode }, 'Draft timer expired — sending ALL_DRAFT_DONE');
+                broadcast(wss, r, { type: 'ALL_DRAFT_DONE' });
+                deleteRoom(roomCode);
+              }
+            }, 20_000);
+          } else {
+            deleteRoom(room.code);
+          }
+          break;
+        }
+
+        case 'PLAYER_DRAFT_DONE': {
+          const room = getRoomBySocket(client.socketId);
+          if (!room) return;
+          room.draftReadyPlayers.add(client.socketId);
+          logger.info({ socketId: client.socketId, ready: room.draftReadyPlayers.size, total: room.players.length }, 'Player draft done');
+          checkDraftComplete(wss, room);
           break;
         }
 
@@ -156,7 +196,12 @@ export function handleWsConnection(wss: WebSocketServer) {
       logger.info({ socketId: client.socketId }, 'WS disconnected');
       const { room } = leaveRoom(client.socketId);
       if (room) {
-        broadcast(wss, room, { type: 'ROOM_STATE', room: roomToMsg(room) });
+        // If the room is in draft phase, re-check whether everyone remaining is done
+        if (room.draftReadyPlayers.size > 0) {
+          checkDraftComplete(wss, room);
+        } else {
+          broadcast(wss, room, { type: 'ROOM_STATE', room: roomToMsg(room) });
+        }
       }
     });
 

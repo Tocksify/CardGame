@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGame } from '../context/GameContext';
+import { useMultiplayer } from '../context/MultiplayerContext';
 import { CardTemplate, generateDraftOptions } from '../lib/cards';
 import { generateId } from '../store/gameStore';
 import { sounds } from '../lib/sounds';
 import { CardArt } from '../components/game/CardArt';
-import { Swords, ShieldAlert, Zap, Package, Sparkles } from 'lucide-react';
+import { Swords, ShieldAlert, Zap, Package, Sparkles, Loader2, Users } from 'lucide-react';
 
 const TOTAL_PICKS = 3; // How many cards the player drafts in total
 
@@ -34,16 +35,29 @@ function rarityLabel(rarity?: string): string {
 export default function PreDraftPage() {
   const [, setLocation] = useLocation();
   const { gameState, dispatch } = useGame();
+  const { signalDraftDone, setOnAllDraftDone, draftSecondsLeft } = useMultiplayer();
+
+  const isMultiplayer = gameState.matchType === 'multiplayer';
 
   const [round, setRound] = useState(0);                         // 0-based current round
   const [options, setOptions] = useState<CardTemplate[]>([]);    // 3 cards to choose from
   const [picked, setPicked] = useState<CardTemplate[]>([]);      // cards chosen so far
   const [chosen, setChosen] = useState<CardTemplate | null>(null); // just-picked (for animation)
+  const [waitingForOthers, setWaitingForOthers] = useState(false);
 
   // Generate first set of options on mount
   useEffect(() => {
     setOptions(generateDraftOptions());
   }, []);
+
+  // Register the ALL_DRAFT_DONE callback for multiplayer
+  useEffect(() => {
+    if (!isMultiplayer) return;
+    setOnAllDraftDone(() => {
+      setLocation('/game');
+    });
+    return () => setOnAllDraftDone(null);
+  }, [isMultiplayer, setOnAllDraftDone, setLocation]);
 
   const handlePick = (card: CardTemplate) => {
     sounds.play('draft');
@@ -59,7 +73,7 @@ export default function PreDraftPage() {
         setOptions(generateDraftOptions());
         setRound(r => r + 1);
       } else {
-        // All picks done — start the game
+        // All picks done
         finishDraft(newPicked);
       }
     }, 380);
@@ -76,16 +90,83 @@ export default function PreDraftPage() {
       });
     }
 
-    // Auto-pick 3 random cards for each AI player
+    // Auto-pick for each non-human player (AI opponents or simulated opponents in multiplayer)
     gameState.players.filter(p => !p.isHuman).forEach(ai => {
       const aiCards = generateDraftOptions().map(makeInst);
       dispatch({ type: 'GIVE_STARTING_CARDS', payload: { playerId: ai.id, cards: aiCards } });
     });
 
-    setLocation('/game');
+    if (isMultiplayer) {
+      // Signal the server we're done; wait for ALL_DRAFT_DONE before navigating
+      signalDraftDone();
+      setWaitingForOthers(true);
+    } else {
+      setLocation('/game');
+    }
   };
 
-  const currentRound = picked.length; // how many picks done
+  const currentRound = picked.length;
+
+  // ── Waiting screen (multiplayer — picks done, waiting for others) ──────────
+  if (waitingForOthers) {
+    return (
+      <div
+        className="min-h-[100dvh] flex flex-col items-center justify-center bg-background text-foreground"
+        style={{ fontFamily: "'IM Fell English', Georgia, serif" }}
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+          className="flex flex-col items-center gap-6 px-8 py-10 max-w-sm w-full text-center"
+          style={{
+            background: 'linear-gradient(180deg, #100b06 0%, #0a0705 100%)',
+            border: '2px solid #3a2800',
+            boxShadow: '0 0 40px rgba(0,0,0,0.8), 0 0 20px rgba(201,162,39,0.08)',
+          }}
+        >
+          {/* Picked cards summary */}
+          <div>
+            <div className="text-[10px] font-display uppercase tracking-[0.5em] mb-3" style={{ color: '#7a6040' }}>
+              Your Starting Hand
+            </div>
+            <div className="flex gap-2 justify-center flex-wrap">
+              {picked.map((card, i) => (
+                <div
+                  key={i}
+                  className="px-2 py-1 border text-[9px] font-display font-bold"
+                  style={{ borderColor: 'rgba(93,184,96,0.5)', background: 'rgba(93,184,96,0.06)', color: '#5db860' }}
+                >
+                  ✓ {card.name}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Waiting indicator */}
+          <div className="flex flex-col items-center gap-3">
+            <div className="flex items-center gap-2" style={{ color: '#c9a227' }}>
+              <Users size={20} />
+              <span className="font-display text-lg font-bold uppercase tracking-widest">
+                Waiting for others
+              </span>
+            </div>
+            <Loader2 size={24} className="animate-spin" style={{ color: '#7a6040' }} />
+            {draftSecondsLeft !== null && (
+              <div
+                className="font-display text-sm font-bold tracking-widest"
+                style={{ color: draftSecondsLeft <= 5 ? '#ef4444' : '#7a6040' }}
+              >
+                Starting in {draftSecondsLeft}s…
+              </div>
+            )}
+          </div>
+
+          <p className="text-xs italic" style={{ color: 'rgba(122,96,64,0.6)' }}>
+            Game starts when all players finish or the timer ends.
+          </p>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -264,7 +345,6 @@ export default function PreDraftPage() {
           Drafted:
         </span>
         {picked.map((card, i) => {
-          const frame = TYPE_FRAME[card.type] || TYPE_FRAME.character;
           return (
             <div
               key={i}

@@ -454,6 +454,52 @@ const PlayerZone = ({
             <span className="text-[7px] font-display uppercase" style={{ color: `${crestColor}30` }}>Empty</span>
           </div>
         )}
+
+        {/* Opponent hand — face-down card backs with count */}
+        {!isMe && (
+          <div className="flex flex-col items-center gap-0.5 ml-1 shrink-0">
+            <div className="relative" style={{ width: 36, height: 50 }}>
+              {/* Depth shadow cards */}
+              {player.hand.length > 2 && (
+                <div className="absolute" style={{
+                  width: 26, height: 38, top: -4, left: 7,
+                  background: '#100303', border: '1px solid rgba(110,20,20,0.3)', borderRadius: 2,
+                }} />
+              )}
+              {player.hand.length > 1 && (
+                <div className="absolute" style={{
+                  width: 28, height: 40, top: -2, left: 4,
+                  background: '#180505', border: '1px solid rgba(140,28,28,0.35)', borderRadius: 2,
+                }} />
+              )}
+              {/* Top face-down card */}
+              <div className="absolute flex items-center justify-center" style={{
+                width: 30, height: 42, top: 0, left: 2,
+                background: 'linear-gradient(135deg, #2d0808 0%, #1a0404 100%)',
+                border: '1px solid rgba(160,40,40,0.55)',
+                borderRadius: 2,
+                boxShadow: '0 2px 6px rgba(0,0,0,0.7)',
+              }}>
+                {/* Card back inner pattern */}
+                <div style={{
+                  position: 'absolute', inset: 3,
+                  border: '1px solid rgba(160,40,40,0.2)',
+                  backgroundImage: 'repeating-linear-gradient(45deg, rgba(160,40,40,0.08) 0px, rgba(160,40,40,0.08) 1px, transparent 1px, transparent 5px)',
+                }} />
+                {player.hand.length > 0 ? (
+                  <span className="relative font-display font-bold text-[11px]" style={{ color: 'rgba(220,70,70,0.9)', zIndex: 1 }}>
+                    {player.hand.length}
+                  </span>
+                ) : (
+                  <span className="relative font-display text-[9px]" style={{ color: 'rgba(160,40,40,0.4)', zIndex: 1 }}>—</span>
+                )}
+              </div>
+            </div>
+            <span className="font-display uppercase text-[6px]" style={{ color: 'rgba(160,40,40,0.55)', letterSpacing: '0.1em' }}>
+              hand
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

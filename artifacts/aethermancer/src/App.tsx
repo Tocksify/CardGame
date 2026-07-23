@@ -14,6 +14,7 @@ import PreDraftPage from './pages/PreDraftPage';
 
 import { LobbyProvider } from './context/LobbyContext';
 import { GameProvider } from './context/GameContext';
+import { MultiplayerProvider } from './context/MultiplayerContext';
 
 const queryClient = new QueryClient();
 
@@ -36,13 +37,15 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <LobbyProvider>
-          <GameProvider>
-            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-              <Router />
-            </WouterRouter>
-          </GameProvider>
-        </LobbyProvider>
+        <MultiplayerProvider>
+          <LobbyProvider>
+            <GameProvider>
+              <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+                <Router />
+              </WouterRouter>
+            </GameProvider>
+          </LobbyProvider>
+        </MultiplayerProvider>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>
