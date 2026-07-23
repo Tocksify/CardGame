@@ -275,6 +275,28 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       });
       announce('CHAIN LIGHTNING!');
       sounds.play('electric');
+    } else if (effect === 'stun_hero') {
+      const enemy = gameState.players.find(p => p.id !== sourcePlayerId);
+      if (enemy) {
+        dispatch({ type: 'STUN_HERO', payload: { playerId: enemy.id } });
+        dispatch({ type: 'ADD_LOG', payload: { msg: `${enemy.name}'s mind is shattered — they lose all Aether next turn!`, type: 'other' } });
+        announce('MIND SHATTERED!');
+        sounds.play('stun');
+      }
+    } else if (effect === 'dmg_5_target' && targetId) {
+      dmgTarget(targetId, 5 + spellBonus);
+      sounds.play('damage');
+    } else if (effect === 'dmg_2_target' && targetId) {
+      dmgTarget(targetId, 2 + spellBonus);
+      sounds.play('damage');
+    } else if (effect === 'heal_3_hero') {
+      dispatch({ type: 'HEAL', payload: { targetPlayerId: sourcePlayerId, amount: 3 } });
+    } else if (effect === 'poison_target_2' && targetId) {
+      const targetOwner = gameState.players.find(p => p.field.some(c => c.instanceId === targetId));
+      if (targetOwner && !isImmuneToPoison(targetOwner)) {
+        dispatch({ type: 'APPLY_POISON', payload: { playerId: targetOwner.id, instanceId: targetId, stacks: 2 } });
+        sounds.play('poison');
+      }
     } else if (effect === 'dmg_2_and_poison_4' && targetId) {
       const targetOwner = gameState.players.find(p => p.field.some(c => c.instanceId === targetId));
       if (targetOwner) {
@@ -342,7 +364,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (!item) return;
     if (player.artifactSlot && player.artifactSlotTurns < 2) return;
     dispatch({ type: 'EQUIP_INVENTORY_ITEM', payload: { playerId: player.id, instanceId } });
-    dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} equipped ${item.name} as a relic.`, type: 'other' } });
+    dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} equipped ${item.name} as an artifact.`, type: 'other' } });
     sounds.play('uiClick');
   };
 
@@ -454,10 +476,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    if (item.type === 'card' && item.cardTemplateId) {
+    if ((item.type === 'card' || item.type === 'artifact') && item.cardTemplateId) {
       const tpl = getCardTemplate(item.cardTemplateId);
       if (tpl) {
-        dispatch({ type: 'BUY_SHOP_ITEM', payload: { playerId: player.id, itemTemplateId: item.id, cost: item.cost, itemType: item.type, name: tpl.name, description: tpl.description, cardTemplate: tpl } });
+        dispatch({ type: 'BUY_SHOP_ITEM', payload: { playerId: player.id, itemTemplateId: item.id, cost: item.cost, itemType: 'card', name: tpl.name, description: tpl.description, cardTemplate: tpl } });
       }
     } else {
       dispatch({ type: 'BUY_SHOP_ITEM', payload: { playerId: player.id, itemTemplateId: item.id, cost: item.cost, itemType: item.type, name: item.name, description: item.description, effectKey: item.effectKey } });
@@ -728,6 +750,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
         if (cp.artifactSlot?.effect === 'aura_heal_2') {
           dispatchRef.current({ type: 'HEAL', payload: { targetPlayerId: cp.id, amount: 2 } });
+        }
+        if (cp.artifactSlot?.effect === 'aura_heal_1') {
+          dispatchRef.current({ type: 'HEAL', payload: { targetPlayerId: cp.id, amount: 1 } });
+        }
+        if (cp.artifactSlot?.effect === 'aura_gold_50') {
+          dispatchRef.current({ type: 'ADD_GOLD', payload: { playerId: cp.id, amount: 50 } });
         }
 
         if (cp.statBuffs.includes('sunfire')) {

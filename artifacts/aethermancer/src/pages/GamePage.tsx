@@ -17,6 +17,7 @@ import { CardArt } from '../components/game/CardArt';
 const SHOP_TAB_TYPES: Record<string, ShopItemTemplate['type'][]> = {
   items: ['item'],
   perks: ['stat', 'perk'],
+  artifacts: ['artifact'],
   cards: ['card'],
 };
 
@@ -152,7 +153,7 @@ const ArtifactSlotUI = ({
   return (
     <div className="flex flex-col items-center gap-0.5">
       <div className="text-[6px] font-display uppercase tracking-wider"
-           style={{ color: 'rgba(200,140,60,0.6)' }}>Relic</div>
+           style={{ color: 'rgba(200,140,60,0.6)' }}>Artifact</div>
       {artifact ? (
         <div className="relative">
           <div
@@ -625,7 +626,7 @@ export default function GamePage() {
   const { animatedBattlefield } = useLobby();
 
   const [countdown, setCountdown] = useState<number | null>(3);
-  const [shopTab, setShopTab] = useState<'items' | 'perks' | 'cards'>('items');
+  const [shopTab, setShopTab] = useState<'items' | 'perks' | 'artifacts' | 'cards'>('items');
   const [invTab, setInvTab] = useState<'items' | 'perks'>('items');
   const [logOpen, setLogOpen] = useState(false);
   const [isSpectating, setIsSpectating] = useState(false);
@@ -688,7 +689,7 @@ export default function GamePage() {
       dispatch({ type: 'SET_TARGETING', payload: { mode: 'enchantment', sourceId: card.instanceId, pendingAction: null } });
     } else if (card.type === 'artifact') {
       if (me.artifactSlot && me.artifactSlotTurns < 2) {
-        flashReason(`Relic locked — ${2 - me.artifactSlotTurns} more turn${2 - me.artifactSlotTurns > 1 ? 's' : ''} before you can swap`);
+        flashReason(`Artifact locked — ${2 - me.artifactSlotTurns} more turn${2 - me.artifactSlotTurns > 1 ? 's' : ''} before you can swap`);
         return;
       }
       playCard(card.instanceId);
@@ -1061,17 +1062,17 @@ export default function GamePage() {
           )}
         </div>
 
-        {/* Hand area + Relic drop zone */}
+        {/* Hand area + Artifact drop zone */}
         <div className="flex-1 flex min-h-0 overflow-hidden">
 
-          {/* ── Relic Drop Slot ── */}
+          {/* ── Artifact Drop Slot ── */}
           {(() => {
             const artifactLocked = me.artifactSlot !== null && me.artifactSlotTurns < 2;
             const canDrop = isMyTurn && gameState.phase === 'main'
               && !me.cardsPlayedByType['artifact']
               && !(me.artifactSlot !== null && me.artifactSlotTurns < 2);
 
-            const handleRelicDrop = (e: React.DragEvent) => {
+            const handleArtifactDrop = (e: React.DragEvent) => {
               e.preventDefault();
               setRelicDragOver(false);
               if (!canDrop) return;
@@ -1085,33 +1086,33 @@ export default function GamePage() {
 
             return (
               <div className="flex flex-col items-center justify-center shrink-0 px-2 gap-1"
-                   style={{ width: 76, borderRight: '1px solid rgba(74,48,0,0.3)' }}>
-                <div className="text-[6px] font-display uppercase tracking-wider"
-                     style={{ color: 'rgba(200,140,60,0.55)' }}>Relic Slot</div>
+                   style={{ width: 100, borderRight: '1px solid rgba(74,48,0,0.3)' }}>
+                <div className="text-[7px] font-display uppercase tracking-wider"
+                     style={{ color: 'rgba(200,140,60,0.65)' }}>Artifact Slot</div>
 
                 {me.artifactSlot ? (
                   /* Equipped artifact */
-                  <div className="relative w-14"
+                  <div className="relative w-20"
                        style={{
                          background: 'linear-gradient(180deg, #241600, #180e00)',
                          border: `2px solid ${artifactLocked ? 'rgba(180,80,80,0.7)' : 'rgba(200,140,60,0.7)'}`,
                          boxShadow: artifactLocked
                            ? '0 0 8px rgba(180,80,80,0.3)'
-                           : '0 0 10px rgba(200,140,60,0.4)',
-                         minHeight: 72,
-                         padding: '4px',
+                           : '0 0 14px rgba(200,140,60,0.5)',
+                         minHeight: 96,
+                         padding: '6px',
                        }}
                        title={me.artifactSlot.description}>
                     <div className="flex flex-col items-center gap-0.5">
-                      <Package size={12} style={{ color: '#c9a227' }} />
-                      <span className="text-[6px] font-display font-bold text-amber-200 text-center leading-tight w-full truncate">
+                      <Package size={14} style={{ color: '#c9a227' }} />
+                      <span className="text-[7px] font-display font-bold text-amber-200 text-center leading-tight w-full truncate">
                         {me.artifactSlot.name}
                       </span>
-                      <span className="text-[5px] italic text-amber-700 text-center leading-tight w-full truncate">
-                        {me.artifactSlot.description?.slice(0, 22)}
+                      <span className="text-[6px] italic text-amber-700 text-center leading-tight w-full" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                        {me.artifactSlot.description?.slice(0, 36)}
                       </span>
                       {artifactLocked ? (
-                        <span className="text-[6px] font-display text-red-400 mt-0.5">
+                        <span className="text-[7px] font-display text-red-400 mt-0.5">
                           🔒 {2 - me.artifactSlotTurns}t left
                         </span>
                       ) : (
@@ -1120,7 +1121,7 @@ export default function GamePage() {
                           tabIndex={0}
                           onClick={(!isMyTurn || gameState.phase !== 'main') ? undefined : sellArtifact}
                           title={`Unequip & sell for ${me.artifactSlot.cost * 75}g`}
-                          className="mt-0.5 px-1.5 py-0.5 text-[6px] font-display font-bold cursor-pointer hover:opacity-80 transition-opacity select-none"
+                          className="mt-1 px-2 py-0.5 text-[7px] font-display font-bold cursor-pointer hover:opacity-80 transition-opacity select-none"
                           style={{
                             background: 'rgba(100,60,0,0.9)',
                             border: '1px solid rgba(201,162,39,0.6)',
@@ -1138,23 +1139,23 @@ export default function GamePage() {
                   <div
                     onDragOver={(e) => { if (canDrop) { e.preventDefault(); setRelicDragOver(true); } }}
                     onDragLeave={() => setRelicDragOver(false)}
-                    onDrop={handleRelicDrop}
-                    className="w-14 flex flex-col items-center justify-center gap-0.5 transition-all duration-150"
+                    onDrop={handleArtifactDrop}
+                    className="w-20 flex flex-col items-center justify-center gap-1 transition-all duration-150"
                     style={{
-                      minHeight: 72,
+                      minHeight: 96,
                       border: relicDragOver
                         ? '2px solid rgba(200,140,60,0.9)'
-                        : '2px dashed rgba(200,140,60,0.25)',
+                        : '2px dashed rgba(200,140,60,0.3)',
                       background: relicDragOver
                         ? 'rgba(200,140,60,0.12)'
                         : 'rgba(200,140,60,0.03)',
-                      boxShadow: relicDragOver ? '0 0 12px rgba(200,140,60,0.4)' : 'none',
+                      boxShadow: relicDragOver ? '0 0 14px rgba(200,140,60,0.5)' : 'none',
                     }}
                   >
-                    <Package size={14} style={{ color: relicDragOver ? 'rgba(200,140,60,0.8)' : 'rgba(200,140,60,0.2)' }} />
-                    <span className="text-[5px] font-display text-center leading-tight"
-                          style={{ color: relicDragOver ? 'rgba(200,140,60,0.8)' : 'rgba(200,140,60,0.2)' }}>
-                      {canDrop ? 'Drop artifact' : 'Empty'}
+                    <Package size={18} style={{ color: relicDragOver ? 'rgba(200,140,60,0.9)' : 'rgba(200,140,60,0.25)' }} />
+                    <span className="text-[6px] font-display text-center leading-tight"
+                          style={{ color: relicDragOver ? 'rgba(200,140,60,0.9)' : 'rgba(200,140,60,0.25)' }}>
+                      {canDrop ? 'Drop Artifact' : 'Empty'}
                     </span>
                   </div>
                 )}
@@ -1347,11 +1348,11 @@ export default function GamePage() {
             )}
 
             <div className="flex shrink-0" style={{ borderBottom: '1px solid #2a1e0a' }}>
-              {(['items','perks','cards'] as const).map(tab => (
+              {(['items','perks','artifacts','cards'] as const).map(tab => (
                 <button
                   key={tab}
                   onClick={() => { sounds.play('uiClick'); setShopTab(tab); }}
-                  className="flex-1 py-1.5 text-[9px] font-display uppercase tracking-wider transition-all border-b-2"
+                  className="flex-1 py-1.5 text-[8px] font-display uppercase tracking-wider transition-all border-b-2"
                   style={{
                     borderColor: shopTab === tab ? '#c9a227' : 'transparent',
                     background: shopTab === tab ? 'rgba(201,162,39,0.08)' : 'transparent',
@@ -1374,12 +1375,14 @@ export default function GamePage() {
                 const owned = isOwnedItem(item);
                 const disabled = !canAfford || owned || gameState.phase !== 'buy';
                 // Card frame colours per sub-type
-                const isPerk = item.type === 'perk';
-                const isStat = item.type === 'stat';
-                const frameGlow = isPerk ? 'rgba(120,60,220,0.5)' : isStat ? 'rgba(60,160,220,0.5)' : 'rgba(200,140,60,0.5)';
-                const frameBar  = isPerk ? '#3a1860' : isStat ? '#143060' : '#3a2800';
-                const frameBg   = isPerk ? '#130a20' : isStat ? '#080f1e' : '#130a00';
-                const typeLabel = isPerk ? 'PERK' : isStat ? 'PASSIVE' : 'ITEM';
+                const isPerk     = item.type === 'perk';
+                const isStat     = item.type === 'stat';
+                const isArtifact = item.type === 'artifact';
+                const isCard     = item.type === 'card';
+                const frameGlow = isPerk ? 'rgba(120,60,220,0.5)' : isStat ? 'rgba(60,160,220,0.5)' : isArtifact ? 'rgba(200,140,60,0.7)' : isCard ? 'rgba(60,120,220,0.5)' : 'rgba(200,140,60,0.5)';
+                const frameBar  = isPerk ? '#3a1860' : isStat ? '#143060' : isArtifact ? '#2a1a00' : isCard ? '#102060' : '#3a2800';
+                const frameBg   = isPerk ? '#130a20' : isStat ? '#080f1e' : isArtifact ? '#1a0e00' : isCard ? '#080f1e' : '#130a00';
+                const typeLabel = isPerk ? 'PERK' : isStat ? 'PASSIVE' : isArtifact ? 'ARTIFACT' : isCard ? 'CARD' : 'ITEM';
                 return (
                   <div key={item.id}
                        className="relative flex flex-col overflow-hidden"
@@ -1497,9 +1500,9 @@ export default function GamePage() {
                         const isStatItem = item.type === 'stat';
                         const isPassive = item.effectKey === 'ironheart' || isStatItem;
                         const canEquip = !isPassive && isMyTurn && gameState.phase === 'main';
-                        const canEquipAsRelic = isMyTurn && gameState.phase === 'main'
+                        const canEquipAsArtifact = isMyTurn && gameState.phase === 'main'
                           && !(me.artifactSlot && me.artifactSlotTurns < 2);
-                        const effectivelyDraggable = canEquipAsRelic;
+                        const effectivelyDraggable = canEquipAsArtifact;
                         return (
                           <div key={item.instanceId}
                                draggable={effectivelyDraggable}
@@ -1617,7 +1620,7 @@ export default function GamePage() {
             <div className="px-3 py-2 shrink-0 text-[9px] italic"
                  style={{ color: '#5a4020', borderTop: '1px solid rgba(74,48,0,0.3)', background: 'rgba(8,5,2,0.5)' }}>
               {invTab === 'items'
-                ? <>Drag item to <span style={{ color: '#c9a227' }}>Relic Slot</span> to equip, or click to use.</>
+                ? <>Drag item to <span style={{ color: '#c9a227' }}>Artifact Slot</span> to equip, or click to use.</>
                 : <>Perks &amp; passives are always active.</>
               }
             </div>

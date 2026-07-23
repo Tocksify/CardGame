@@ -73,6 +73,7 @@ export interface Player {
   shopItemsBoughtThisGame?: number;
   isDead?: boolean;
   undyingUsed?: boolean;
+  heroStunTurns?: number;
 }
 
 export interface GameState {
@@ -132,7 +133,8 @@ export type GameAction =
   | { type: 'STEAL_GOLD'; payload: { fromPlayerId: number; toPlayerId: number; amount: number } }
   | { type: 'RESET_BONUS_GOLD'; payload: { playerId: number } }
   | { type: 'SELL_HAND_CARD'; payload: { playerId: number; instanceId: string } }
-  | { type: 'EQUIP_INVENTORY_ITEM'; payload: { playerId: number; instanceId: string } };
+  | { type: 'EQUIP_INVENTORY_ITEM'; payload: { playerId: number; instanceId: string } }
+  | { type: 'STUN_HERO'; payload: { playerId: number } };
 
 export const initialGameState: GameState = {
   phase: 'countdown',
@@ -164,6 +166,9 @@ function applyAuraToField(field: FieldCard[], effect: string | undefined, sign: 
     let def = c.currentDef;
     if (effect === 'aura_atk_1') atk += sign;
     if (effect === 'aura_def_1') def += sign;
+    if (effect === 'aura_atk_2') atk += sign * 2;
+    if (effect === 'aura_def_2') def += sign * 2;
+    if (effect === 'aura_atk_2_def_2') { atk += sign * 2; def += sign * 2; }
     return { ...c, currentAtk: atk, currentDef: def };
   });
 }
@@ -224,8 +229,21 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'REPLENISH_AETHER':
       return {
         ...state,
+        players: state.players.map(p => {
+          if (p.id !== action.payload.playerId) return p;
+          // Hero stunned: lose all aether this turn, decrement stun
+          if ((p.heroStunTurns ?? 0) > 0) {
+            return { ...p, aether: 0, heroStunTurns: (p.heroStunTurns ?? 1) - 1 };
+          }
+          return { ...p, aether: p.maxAether + p.aetherBonus };
+        }),
+      };
+
+    case 'STUN_HERO':
+      return {
+        ...state,
         players: state.players.map(p =>
-          p.id !== action.payload.playerId ? p : { ...p, aether: p.maxAether + p.aetherBonus }
+          p.id !== action.payload.playerId ? p : { ...p, heroStunTurns: 1 }
         ),
       };
 

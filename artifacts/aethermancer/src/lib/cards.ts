@@ -21,7 +21,7 @@ export interface CardTemplate {
 export interface ShopItemTemplate {
   id: string;
   name: string;
-  type: 'item' | 'stat' | 'perk' | 'card';
+  type: 'item' | 'stat' | 'perk' | 'card' | 'artifact';
   cost: number;
   description: string;
   effectKey?: string;
@@ -30,11 +30,12 @@ export interface ShopItemTemplate {
 }
 
 // ── Rarity draw weights ────────────────────────────────────────────────────
+// Total = 100. Secret is rare — ~1% per draw. Legendary ~6%.
 export const RARITY_WEIGHTS: Record<CardRarity, number> = {
-  common: 60,
-  rare: 25,
-  legendary: 12,
-  secret: 3,
+  common: 65,
+  rare: 28,
+  legendary: 6,
+  secret: 1,
 };
 
 export const CARD_TEMPLATES: CardTemplate[] = [
@@ -136,6 +137,55 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     rarity: 'common', artTheme: 'aether',
     evolvesTo: 'ev_c1', evolveCondition: { turnsOnField: 4 },
   },
+  // New common characters (pool dilution)
+  {
+    templateId: 'c17', name: 'Ember Scout', type: 'character', cost: 1,
+    atk: 2, def: 1,
+    description: 'A quick fire scout. Applies burn on every hit.',
+    keywords: ['flame_aura'],
+    rarity: 'common', artTheme: 'fire',
+  },
+  {
+    templateId: 'c18', name: 'Shield Bearer', type: 'character', cost: 2,
+    atk: 1, def: 5,
+    description: 'Stalwart defender. Forces enemies to strike it first.',
+    keywords: ['taunt'],
+    rarity: 'common', artTheme: 'iron',
+  },
+  {
+    templateId: 'c19', name: 'Frost Archer', type: 'character', cost: 2,
+    atk: 3, def: 1,
+    description: 'Fires frost bolts that slow and stun enemies.',
+    keywords: ['stun_on_hit'],
+    rarity: 'common', artTheme: 'frost',
+  },
+  {
+    templateId: 'c20', name: 'Mud Troll', type: 'character', cost: 3,
+    atk: 4, def: 3,
+    description: 'A filthy troll that poisons everything it touches.',
+    keywords: ['poison_on_hit'],
+    rarity: 'common', artTheme: 'poison',
+  },
+  {
+    templateId: 'c21', name: 'Dust Wraith', type: 'character', cost: 2,
+    atk: 2, def: 2,
+    description: 'A phantom of the wastes. Attacks from the shadows.',
+    keywords: ['stealth'],
+    rarity: 'common', artTheme: 'shadow',
+  },
+  {
+    templateId: 'c22', name: 'Iron Drake Whelp', type: 'character', cost: 3,
+    atk: 3, def: 3,
+    description: 'A young iron drake — tough hide deflects blows.',
+    rarity: 'common', artTheme: 'dragon',
+  },
+  {
+    templateId: 'c23', name: 'Torch Bearer', type: 'character', cost: 1,
+    atk: 1, def: 2,
+    description: 'Carries a blazing torch. Enemies beware.',
+    keywords: ['flame_aura'],
+    rarity: 'common', artTheme: 'fire',
+  },
 
   // ── Common Spells ─────────────────────────────────────────────────────────
   {
@@ -173,12 +223,33 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     description: 'Restore 6 life to your hero.',
     effect: 'heal_6_hero', rarity: 'common',
   },
+  // New common spells
+  {
+    templateId: 's17', name: 'Swift Hex', type: 'spell', cost: 1,
+    description: 'Deal 2 damage to any target.',
+    effect: 'dmg_2_target', rarity: 'common',
+  },
+  {
+    templateId: 's18', name: 'Stone Skin', type: 'spell', cost: 2,
+    description: 'Restore 3 life to your hero.',
+    effect: 'heal_3_hero', rarity: 'common',
+  },
+  {
+    templateId: 's20', name: 'Whispering Venom', type: 'spell', cost: 2,
+    description: 'Apply 2 poison stacks to a target character.',
+    effect: 'poison_target_2', rarity: 'common',
+  },
 
   // ── Common Artifacts ──────────────────────────────────────────────────────
   {
     templateId: 'a1', name: 'Iron Totem', type: 'artifact', cost: 2,
     description: 'All your characters get +1 DEF.',
     effect: 'aura_def_1', rarity: 'common',
+  },
+  {
+    templateId: 'a6', name: 'Runic Barrier', type: 'artifact', cost: 3,
+    description: 'All your characters get +2 DEF.',
+    effect: 'aura_def_2', rarity: 'common',
   },
 
   // ── Common Enchantments ───────────────────────────────────────────────────
@@ -299,6 +370,35 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     keywords: ['stealth'],
     rarity: 'rare', artTheme: 'void',
   },
+  // New rare characters
+  {
+    templateId: 'r1', name: 'Storm Hawk', type: 'character', cost: 3,
+    atk: 4, def: 3,
+    description: 'A lightning-swift raptor. Strikes first; shocks enemies.',
+    keywords: ['haste', 'electric'],
+    rarity: 'rare', artTheme: 'storm',
+  },
+  {
+    templateId: 'r2', name: 'Plague Wraith', type: 'character', cost: 4,
+    atk: 3, def: 3,
+    description: 'A diseased specter. Poisons anything it touches and ignores guards.',
+    keywords: ['poison_on_hit', 'stealth'],
+    rarity: 'rare', artTheme: 'poison',
+  },
+  {
+    templateId: 'r3', name: 'Bastion Knight', type: 'character', cost: 4,
+    atk: 2, def: 8,
+    description: 'An immovable fortress. Taunt. Heavily armored against all blows.',
+    keywords: ['taunt', 'heavy_armor'],
+    rarity: 'rare', artTheme: 'iron',
+  },
+  {
+    templateId: 'r4', name: 'Verdant Treant', type: 'character', cost: 5,
+    atk: 4, def: 6,
+    description: 'Ancient forest guardian. Taunt. Heals your hero on every kill.',
+    keywords: ['taunt', 'heal_on_kill'],
+    rarity: 'rare', artTheme: 'earth',
+  },
 
   // ── Rare Spells ───────────────────────────────────────────────────────────
   {
@@ -331,6 +431,17 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     description: 'Draw 3 cards from the pool.',
     effect: 'draw_3', rarity: 'rare',
   },
+  // Mind Shatter — stuns the enemy hero for 1 turn
+  {
+    templateId: 'sH1', name: 'Mind Shatter', type: 'spell', cost: 4,
+    description: 'Shatter the enemy hero\'s focus — they lose all Aether next turn and cannot play cards.',
+    effect: 'stun_hero', rarity: 'rare',
+  },
+  {
+    templateId: 's19', name: 'Void Rend', type: 'spell', cost: 3,
+    description: 'Deal 5 damage to a single target.',
+    effect: 'dmg_5_target', rarity: 'rare',
+  },
 
   // ── Rare Artifacts ────────────────────────────────────────────────────────
   {
@@ -347,6 +458,21 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     templateId: 'a5', name: 'Venom Chalice', type: 'artifact', cost: 3,
     description: 'Your characters apply 1 poison on every attack.',
     effect: 'aura_poison_1', rarity: 'rare',
+  },
+  {
+    templateId: 'a7', name: 'War Idol', type: 'artifact', cost: 4,
+    description: 'All your characters get +2 ATK.',
+    effect: 'aura_atk_2', rarity: 'rare',
+  },
+  {
+    templateId: 'a8', name: 'Gold Shrine', type: 'artifact', cost: 3,
+    description: 'Gain 50 extra gold each turn.',
+    effect: 'aura_gold_50', rarity: 'rare',
+  },
+  {
+    templateId: 'a9', name: 'Crimson Heart', type: 'artifact', cost: 4,
+    description: 'Heal 1 HP each turn.',
+    effect: 'aura_heal_1', rarity: 'rare',
   },
 
   // ── Rare Enchantments ─────────────────────────────────────────────────────
@@ -402,6 +528,21 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     keywords: ['haste', 'flame_aura', 'taunt'],
     rarity: 'legendary', artTheme: 'fire',
   },
+  // New legendary characters
+  {
+    templateId: 'l1', name: 'Arcane Colossus', type: 'character', cost: 7,
+    atk: 6, def: 7,
+    description: 'A living construct of pure aether. Strikes immediately. Taunt.',
+    keywords: ['haste', 'taunt'],
+    rarity: 'legendary', artTheme: 'aether',
+  },
+  {
+    templateId: 'l2', name: 'Death Knight', type: 'character', cost: 6,
+    atk: 7, def: 4,
+    description: 'A wraith of death. Stealth. Poisons on hit. Heals your hero on every kill.',
+    keywords: ['stealth', 'poison_on_hit', 'heal_on_kill'],
+    rarity: 'legendary', artTheme: 'shadow',
+  },
 
   // ── Legendary Spells ──────────────────────────────────────────────────────
   {
@@ -426,6 +567,11 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     description: 'Heal 2 life each turn.',
     effect: 'aura_heal_2', rarity: 'legendary',
   },
+  {
+    templateId: 'a10', name: 'Void Throne', type: 'artifact', cost: 7,
+    description: 'All your characters get +2 ATK and +2 DEF.',
+    effect: 'aura_atk_2_def_2', rarity: 'legendary',
+  },
 
   // ── Secret Characters ─────────────────────────────────────────────────────
   {
@@ -434,6 +580,20 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     description: 'The Unknown. A mystery of untold power. No one knows who — or what — it is.',
     keywords: ['taunt', 'stealth', 'heavy_armor'],
     rarity: 'secret', artTheme: 'unknown',
+  },
+  {
+    templateId: 'sec2', name: 'The Watcher', type: 'character', cost: 8,
+    atk: 7, def: 9,
+    description: 'It has always been watching. Taunt. Stuns any enemy that dares strike it.',
+    keywords: ['taunt', 'stun_on_hit'],
+    rarity: 'secret', artTheme: 'void',
+  },
+  {
+    templateId: 'sec3', name: 'The Ancient', type: 'character', cost: 10,
+    atk: 9, def: 12,
+    description: 'From before time itself. Taunt. Heavy Armor. Poison on every hit.',
+    keywords: ['taunt', 'heavy_armor', 'poison_on_hit'],
+    rarity: 'secret', artTheme: 'earth',
   },
 
   // ── Evolutions ────────────────────────────────────────────────────────────
@@ -549,10 +709,21 @@ export const SHOP_ITEMS: ShopItemTemplate[] = [
   { id: 'p8', name: 'Battle Hardened',   type: 'perk', cost: 1400, description: 'All your characters start with +1 ATK and +1 DEF.', effectKey: 'perk_deploy_bonus' },
   { id: 'p9', name: 'Undying Resolve',   type: 'perk', cost: 1600, description: 'Once per game, survive a lethal blow with 1 HP.', effectKey: 'perk_undying' },
 
+  // ── Artifacts (cards that go to hand then equip to artifact slot) ─────────
+  { id: 'a1_shop',   name: 'Iron Totem',      type: 'artifact', cost: 400,  description: 'Artifact: All characters +1 DEF.', cardTemplateId: 'a1', stackable: true },
+  { id: 'a6_shop',   name: 'Runic Barrier',   type: 'artifact', cost: 600,  description: 'Artifact: All characters +2 DEF.', cardTemplateId: 'a6', stackable: true },
+  { id: 'a2_shop',   name: 'Aether Lens',     type: 'artifact', cost: 700,  description: 'Artifact: Draw a card each turn.', cardTemplateId: 'a2', stackable: true },
+  { id: 'a3_shop',   name: 'War Banner',      type: 'artifact', cost: 800,  description: 'Artifact: All characters +1 ATK.', cardTemplateId: 'a3', stackable: true },
+  { id: 'a5_shop',   name: 'Venom Chalice',   type: 'artifact', cost: 700,  description: 'Artifact: Characters apply 1 poison per attack.', cardTemplateId: 'a5', stackable: true },
+  { id: 'a7_shop',   name: 'War Idol',        type: 'artifact', cost: 900,  description: 'Artifact: All characters +2 ATK.', cardTemplateId: 'a7', stackable: true },
+  { id: 'a8_shop',   name: 'Gold Shrine',     type: 'artifact', cost: 650,  description: 'Artifact: Gain 50 extra gold each turn.', cardTemplateId: 'a8', stackable: true },
+  { id: 'a9_shop',   name: 'Crimson Heart',   type: 'artifact', cost: 750,  description: 'Artifact: Heal 1 HP each turn.', cardTemplateId: 'a9', stackable: true },
+  { id: 'a4_shop',   name: 'Eternity Bloom',  type: 'artifact', cost: 1100, description: 'Artifact: Heal 2 life each turn.', cardTemplateId: 'a4', stackable: true },
+  { id: 'a10_shop',  name: 'Void Throne',     type: 'artifact', cost: 1400, description: 'Artifact: All characters +2 ATK and +2 DEF.', cardTemplateId: 'a10', stackable: true },
+
   // ── Cards ─────────────────────────────────────────────────────────────────
   { id: 'c10_shop',  name: 'Void Colossus',   type: 'card', cost: 900,  description: '8/8 Character, costs 8 Aether.', cardTemplateId: 'c10', stackable: true },
   { id: 's7_shop',   name: 'Arcane Nova',      type: 'card', cost: 700,  description: 'Spell: Deal 5 damage to all enemies.', cardTemplateId: 's7', stackable: true },
-  { id: 'a4_shop',   name: 'Eternity Bloom',   type: 'card', cost: 750,  description: 'Artifact: Heal 2 life each turn.', cardTemplateId: 'a4', stackable: true },
   { id: 'c9_shop',   name: 'Storm Drake',      type: 'card', cost: 600,  description: '5/3 Character, costs 4 Aether, Haste.', cardTemplateId: 'c9', stackable: true },
   { id: 'c11_shop',  name: 'Celestial Titan',  type: 'card', cost: 1000, description: '6/8 Character, Taunt.', cardTemplateId: 'c11', stackable: true },
   { id: 's8_shop',   name: 'Soul Reaper',      type: 'card', cost: 800,  description: 'Spell: Destroy any character.', cardTemplateId: 's8', stackable: true },
@@ -563,6 +734,9 @@ export const SHOP_ITEMS: ShopItemTemplate[] = [
   { id: 'h18_shop',  name: 'Dawnbringer',      type: 'card', cost: 1100, description: '5/6 Legendary — Taunt, Heal on Kill.', cardTemplateId: 'h18', stackable: true },
   { id: 'h19_shop',  name: 'Blazing Titan',    type: 'card', cost: 1050, description: '7/5 Legendary — Haste, Flame Aura, Taunt.', cardTemplateId: 'h19', stackable: true },
   { id: 'h17_shop',  name: 'The Warden',       type: 'card', cost: 750,  description: '3/7 Rare — Taunt, Heavy Armor.', cardTemplateId: 'h17', stackable: true },
+  { id: 'sH1_shop',  name: 'Mind Shatter',     type: 'card', cost: 650,  description: 'Spell: Stun enemy hero — they lose all Aether next turn.', cardTemplateId: 'sH1', stackable: true },
+  { id: 'l1_shop',   name: 'Arcane Colossus',  type: 'card', cost: 1100, description: '6/7 Legendary — Haste, Taunt.', cardTemplateId: 'l1', stackable: true },
+  { id: 'l2_shop',   name: 'Death Knight',     type: 'card', cost: 1000, description: '7/4 Legendary — Stealth, Poison, Heal on Kill.', cardTemplateId: 'l2', stackable: true },
 ];
 
 export function getCardTemplate(id: string): CardTemplate | undefined {
@@ -575,15 +749,17 @@ export function generateShopRotation(): string[] {
     const shuffled = [...ids].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, n);
   };
-  const itemIds = SHOP_ITEMS.filter(i => i.type === 'item').map(i => i.id);
-  const statIds = SHOP_ITEMS.filter(i => i.type === 'stat').map(i => i.id);
-  const perkIds = SHOP_ITEMS.filter(i => i.type === 'perk').map(i => i.id);
-  const cardIds = SHOP_ITEMS.filter(i => i.type === 'card').map(i => i.id);
+  const itemIds     = SHOP_ITEMS.filter(i => i.type === 'item').map(i => i.id);
+  const statIds     = SHOP_ITEMS.filter(i => i.type === 'stat').map(i => i.id);
+  const perkIds     = SHOP_ITEMS.filter(i => i.type === 'perk').map(i => i.id);
+  const cardIds     = SHOP_ITEMS.filter(i => i.type === 'card').map(i => i.id);
+  const artifactIds = SHOP_ITEMS.filter(i => i.type === 'artifact').map(i => i.id);
   return [
     ...pick(itemIds, 5),
     ...pick(statIds, 4),
     ...pick(perkIds, 3),
     ...pick(cardIds, 4),
+    ...pick(artifactIds, 4),
   ];
 }
 
