@@ -437,6 +437,12 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     description: 'Shatter the enemy hero\'s focus — they lose all Aether next turn and cannot play cards.',
     effect: 'stun_hero', rarity: 'rare',
   },
+  // Soul Cage — imprisons the enemy player for a full turn
+  {
+    templateId: 'sH2', name: 'Soul Cage', type: 'spell', cost: 5,
+    description: 'Imprison the enemy player — their entire next turn is lost. They cannot play cards or attack.',
+    effect: 'stun_player', rarity: 'legendary',
+  },
   {
     templateId: 's19', name: 'Void Rend', type: 'spell', cost: 3,
     description: 'Deal 5 damage to a single target.',
@@ -735,6 +741,7 @@ export const SHOP_ITEMS: ShopItemTemplate[] = [
   { id: 'h19_shop',  name: 'Blazing Titan',    type: 'card', cost: 1050, description: '7/5 Legendary — Haste, Flame Aura, Taunt.', cardTemplateId: 'h19', stackable: true },
   { id: 'h17_shop',  name: 'The Warden',       type: 'card', cost: 750,  description: '3/7 Rare — Taunt, Heavy Armor.', cardTemplateId: 'h17', stackable: true },
   { id: 'sH1_shop',  name: 'Mind Shatter',     type: 'card', cost: 650,  description: 'Spell: Stun enemy hero — they lose all Aether next turn.', cardTemplateId: 'sH1', stackable: true },
+  { id: 'sH2_shop',  name: 'Soul Cage',        type: 'card', cost: 1000, description: 'Spell: Imprison the enemy player — their entire next turn is skipped.', cardTemplateId: 'sH2', stackable: true },
   { id: 'l1_shop',   name: 'Arcane Colossus',  type: 'card', cost: 1100, description: '6/7 Legendary — Haste, Taunt.', cardTemplateId: 'l1', stackable: true },
   { id: 'l2_shop',   name: 'Death Knight',     type: 'card', cost: 1000, description: '7/4 Legendary — Stealth, Poison, Heal on Kill.', cardTemplateId: 'l2', stackable: true },
 ];

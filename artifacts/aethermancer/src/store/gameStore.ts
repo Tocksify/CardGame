@@ -74,6 +74,7 @@ export interface Player {
   isDead?: boolean;
   undyingUsed?: boolean;
   heroStunTurns?: number;
+  playerStunTurns?: number;
 }
 
 export interface GameState {
@@ -134,7 +135,8 @@ export type GameAction =
   | { type: 'RESET_BONUS_GOLD'; payload: { playerId: number } }
   | { type: 'SELL_HAND_CARD'; payload: { playerId: number; instanceId: string } }
   | { type: 'EQUIP_INVENTORY_ITEM'; payload: { playerId: number; instanceId: string } }
-  | { type: 'STUN_HERO'; payload: { playerId: number } };
+  | { type: 'STUN_HERO'; payload: { playerId: number } }
+  | { type: 'STUN_PLAYER'; payload: { playerId: number } };
 
 export const initialGameState: GameState = {
   phase: 'countdown',
@@ -232,6 +234,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         players: state.players.map(p => {
           if (p.id !== action.payload.playerId) return p;
+          // Full player stun: skip entire turn — decrement and zero aether
+          if ((p.playerStunTurns ?? 0) > 0) {
+            return { ...p, aether: 0, playerStunTurns: (p.playerStunTurns ?? 1) - 1 };
+          }
           // Hero stunned: lose all aether this turn, decrement stun
           if ((p.heroStunTurns ?? 0) > 0) {
             return { ...p, aether: 0, heroStunTurns: (p.heroStunTurns ?? 1) - 1 };
@@ -245,6 +251,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         players: state.players.map(p =>
           p.id !== action.payload.playerId ? p : { ...p, heroStunTurns: 1 }
+        ),
+      };
+
+    case 'STUN_PLAYER':
+      return {
+        ...state,
+        players: state.players.map(p =>
+          p.id !== action.payload.playerId ? p : { ...p, playerStunTurns: 1 }
         ),
       };
 

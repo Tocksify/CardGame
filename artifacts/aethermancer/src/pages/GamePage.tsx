@@ -119,7 +119,7 @@ const ArenaCardUI = ({
           <>
             <div className="flex items-center gap-0.5 font-bold text-[13px]" style={{ color: '#e8a030' }}><Swords size={10} />{displayAtk}</div>
             <div className="text-[9px]" style={{ color: 'rgba(201,162,39,0.4)' }}>◆</div>
-            <div className="flex items-center gap-0.5 font-bold text-[13px]" style={{ color: '#5db860' }}><ShieldAlert size={10} />{displayDef}</div>
+            <div className="flex items-center gap-0.5 font-bold text-[13px]" style={{ color: '#5db860' }}><ShieldAlert size={10} />{displayDef}<span style={{ color: 'rgba(93,184,96,0.45)', fontSize: '9px', fontWeight: 'normal' }}>/{card.def ?? displayDef}</span></div>
           </>
         ) : (
           <div className="flex w-full justify-center" style={{ color: frame.bar }}>{frame.icon}</div>
@@ -1354,7 +1354,7 @@ export default function GamePage() {
             transition={{ type: 'tween', duration: 0.22 }}
             className="absolute top-14 right-0 w-72 flex flex-col z-40"
             style={{
-              bottom: 270,
+              bottom: 0,
               background: 'linear-gradient(180deg, #0d0906 0%, #090604 100%)',
               borderLeft: '2px solid #3a2800',
               boxShadow: '-8px 0 24px rgba(0,0,0,0.8)',
@@ -1420,25 +1420,28 @@ export default function GamePage() {
                 const canAfford = me.gold >= item.cost;
                 const owned = isOwnedItem(item);
                 const disabled = !canAfford || owned || gameState.phase !== 'buy';
-                // Card frame colours per sub-type
                 const isPerk     = item.type === 'perk';
                 const isStat     = item.type === 'stat';
                 const isArtifact = item.type === 'artifact';
                 const isCard     = item.type === 'card';
-                const frameGlow = isPerk ? 'rgba(120,60,220,0.5)' : isStat ? 'rgba(60,160,220,0.5)' : isArtifact ? 'rgba(200,140,60,0.7)' : isCard ? 'rgba(60,120,220,0.5)' : 'rgba(200,140,60,0.5)';
-                const frameBar  = isPerk ? '#3a1860' : isStat ? '#143060' : isArtifact ? '#2a1a00' : isCard ? '#102060' : '#3a2800';
-                const frameBg   = isPerk ? '#130a20' : isStat ? '#080f1e' : isArtifact ? '#1a0e00' : isCard ? '#080f1e' : '#130a00';
-                const typeLabel = isPerk ? 'PERK' : isStat ? 'PASSIVE' : isArtifact ? 'ARTIFACT' : isCard ? 'CARD' : 'ITEM';
+                const isItem     = item.type === 'item';
+                const frameGlow  = isPerk ? 'rgba(120,60,220,0.6)' : isStat ? 'rgba(60,160,220,0.6)' : isArtifact ? 'rgba(200,140,60,0.8)' : isCard ? 'rgba(80,130,220,0.6)' : 'rgba(200,120,30,0.6)';
+                const frameBar   = isPerk ? '#3a1860' : isStat ? '#143060' : isArtifact ? '#2a1a00' : isCard ? '#102060' : '#2a1200';
+                const frameBg    = isPerk ? '#130a20' : isStat ? '#080f1e' : isArtifact ? '#1a0e00' : isCard ? '#080f1e' : '#120800';
+                const typeLabel  = isPerk ? 'PERK' : isStat ? 'PASSIVE' : isArtifact ? 'ARTIFACT' : isCard ? 'CARD' : 'ITEM';
+                const typeColor  = isPerk ? '#b070ff' : isStat ? '#60b0ff' : '#c9a227';
+                const hasCardArt = (isArtifact || isCard) && item.cardTemplateId;
+                const cardTpl    = hasCardArt ? CARD_TEMPLATES.find(t => t.templateId === item.cardTemplateId) : null;
                 return (
                   <div key={item.id}
                        className="relative flex flex-col overflow-hidden"
                        style={{
                          background: frameBg,
-                         border: `1px solid ${owned ? 'rgba(201,162,39,0.35)' : canAfford ? frameGlow : 'rgba(30,20,10,0.5)'}`,
+                         border: `1.5px solid ${owned ? 'rgba(201,162,39,0.35)' : canAfford ? frameGlow : 'rgba(30,20,10,0.5)'}`,
                          boxShadow: canAfford && !owned ? `0 0 8px ${frameGlow}` : 'none',
                          opacity: canAfford || owned ? 1 : 0.45,
                        }}>
-                    {/* Card header bar */}
+                    {/* Header bar */}
                     <div className="flex items-center justify-between px-2 py-1" style={{ background: frameBar }}>
                       <span className="font-display font-bold text-[9px] leading-tight truncate" style={{ color: '#e8d080', maxWidth: 110 }}>
                         {item.name}
@@ -1448,12 +1451,27 @@ export default function GamePage() {
                         {item.cost.toLocaleString()}g
                       </span>
                     </div>
+                    {/* Art area */}
+                    <div className="h-16 w-full relative overflow-hidden"
+                         style={{ background: `linear-gradient(180deg, ${frameBg}ee, #050300)` }}>
+                      {hasCardArt && cardTpl ? (
+                        <CardArt templateId={item.cardTemplateId!} type={cardTpl.type} />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          {isPerk && <Sparkles size={30} style={{ color: 'rgba(176,112,255,0.3)' }} />}
+                          {isStat && <Activity size={30} style={{ color: 'rgba(96,176,255,0.3)' }} />}
+                          {isItem && <Package size={30} style={{ color: 'rgba(200,140,60,0.28)' }} />}
+                        </div>
+                      )}
+                      <div className="absolute inset-x-0 bottom-0 h-5"
+                           style={{ background: `linear-gradient(0deg, ${frameBg}, transparent)` }} />
+                    </div>
                     {/* Type badge row */}
                     <div className="flex items-center gap-1 px-2 pt-1">
                       <span className="text-[7px] font-display font-bold uppercase tracking-wider px-1 rounded-sm"
                             style={{
                               background: isPerk ? 'rgba(120,60,220,0.2)' : isStat ? 'rgba(60,160,220,0.2)' : 'rgba(200,140,60,0.2)',
-                              color: isPerk ? '#b070ff' : isStat ? '#60b0ff' : '#c9a227',
+                              color: typeColor,
                               border: `1px solid ${isPerk ? 'rgba(120,60,220,0.3)' : isStat ? 'rgba(60,160,220,0.3)' : 'rgba(200,140,60,0.3)'}`,
                             }}>
                         {typeLabel}
@@ -1494,7 +1512,7 @@ export default function GamePage() {
             transition={{ type: 'tween', duration: 0.22 }}
             className="absolute top-14 left-0 w-64 flex flex-col z-40"
             style={{
-              bottom: 270,
+              bottom: 0,
               background: 'linear-gradient(180deg, #0d0906 0%, #090604 100%)',
               borderRight: '2px solid #3a2800',
               boxShadow: '8px 0 24px rgba(0,0,0,0.8)',
@@ -1545,62 +1563,49 @@ export default function GamePage() {
                       {invItems.map(item => {
                         const isStatItem = item.type === 'stat';
                         const isPassive = item.effectKey === 'ironheart' || isStatItem;
-                        const canEquip = !isPassive && isMyTurn && gameState.phase === 'main';
-                        const canEquipAsArtifact = isMyTurn && gameState.phase === 'main'
-                          && !(me.artifactSlot && me.artifactSlotTurns < 2);
-                        const effectivelyDraggable = canEquipAsArtifact;
+                        const canUse = !isPassive && isMyTurn && gameState.phase === 'main';
+                        const frameBar  = isPassive ? '#143060' : '#2a1600';
+                        const frameBg   = isPassive ? '#060e1c' : '#0d0800';
+                        const typeColor = isPassive ? '#60b0ff' : '#c9a227';
                         return (
                           <div key={item.instanceId}
-                               draggable={effectivelyDraggable}
-                               onDragStart={(e) => {
-                                 if (effectivelyDraggable) {
-                                   e.dataTransfer.setData('inventoryItemId', item.instanceId);
-                                   e.dataTransfer.effectAllowed = 'move';
-                                 }
-                               }}
-                               className="relative flex flex-col overflow-hidden transition-transform"
+                               className="relative flex flex-col overflow-hidden"
                                style={{
-                                 background: '#0d0800',
-                                 border: `1px solid ${effectivelyDraggable ? 'rgba(200,140,60,0.6)' : 'rgba(74,48,0,0.4)'}`,
-                                 boxShadow: effectivelyDraggable ? '0 0 8px rgba(200,140,60,0.3)' : 'none',
-                                 cursor: effectivelyDraggable ? 'grab' : canEquip ? 'pointer' : 'default',
+                                 background: frameBg,
+                                 border: `1.5px solid ${canUse ? 'rgba(200,140,60,0.8)' : isPassive ? 'rgba(60,160,220,0.3)' : 'rgba(74,48,0,0.4)'}`,
+                                 boxShadow: canUse ? '0 0 8px rgba(200,140,60,0.35)' : 'none',
+                                 cursor: canUse ? 'pointer' : 'default',
                                }}
-                               onClick={() => canEquip && handleInventoryClick(item)}>
-                            {/* Card header */}
-                            <div className="flex items-center justify-between px-2 py-1"
-                                 style={{ background: '#2a1600', borderBottom: '1px solid rgba(74,48,0,0.5)' }}>
-                              <span className="font-display font-bold text-[9px] leading-tight truncate"
-                                    style={{ color: '#e8d080', maxWidth: 120 }}>
-                                {item.name}
-                              </span>
-                              <Package size={9} style={{ color: '#c9a227', flexShrink: 0, marginLeft: 4 }} />
+                               onClick={() => canUse && handleInventoryClick(item)}>
+                            {/* Header bar */}
+                            <div className="flex items-center justify-between px-2 py-1" style={{ background: frameBar }}>
+                              <span className="font-display font-bold text-[10px] leading-tight truncate" style={{ color: '#e8d080', maxWidth: 130 }}>{item.name}</span>
+                              {isPassive ? <Activity size={9} style={{ color: typeColor, flexShrink: 0 }} /> : <Package size={9} style={{ color: typeColor, flexShrink: 0 }} />}
+                            </div>
+                            {/* Art area */}
+                            <div className="h-14 w-full flex items-center justify-center relative overflow-hidden"
+                                 style={{ background: isPassive ? 'linear-gradient(180deg,#0a1528,#060e1c)' : 'linear-gradient(180deg,#1e0e02,#100800)' }}>
+                              {isPassive
+                                ? <Activity size={28} style={{ color: 'rgba(96,176,255,0.3)' }} />
+                                : <Package size={28} style={{ color: 'rgba(200,140,60,0.28)' }} />}
+                              <div className="absolute inset-x-0 bottom-0 h-4"
+                                   style={{ background: `linear-gradient(0deg, ${frameBg}, transparent)` }} />
                             </div>
                             {/* Type badge */}
                             <div className="px-2 pt-1 flex items-center gap-1">
                               <span className="text-[7px] font-display uppercase tracking-wider px-1 rounded-sm"
-                                    style={{
-                                      background: 'rgba(200,140,60,0.15)',
-                                      color: '#c9a227',
-                                      border: '1px solid rgba(200,140,60,0.25)',
-                                    }}>
+                                    style={{ background: isPassive ? 'rgba(60,160,220,0.15)' : 'rgba(200,140,60,0.12)', color: typeColor, border: `1px solid ${isPassive ? 'rgba(60,160,220,0.25)' : 'rgba(200,140,60,0.2)'}` }}>
                                 {isPassive ? 'PASSIVE' : 'ITEM'}
                               </span>
-                              {effectivelyDraggable && (
-                                <span className="text-[7px] font-display uppercase ml-auto" style={{ color: 'rgba(200,140,60,0.6)' }}>
-                                  drag to equip
-                                </span>
-                              )}
                             </div>
                             {/* Description */}
-                            <p className="px-2 pb-2 pt-0.5 text-[8px] leading-snug italic" style={{ color: '#7a6040' }}>
-                              {item.description}
-                            </p>
-                            {/* Action hint */}
-                            {canEquip && !effectivelyDraggable && (
-                              <div className="px-2 pb-1 text-[7px] font-display text-center"
-                                   style={{ color: '#9aaa60' }}>
-                                Click to use
-                              </div>
+                            <p className="px-2 pb-1.5 pt-0.5 text-[8px] leading-snug italic" style={{ color: '#8a7050' }}>{item.description}</p>
+                            {/* Use button */}
+                            {canUse && (
+                              <button className="btn-fantasy py-0.5 text-[8px] w-full rounded-none"
+                                      onClick={(e) => { e.stopPropagation(); handleInventoryClick(item); }}>
+                                Use
+                              </button>
                             )}
                           </div>
                         );
@@ -1666,7 +1671,7 @@ export default function GamePage() {
             <div className="px-3 py-2 shrink-0 text-[9px] italic"
                  style={{ color: '#5a4020', borderTop: '1px solid rgba(74,48,0,0.3)', background: 'rgba(8,5,2,0.5)' }}>
               {invTab === 'items'
-                ? <>Drag item to <span style={{ color: '#c9a227' }}>Artifact Slot</span> to equip, or click to use.</>
+                ? <>Items are <span style={{ color: '#c9a227' }}>passive</span> or click to <span style={{ color: '#c9a227' }}>use</span> during Main phase.</>
                 : <>Perks &amp; passives are always active.</>
               }
             </div>

@@ -283,6 +283,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         announce('MIND SHATTERED!');
         sounds.play('stun');
       }
+    } else if (effect === 'stun_player') {
+      const enemy = gameState.players.find(p => p.id !== sourcePlayerId);
+      if (enemy) {
+        dispatch({ type: 'STUN_PLAYER', payload: { playerId: enemy.id } });
+        dispatch({ type: 'ADD_LOG', payload: { msg: `${enemy.name} is imprisoned in a Soul Cage — their next turn is completely lost!`, type: 'other' } });
+        announce('SOUL CAGED!');
+        sounds.play('stun');
+      }
     } else if (effect === 'dmg_5_target' && targetId) {
       dmgTarget(targetId, 5 + spellBonus);
       sounds.play('damage');
@@ -735,8 +743,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         const cp = state.players[state.currentPlayerIndex];
         if (!cp) return;
 
+        // Full player stun: skip entire turn
+        const wasPlayerStunned = (cp.playerStunTurns ?? 0) > 0;
         dispatchRef.current({ type: 'REPLENISH_AETHER', payload: { playerId: cp.id } });
         dispatchRef.current({ type: 'PROCESS_STATUS_EFFECTS', payload: { playerId: cp.id } });
+
+        if (wasPlayerStunned) {
+          dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name} is imprisoned — their turn is skipped!`, type: 'other' } });
+          dispatchRef.current({ type: 'SET_PHASE', payload: 'end' });
+          return;
+        }
 
         const goldGain = 100 + cp.goldPerTurn;
         dispatchRef.current({ type: 'ADD_GOLD', payload: { playerId: cp.id, amount: goldGain } });
