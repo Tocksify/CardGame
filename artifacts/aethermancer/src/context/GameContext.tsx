@@ -773,7 +773,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     // ── Combat phase ───────────────────────────────────────────────────────
     if (gameState.phase === 'combat') {
       // Novice: sometimes skip combat entirely (decide once upfront)
-      const skipCombat = !currentPlayer.isHuman && currentPlayer.difficulty === 'Novice' && Math.random() < 0.3;
+      const skipCombat = !currentPlayer.isHuman && gameState.difficulty === 'Novice' && Math.random() < 0.3;
 
       // Define AI combat loop here so it can be referenced from both
       // the spell-resolution callback and the normal (no-spell) path.
