@@ -39,6 +39,14 @@ export interface InventoryItem {
   type?: 'item' | 'stat' | 'perk' | 'card';
 }
 
+export interface CardGameStats {
+  name: string;
+  type: CardType;
+  damageDealt: number;
+  kills: number;
+  goldEarned: number;
+}
+
 export interface Player {
   id: number;
   name: string;
@@ -67,9 +75,11 @@ export interface Player {
   bonusGoldPending?: number;
 
   damageTakenThisGame?: boolean;
+  damageDealtThisGame?: number;
   cardsPlayedThisGame?: number;
   goldEarnedThisGame?: number;
   creaturesKilledThisGame?: number;
+  cardStats?: Record<string, CardGameStats>;
   shopItemsBoughtThisGame?: number;
   isDead?: boolean;
   undyingUsed?: boolean;
@@ -133,6 +143,7 @@ export type GameAction =
   | { type: 'GIVE_STARTING_CARDS'; payload: { playerId: number; cards: CardInstance[] } }
   | { type: 'STEAL_GOLD'; payload: { fromPlayerId: number; toPlayerId: number; amount: number } }
   | { type: 'RESET_BONUS_GOLD'; payload: { playerId: number } }
+  | { type: 'RECORD_CARD_STATS'; payload: { playerId: number; cardInstanceId: string; damage?: number; kills?: number; goldEarned?: number } }
   | { type: 'SELL_HAND_CARD'; payload: { playerId: number; instanceId: string } }
   | { type: 'EQUIP_INVENTORY_ITEM'; payload: { playerId: number; instanceId: string } }
   | { type: 'STUN_HERO'; payload: { playerId: number } }
@@ -485,6 +496,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           const card = p.hand.find(c => c.instanceId === cardInstanceId);
           if (!card || card.type !== 'spell') return p;
           if (p.aether < card.cost || p.cardsPlayedByType['spell']) return p;
+          const cardStats = { ...(p.cardStats || {}) };
+          cardStats[card.instanceId] = cardStats[card.instanceId] || {
+            name: card.name, type: card.type, damageDealt: 0, kills: 0, goldEarned: 0,
+          };
           return {
             ...p,
             hand: p.hand.filter(c => c.instanceId !== cardInstanceId),
@@ -492,6 +507,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             pendingSpells: [...p.pendingSpells, { ...card, targetId }],
             cardsPlayedByType: { ...p.cardsPlayedByType, spell: true },
             cardsPlayedThisGame: (p.cardsPlayedThisGame || 0) + 1,
+            cardStats,
           };
         }),
       };
@@ -517,6 +533,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
         const newHand = p.hand.filter(c => c.instanceId !== cardInstanceId);
         const newAether = p.aether - cardToPlay.cost;
+        const cardStats = { ...(p.cardStats || {}) };
+        cardStats[cardToPlay.instanceId] = cardStats[cardToPlay.instanceId] || {
+          name: cardToPlay.name, type: cardToPlay.type, damageDealt: 0, kills: 0, goldEarned: 0,
+        };
         let newField = p.field;
         let newArtifactSlot = p.artifactSlot;
         let newArtifactSlotTurns = p.artifactSlotTurns;
@@ -555,6 +575,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           artifactSlot: newArtifactSlot, artifactSlotTurns: newArtifactSlotTurns,
           cardsPlayedByType: { ...p.cardsPlayedByType, [cardToPlay.type]: true },
           cardsPlayedThisGame: (p.cardsPlayedThisGame || 0) + 1,
+          cardStats,
         };
       });
       return { ...state, players: newPlayers };
@@ -655,6 +676,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'ATTACK': {
       const { attackerPlayerId, attackerInstanceId, targetPlayerId, targetInstanceId, damageOverride } = action.payload;
       let attackerAtk = damageOverride || 0;
+      let actualDamage = 0;
+      let attackKilled = false;
 
       let newPlayers = state.players.map(p => {
         if (p.id === attackerPlayerId) {
@@ -675,6 +698,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       newPlayers = newPlayers.map(p => {
         if (p.id === targetPlayerId) {
           if (targetInstanceId) {
+            const targetCard = p.field.find(c => c.instanceId === targetInstanceId);
+            if (targetCard) {
+              actualDamage = Math.max(1, attackerAtk - getArmorReduction(targetCard));
+              attackKilled = targetCard.currentDef - actualDamage <= 0;
+            }
             return {
               ...p,
               field: p.field.map(c => {
@@ -693,6 +721,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             if (finalDmg >= p.hp && p.perks.includes('perk_undying') && !p.undyingUsed) {
               finalDmg = p.hp - 1;
             }
+            actualDamage = finalDmg;
             return { ...p, hp: Math.max(0, p.hp - finalDmg), damageTakenThisGame: true };
           }
         }
@@ -702,7 +731,25 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // Track damage dealt by attacker for bonus-gold system
       newPlayers = newPlayers.map(p => {
         if (p.id === attackerPlayerId) {
-          return { ...p, damageDealtThisTurn: (p.damageDealtThisTurn || 0) + attackerAtk };
+          const cardStats = { ...(p.cardStats || {}) };
+          const attackerCard = p.field.find(c => c.instanceId === attackerInstanceId);
+          const previous = cardStats[attackerInstanceId] || {
+            name: attackerCard?.name || 'Unknown card',
+            type: attackerCard?.type || 'character',
+            damageDealt: 0, kills: 0, goldEarned: 0,
+          };
+          cardStats[attackerInstanceId] = {
+            ...previous,
+            damageDealt: previous.damageDealt + actualDamage,
+            kills: previous.kills + (attackKilled ? 1 : 0),
+            goldEarned: previous.goldEarned + (attackKilled ? 50 : 0),
+          };
+          return {
+            ...p,
+            damageDealtThisTurn: (p.damageDealtThisTurn || 0) + actualDamage,
+            damageDealtThisGame: (p.damageDealtThisGame || 0) + actualDamage,
+            cardStats,
+          };
         }
         return p;
       });
@@ -726,7 +773,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
 
     case 'DAMAGE': {
-      const { targetPlayerId, targetInstanceId, amount, bypassResist, bypassArmor } = action.payload;
+      const { targetPlayerId, targetInstanceId, amount, sourcePlayerId, sourceInstanceId, bypassResist, bypassArmor } = action.payload;
+      let dealtAmount = 0;
+      let sourceKilled = false;
 
       let newPlayers = state.players.map(p => {
         if (p.id !== targetPlayerId) return p;
@@ -740,6 +789,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
               if (c.instanceId !== targetInstanceId) return c;
               const armor = bypassArmor ? 0 : getArmorReduction(c);
               const dmg = Math.max(1, actualAmount - armor);
+              dealtAmount = dmg;
+              sourceKilled = c.currentDef - dmg <= 0;
               return { ...c, currentDef: c.currentDef - dmg };
             }).filter(c => c.currentDef > 0),
           };
@@ -749,9 +800,38 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           if (finalDmg >= p.hp && p.perks.includes('perk_undying') && !p.undyingUsed) {
             finalDmg = p.hp - 1;
           }
+          dealtAmount = finalDmg;
           return { ...p, hp: Math.max(0, p.hp - finalDmg), damageTakenThisGame: true };
         }
       });
+
+      if (sourcePlayerId !== undefined && sourceInstanceId) {
+        newPlayers = newPlayers.map(p => {
+          if (p.id !== sourcePlayerId) return p;
+          const sourceCard = p.field.find(c => c.instanceId === sourceInstanceId)
+            || p.hand.find(c => c.instanceId === sourceInstanceId)
+            || p.pendingSpells.find(c => c.instanceId === sourceInstanceId);
+          const existing = p.cardStats?.[sourceInstanceId] || {
+            name: sourceCard?.name || 'Unknown card',
+            type: sourceCard?.type || 'spell',
+            damageDealt: 0,
+            kills: 0,
+            goldEarned: 0,
+          };
+          return {
+            ...p,
+            damageDealtThisGame: (p.damageDealtThisGame || 0) + dealtAmount,
+            cardStats: {
+              ...(p.cardStats || {}),
+              [sourceInstanceId]: {
+                ...existing,
+                damageDealt: existing.damageDealt + dealtAmount,
+                kills: existing.kills + (sourceKilled ? 1 : 0),
+              },
+            },
+          };
+        });
+      }
 
       const alivePlayers = newPlayers.filter(p => p.hp > 0 && !p.isDead);
       let winner = state.winner;
@@ -875,6 +955,39 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           p.id === action.payload.playerId ? { ...p, bonusGoldPending: 0 } : p
         ),
       };
+
+    case 'RECORD_CARD_STATS': {
+      const { playerId, cardInstanceId, damage = 0, kills = 0, goldEarned = 0 } = action.payload;
+      return {
+        ...state,
+        players: state.players.map(p => {
+          if (p.id !== playerId) return p;
+          const existing = p.cardStats?.[cardInstanceId];
+          const fallbackCard = p.field.find(c => c.instanceId === cardInstanceId)
+            || p.hand.find(c => c.instanceId === cardInstanceId)
+            || p.pendingSpells.find(c => c.instanceId === cardInstanceId);
+          const stat = existing || {
+            name: fallbackCard?.name || 'Unknown card',
+            type: fallbackCard?.type || 'spell',
+            damageDealt: 0,
+            kills: 0,
+            goldEarned: 0,
+          };
+          return {
+            ...p,
+            cardStats: {
+              ...(p.cardStats || {}),
+              [cardInstanceId]: {
+                ...stat,
+                damageDealt: stat.damageDealt + damage,
+                kills: stat.kills + kills,
+                goldEarned: stat.goldEarned + goldEarned,
+              },
+            },
+          };
+        }),
+      };
+    }
 
     case 'SELL_HAND_CARD': {
       const { playerId, instanceId } = action.payload;

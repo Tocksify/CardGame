@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, useRef, useState } from 'react';
-import { GameState, GameAction, gameReducer, initialGameState, Player, StagedSpell, generateId, AiDifficulty } from '../store/gameStore';
+import { GameState, GameAction, gameReducer, initialGameState, Player, StagedSpell, CardInstance, generateId, AiDifficulty } from '../store/gameStore';
 import { getSettings } from '../store/settings';
 import { sounds, SoundName, ELEMENT_SOUNDS } from '../lib/sounds';
 import { SHOP_ITEMS, getCardTemplate, generateShopRotation, generateDraftOptions, drawFromPool, CardTemplate } from '../lib/cards';
@@ -26,7 +26,8 @@ interface GameContextType {
   pickDraftCard: (template: CardTemplate) => void;
   achievements: Achievement[];
   achievementToast: string | null;
-  combatAnim: { targetId: string; damage: number } | null;
+  combatAnim: { targetId: string; damage: number; attackerId?: string } | null;
+  playedCardAnim: { card: CardInstance; key: number } | null;
   announcement: string | null;
   shopRotationIds: string[];
   shopRotationTimeLeft: number;
@@ -39,7 +40,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [gameState, dispatch] = useReducer(gameReducer, initialGameState);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [achievementToast, setAchievementToast] = useState<string | null>(null);
-  const [combatAnim, setCombatAnim] = useState<{ targetId: string; damage: number } | null>(null);
+  const [combatAnim, setCombatAnim] = useState<{ targetId: string; damage: number; attackerId?: string } | null>(null);
+  const [playedCardAnim, setPlayedCardAnim] = useState<{ card: CardInstance; key: number } | null>(null);
   const [announcement, setAnnouncement] = useState<string | null>(null);
   const [shopRotationIds, setShopRotationIds] = useState<string[]>(() => generateShopRotation());
   const [shopRotationTimeLeft, setShopRotationTimeLeft] = useState(SHOP_ROTATION_SECONDS);
@@ -131,6 +133,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
 
     dispatch({ type: 'PLAY_CARD', payload: { playerId: player.id, cardInstanceId, targetId } });
+    setPlayedCardAnim({ card: { ...card }, key: Date.now() });
+    setTimeout(() => setPlayedCardAnim(null), 750);
     dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} played ${card.name}.`, type: 'card' } });
 
     if (player.isHuman) {
@@ -152,6 +156,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (player.aether < card.cost) return;
 
     sounds.play('cardPlay_spell');
+    setPlayedCardAnim({ card: { ...card }, key: Date.now() });
+    setTimeout(() => setPlayedCardAnim(null), 750);
     dispatch({ type: 'STAGE_SPELL', payload: { playerId: player.id, cardInstanceId, targetId } });
     dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} staged ${card.name} for combat.`, type: 'card' } });
 
@@ -171,21 +177,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   };
 
   // ── Spell effects ─────────────────────────────────────────────────────────
-  const handleSpellEffect = (sourcePlayerId: number, effect: string, targetId: string | undefined, spellBonus: number) => {
+  const handleSpellEffect = (sourcePlayerId: number, sourceInstanceId: string, effect: string, targetId: string | undefined, spellBonus: number) => {
     const isImmuneToPoison = (p: Player) => p.perks.includes('perk_poison_immune');
     const isImmuneToStun = (p: Player) => p.perks.includes('perk_stun_immune');
 
     const dmgTarget = (tId: string, amount: number) => {
       let targetOwner = gameState.players.find(p => p.field.some(c => c.instanceId === tId));
       if (targetOwner) {
-        dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, targetInstanceId: tId, amount } });
-        setCombatAnim({ targetId: tId, damage: amount });
+        dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, targetInstanceId: tId, amount, sourcePlayerId, sourceInstanceId } });
+           setCombatAnim({ targetId: tId, damage: amount });
         setTimeout(() => setCombatAnim(null), 600);
       } else {
         targetOwner = gameState.players.find(p => p.id.toString() === tId);
         if (targetOwner) {
-          dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, amount } });
-          setCombatAnim({ targetId: tId, damage: amount });
+          dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, amount, sourcePlayerId, sourceInstanceId } });
+         setCombatAnim({ targetId: tId, damage: amount });
           setTimeout(() => setCombatAnim(null), 600);
         }
       }
@@ -210,7 +216,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (targetOwner) {
         const creature = targetOwner.field.find(c => c.instanceId === targetId);
         if (creature && creature.currentDef <= 3) {
-          dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, targetInstanceId: targetId, amount: 999, bypassResist: true, bypassArmor: true } });
+          dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, targetInstanceId: targetId, amount: 999, sourcePlayerId, sourceInstanceId, bypassResist: true, bypassArmor: true } });
           dispatch({ type: 'ADD_GOLD', payload: { playerId: sourcePlayerId, amount: creature.currentAtk * 50 } });
           sounds.play('gold');
         }
@@ -218,7 +224,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } else if (effect === 'dmg_2_all_enemies') {
       gameState.players.forEach(p => {
         if (p.id !== sourcePlayerId) {
-          p.field.forEach(c => dispatch({ type: 'DAMAGE', payload: { targetPlayerId: p.id, targetInstanceId: c.instanceId, amount: 2 + spellBonus } }));
+          p.field.forEach(c => dispatch({ type: 'DAMAGE', payload: { targetPlayerId: p.id, targetInstanceId: c.instanceId, amount: 2 + spellBonus, sourcePlayerId, sourceInstanceId } }));
         }
       });
       sounds.play('damage');
@@ -229,23 +235,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } else if (effect === 'dmg_6_enemy_hero') {
       const enemy = gameState.players.find(p => p.id !== sourcePlayerId);
       if (enemy) {
-        dispatch({ type: 'DAMAGE', payload: { targetPlayerId: enemy.id, amount: 6 + spellBonus } });
-        setCombatAnim({ targetId: enemy.id.toString(), damage: 6 + spellBonus });
+        dispatch({ type: 'DAMAGE', payload: { targetPlayerId: enemy.id, amount: 6 + spellBonus, sourcePlayerId, sourceInstanceId } });
+         setCombatAnim({ targetId: enemy.id.toString(), damage: 6 + spellBonus });
         setTimeout(() => setCombatAnim(null), 600);
         sounds.play('damage');
       }
     } else if (effect === 'dmg_5_all') {
       gameState.players.forEach(p => {
         if (p.id !== sourcePlayerId) {
-          p.field.forEach(c => dispatch({ type: 'DAMAGE', payload: { targetPlayerId: p.id, targetInstanceId: c.instanceId, amount: 5 + spellBonus } }));
-          dispatch({ type: 'DAMAGE', payload: { targetPlayerId: p.id, amount: 5 + spellBonus } });
+          p.field.forEach(c => dispatch({ type: 'DAMAGE', payload: { targetPlayerId: p.id, targetInstanceId: c.instanceId, amount: 5 + spellBonus, sourcePlayerId, sourceInstanceId } }));
+          dispatch({ type: 'DAMAGE', payload: { targetPlayerId: p.id, amount: 5 + spellBonus, sourcePlayerId, sourceInstanceId } });
         }
       });
       sounds.play('damage');
     } else if (effect === 'destroy_target' && targetId) {
       const targetOwner = gameState.players.find(p => p.field.some(c => c.instanceId === targetId));
       if (targetOwner) {
-        dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, targetInstanceId: targetId, amount: 999, bypassResist: true, bypassArmor: true } });
+          dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, targetInstanceId: targetId, amount: 999, sourcePlayerId, sourceInstanceId, bypassResist: true, bypassArmor: true } });
         announce('CHARACTER DESTROYED');
         sounds.play('damage');
       }
@@ -308,7 +314,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } else if (effect === 'dmg_2_and_poison_4' && targetId) {
       const targetOwner = gameState.players.find(p => p.field.some(c => c.instanceId === targetId));
       if (targetOwner) {
-        dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, targetInstanceId: targetId, amount: 2 + spellBonus } });
+        dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, targetInstanceId: targetId, amount: 2 + spellBonus, sourcePlayerId, sourceInstanceId } });
         if (!isImmuneToPoison(targetOwner)) {
           dispatch({ type: 'APPLY_POISON', payload: { playerId: targetOwner.id, instanceId: targetId, stacks: 4 } });
         }
@@ -318,7 +324,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       gameState.players.forEach(p => {
         if (p.id !== sourcePlayerId) {
           p.field.forEach(c => {
-            dispatch({ type: 'DAMAGE', payload: { targetPlayerId: p.id, targetInstanceId: c.instanceId, amount: 3 + spellBonus } });
+            dispatch({ type: 'DAMAGE', payload: { targetPlayerId: p.id, targetInstanceId: c.instanceId, amount: 3 + spellBonus, sourcePlayerId, sourceInstanceId } });
             if (!isImmuneToPoison(p)) {
               dispatch({ type: 'APPLY_POISON', payload: { playerId: p.id, instanceId: c.instanceId, stacks: 2 } });
             }
@@ -439,7 +445,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
 
     dispatch({ type: 'ATTACK', payload: { attackerPlayerId: player.id, attackerInstanceId, targetPlayerId, targetInstanceId, damageOverride: dmg } });
-    setCombatAnim({ targetId: targetInstanceId || targetPlayerId.toString(), damage: dmg });
+    setCombatAnim({ targetId: targetInstanceId || targetPlayerId.toString(), damage: dmg, attackerId: attackerInstanceId });
     setTimeout(() => setCombatAnim(null), 600);
 
     if (targetOwner && targetInstanceId) {
@@ -879,6 +885,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             damageOverride: dmg,
           },
         });
+        setCombatAnim({ targetId: target.targetInstanceId || target.targetPlayerId.toString(), damage: dmg, attackerId: attacker.instanceId });
+        setTimeout(() => setCombatAnim(null), 650);
 
         // AI status on hit
         if (target.targetInstanceId) {
@@ -921,7 +929,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           const cp = state.players[state.currentPlayerIndex];
           const spellBonus = cp?.statBuffs.includes('rabadon') ? 2 : 0;
           spells.forEach(spell => {
-            if (spell.effect) handleSpellEffect(currentPlayer.id, spell.effect, spell.targetId, spellBonus);
+            if (spell.effect) handleSpellEffect(currentPlayer.id, spell.instanceId, spell.effect, spell.targetId, spellBonus);
             dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${currentPlayer.name}'s ${spell.name} fires!`, type: 'card' } });
           });
           sounds.play('cardPlay_spell');
@@ -964,16 +972,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
           if (card.type === 'spell') {
             const targetId = chooseAiSpellTarget(card.effect || '', diff, state.players, cp.id);
+            setPlayedCardAnim({ card: { ...card }, key: Date.now() });
+            setTimeout(() => setPlayedCardAnim(null), 750);
             dispatchRef.current({ type: 'STAGE_SPELL', payload: { playerId: cp.id, cardInstanceId: card.instanceId, targetId } });
           } else if (card.type === 'enchantment') {
             const targetId = cp.field[0]?.instanceId;
             if (targetId) {
+              setPlayedCardAnim({ card: { ...card }, key: Date.now() });
+              setTimeout(() => setPlayedCardAnim(null), 750);
               dispatchRef.current({ type: 'PLAY_CARD', payload: { playerId: cp.id, cardInstanceId: card.instanceId, targetId } });
             } else {
               dispatchRef.current({ type: 'ADVANCE_PHASE' });
               return;
             }
           } else {
+            setPlayedCardAnim({ card: { ...card }, key: Date.now() });
+            setTimeout(() => setPlayedCardAnim(null), 750);
             dispatchRef.current({ type: 'PLAY_CARD', payload: { playerId: cp.id, cardInstanceId: card.instanceId } });
           }
 
@@ -991,7 +1005,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     <GameContext.Provider value={{
       gameState, dispatch, playCard, stageSpell, sellArtifact, sellCreature, sellHandCard, attackWith,
       buyItem, useInventoryItem, equipInventoryItem, endPhase, pickDraftCard,
-      achievements, achievementToast, combatAnim, announcement,
+      achievements, achievementToast, combatAnim, playedCardAnim, announcement,
       shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft,
     }}>
       {children}

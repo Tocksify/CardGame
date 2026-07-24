@@ -64,13 +64,14 @@ const EvoProgress = ({ card }: { card: FieldCard }) => {
 
 // ── Field / Arena card ────────────────────────────────────────────────────
 const ArenaCardUI = ({
-  card, onClick, tapped = false, targetable = false, combatAnim = null, size = 'md',
+  card, onClick, tapped = false, targetable = false, combatAnim = null, attackOffset = { x: 18, y: 0 }, size = 'md',
 }: {
   card: CardInstance | FieldCard;
   onClick?: () => void;
   tapped?: boolean;
   targetable?: boolean;
-  combatAnim?: { targetId: string; damage: number } | null;
+  combatAnim?: { targetId: string; damage: number; attackerId?: string } | null;
+  attackOffset?: { x: number; y: number };
   size?: 'sm' | 'md';
 }) => {
   const frame = TYPE_FRAME[card.type] || TYPE_FRAME.character;
@@ -79,6 +80,7 @@ const ArenaCardUI = ({
   const displayDef = fc.currentDef ?? card.def ?? 1;
   const isEvolved = fc.evolved;
   const isHit = combatAnim?.targetId === (card as any).instanceId;
+  const isAttacker = combatAnim?.attackerId === (card as any).instanceId;
   const borderCls = rarityBorder(card.rarity, isEvolved);
   const w = size === 'sm' ? 'w-[86px]' : 'w-[106px]';
   const h = size === 'sm' ? 'h-[124px]' : 'h-[154px]';
@@ -86,6 +88,10 @@ const ArenaCardUI = ({
   return (
     <motion.div
       whileHover={{ scale: 1.12, y: -6, zIndex: 60 }}
+      animate={isAttacker
+        ? { x: [0, attackOffset.x, -attackOffset.x * 0.35, 0], y: [0, attackOffset.y, -attackOffset.y * 0.35, 0], rotate: [0, -4, 2, 0] }
+        : undefined}
+      transition={isAttacker ? { duration: 0.58, ease: 'easeOut' } : undefined}
       onClick={onClick}
       title={card.name}
       className={`relative ${w} ${h} flex-shrink-0 border-2 cursor-pointer transition-colors duration-200 overflow-hidden
@@ -134,10 +140,42 @@ const ArenaCardUI = ({
             -{combatAnim!.damage}
           </motion.div>
         )}
+        {isAttacker && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 0.85, 0] }}
+            transition={{ duration: 0.58, times: [0, 0.35, 1] }}
+            className="absolute inset-0 pointer-events-none z-40"
+            style={{ background: 'radial-gradient(circle, rgba(255,230,130,0.9), rgba(201,162,39,0.2) 42%, transparent 72%)' }}
+          />
+        )}
       </AnimatePresence>
     </motion.div>
   );
 };
+
+const PlayedCardAnimation = ({ card }: { card: CardInstance }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 190, scale: 0.72, rotate: 5 }}
+    animate={{ opacity: [0, 1, 1, 0], y: [190, 55, -30, -85], scale: [0.72, 1, 1.02, 0.88], rotate: [5, -2, 0, -3] }}
+    transition={{ duration: 0.75, times: [0, 0.22, 0.58, 1], ease: 'easeOut' }}
+    className="absolute bottom-[250px] left-1/2 -translate-x-1/2 z-[65] pointer-events-none"
+  >
+    <div className="relative">
+      <HandCardUI card={card} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.5 }}
+        animate={{ opacity: [0, 0.9, 0], scale: [0.5, 1.45, 1.9] }}
+        transition={{ duration: 0.42, delay: 0.3 }}
+        className="absolute inset-[-18px] rounded-full pointer-events-none"
+        style={{
+          background: 'radial-gradient(circle, rgba(255,238,170,0.9) 0%, rgba(201,162,39,0.35) 35%, transparent 70%)',
+          mixBlendMode: 'screen',
+        }}
+      />
+    </div>
+  </motion.div>
+);
 
 // ── Artifact Slot display ─────────────────────────────────────────────────
 const ArtifactSlotUI = ({
@@ -283,6 +321,17 @@ const POSITION_CFG: Record<PositionId, { wrapperCls: string; inner: string; card
   'bottom-right': { wrapperCls: 'bottom-0 right-0', inner: 'flex-col-reverse', cardArea: 'flex-row flex-wrap gap-1 max-w-[120px]' },
 };
 
+const ATTACK_DIRECTION: Record<PositionId, { x: number; y: number }> = {
+  left: { x: 18, y: 0 },
+  right: { x: -18, y: 0 },
+  top: { x: 0, y: 18 },
+  bottom: { x: 0, y: -18 },
+  'top-left': { x: 13, y: 13 },
+  'top-right': { x: -13, y: 13 },
+  'bottom-left': { x: 13, y: -13 },
+  'bottom-right': { x: -13, y: -13 },
+};
+
 // Local player (index 0) is ALWAYS at 'bottom' — enemies spread around the top
 function getPositions(count: number): PositionId[] {
   switch (count) {
@@ -308,7 +357,7 @@ const PlayerZone = ({
   targetingMode: string;
   onHeroClick: () => void;
   onCardClick: (card: FieldCard) => void;
-  combatAnim: { targetId: string; damage: number } | null;
+  combatAnim: { targetId: string; damage: number; attackerId?: string } | null;
   aether?: number;
   maxAether?: number;
   onSellArtifact?: () => void;
@@ -427,6 +476,7 @@ const PlayerZone = ({
                     targetable={isTargetable}
                     onClick={() => onCardClick(card)}
                     combatAnim={combatAnim}
+                    attackOffset={ATTACK_DIRECTION[posId]}
                   />
                   {canSellThis && (
                     <button
@@ -666,7 +716,7 @@ export default function GamePage() {
   const [, setLocation] = useLocation();
   const {
     gameState, dispatch, playCard, stageSpell, sellArtifact, sellCreature, sellHandCard, attackWith,
-    buyItem, useInventoryItem, equipInventoryItem, endPhase, pickDraftCard, achievementToast, combatAnim, announcement,
+    buyItem, useInventoryItem, equipInventoryItem, endPhase, pickDraftCard, achievementToast, combatAnim, playedCardAnim, announcement,
     shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft,
   } = useGame();
   const { animatedBattlefield } = useLobby();
@@ -711,6 +761,14 @@ export default function GamePage() {
   const currentPlayer = gameState.players[gameState.currentPlayerIndex];
   const isMyTurn = currentPlayer.id === me.id;
   const isDefeated = gameState.phase === 'gameover' && gameState.winner !== me.id;
+  const cardStatEntries = Object.values(me.cardStats || {}).filter(stat => (
+    stat.damageDealt > 0 || stat.kills > 0 || stat.goldEarned > 0
+  ));
+  const mostValuableCard = [...cardStatEntries].sort((a, b) => {
+    const scoreA = a.damageDealt + a.kills * 20 + a.goldEarned / 10;
+    const scoreB = b.damageDealt + b.kills * 20 + b.goldEarned / 10;
+    return scoreB - scoreA;
+  })[0];
 
   // ── Interaction handlers ────────────────────────────────────────────────
   const flashReason = (msg: string) => {
@@ -949,6 +1007,10 @@ export default function GamePage() {
             />
           );
         })}
+
+        <AnimatePresence>
+          {playedCardAnim && <PlayedCardAnimation key={playedCardAnim.key} card={playedCardAnim.card} />}
+        </AnimatePresence>
 
         {/* Targeting toast */}
         <AnimatePresence>
@@ -1859,6 +1921,7 @@ export default function GamePage() {
                   { label: 'Turns Survived',  value: gameState.turn,                              color: '#c8b888' },
                   { label: 'Gold Earned',      value: `${(me.goldEarnedThisGame||0).toLocaleString()}g`, color: '#c9a227' },
                   { label: 'Characters Slain', value: me.creaturesKilledThisGame || 0,             color: '#e05050' },
+                  { label: 'Damage Dealt',     value: me.damageDealtThisGame || 0,                 color: '#f08050' },
                   { label: 'Cards Played',     value: me.cardsPlayedThisGame || 0,                 color: '#70a0c0' },
                 ].map(row => (
                   <div key={row.label} className="flex justify-between items-center">
@@ -1866,6 +1929,52 @@ export default function GamePage() {
                     <span className="font-display font-bold text-sm" style={{ color: row.color }}>{row.value}</span>
                   </div>
                 ))}
+              </div>
+
+              <div className="w-full text-left">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-px flex-1" style={{ background: 'rgba(201,162,39,0.25)' }} />
+                  <span className="text-[9px] font-display uppercase tracking-[0.25em]" style={{ color: '#c9a227' }}>
+                    Battle Ledger
+                  </span>
+                  <div className="h-px flex-1" style={{ background: 'rgba(201,162,39,0.25)' }} />
+                </div>
+                {mostValuableCard ? (
+                  <div className="mb-3 flex items-center justify-between gap-3 p-3"
+                       style={{
+                         background: 'linear-gradient(90deg, rgba(201,162,39,0.16), rgba(201,162,39,0.03))',
+                         border: '1px solid rgba(201,162,39,0.45)',
+                         boxShadow: '0 0 16px rgba(201,162,39,0.08)',
+                       }}>
+                    <div>
+                      <div className="text-[8px] uppercase tracking-widest" style={{ color: '#9a7b32' }}>Most Valuable Card</div>
+                      <div className="font-display font-bold text-base" style={{ color: '#ffe6a0' }}>{mostValuableCard.name}</div>
+                    </div>
+                    <div className="text-right text-[10px] leading-relaxed" style={{ color: '#c8b888' }}>
+                      <div><span style={{ color: '#f08050' }}>{mostValuableCard.damageDealt}</span> damage</div>
+                      <div><span style={{ color: '#e05050' }}>{mostValuableCard.kills}</span> kills · <span style={{ color: '#c9a227' }}>{mostValuableCard.goldEarned}g</span></div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mb-3 p-3 text-center text-[10px] italic" style={{ color: '#7a6040', border: '1px solid rgba(74,48,0,0.25)' }}>
+                    No card dealt damage this match.
+                  </div>
+                )}
+                {cardStatEntries.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    {[...cardStatEntries]
+                      .sort((a, b) => b.damageDealt - a.damageDealt)
+                      .slice(0, 4)
+                      .map(stat => (
+                        <div key={stat.name} className="flex items-center justify-between text-[10px]">
+                          <span className="truncate pr-2" style={{ color: '#a89060' }}>{stat.name}</span>
+                          <span className="shrink-0" style={{ color: '#c8b888' }}>
+                            {stat.damageDealt} dmg · {stat.kills} kill{stat.kills === 1 ? '' : 's'}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 w-full">

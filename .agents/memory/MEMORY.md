@@ -1,3 +1,4 @@
 - [Aethermancer feature batch 1](aethermancer-features.md) — creature→character rename, draft mode, status effects, new heroes, multiplayer, ELO, matchmaking all implemented in one session.
 - [Aethermancer feature batch 2](aethermancer-features-2.md) — AI stuck fix, 8-card starting hand, pre-draft screen, damage gold bonus, kill gold steal, ELO application on ranked gameover.
 - [Aethermancer feature batch 3](aethermancer-features-3.md) — Multiplayer reworked to rooms (no matchmaking/ranked), bigger cards/text, cantPlayReason toast, TS fix in GameContext.
+- [Aethermancer combat stats](aethermancer-combat-stats.md) — derive card performance from reducer-side post-mitigation damage, not UI estimates, so armor/resistance stays reflected.
