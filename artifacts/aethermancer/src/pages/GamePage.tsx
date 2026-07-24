@@ -919,6 +919,12 @@ export default function GamePage() {
       return;
     }
     if (gameState.targetingMode === 'attack' && player.id !== me.id) {
+      // Defender rule: cannot attack hero directly while they have field cards
+      if (player.field.length > 0) {
+        flashReason('Defeat all enemy characters before attacking their hero');
+        dispatch({ type: 'CLEAR_TARGETING' });
+        return;
+      }
       attackWith(gameState.sourceId!, player.id);
       dispatch({ type: 'CLEAR_TARGETING' });
       return;

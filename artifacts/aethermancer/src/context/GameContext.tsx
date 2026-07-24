@@ -214,6 +214,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       } else {
         targetOwner = gameState.players.find(p => p.id.toString() === tId);
         if (targetOwner) {
+          // Defender rule: cannot deal direct damage to a player who still has field cards
+          if (targetOwner.field.length > 0) {
+            dispatch({ type: 'ADD_LOG', payload: { msg: `${targetOwner.name} is shielded by their defenders — the spell fizzles!`, type: 'other' } });
+            return;
+          }
           dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, amount, sourcePlayerId, sourceInstanceId } });
          setCombatAnim({ targetId: tId, damage: amount });
           setTimeout(() => setCombatAnim(null), 600);
@@ -259,16 +264,24 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } else if (effect === 'dmg_6_enemy_hero') {
       const enemy = gameState.players.find(p => p.id !== sourcePlayerId);
       if (enemy) {
-        dispatch({ type: 'DAMAGE', payload: { targetPlayerId: enemy.id, amount: 6 + spellBonus, sourcePlayerId, sourceInstanceId } });
-         setCombatAnim({ targetId: enemy.id.toString(), damage: 6 + spellBonus });
-        setTimeout(() => setCombatAnim(null), 600);
-        sounds.play('damage');
+        // Defender rule: only hits hero if enemy has no field cards
+        if (enemy.field.length > 0) {
+          dispatch({ type: 'ADD_LOG', payload: { msg: `${enemy.name}'s defenders absorb the spell — the hero is unharmed!`, type: 'other' } });
+        } else {
+          dispatch({ type: 'DAMAGE', payload: { targetPlayerId: enemy.id, amount: 6 + spellBonus, sourcePlayerId, sourceInstanceId } });
+          setCombatAnim({ targetId: enemy.id.toString(), damage: 6 + spellBonus });
+          setTimeout(() => setCombatAnim(null), 600);
+          sounds.play('damage');
+        }
       }
     } else if (effect === 'dmg_5_all') {
       gameState.players.forEach(p => {
         if (p.id !== sourcePlayerId) {
           p.field.forEach(c => dispatch({ type: 'DAMAGE', payload: { targetPlayerId: p.id, targetInstanceId: c.instanceId, amount: 5 + spellBonus, sourcePlayerId, sourceInstanceId } }));
-          dispatch({ type: 'DAMAGE', payload: { targetPlayerId: p.id, amount: 5 + spellBonus, sourcePlayerId, sourceInstanceId } });
+          // Defender rule: only hits hero if they have no field cards
+          if (p.field.length === 0) {
+            dispatch({ type: 'DAMAGE', payload: { targetPlayerId: p.id, amount: 5 + spellBonus, sourcePlayerId, sourceInstanceId } });
+          }
         }
       });
       sounds.play('damage');
@@ -664,45 +677,52 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const targetHuman = players.find(p => p.isHuman && p.hp > 0);
     if (!targetHuman) return null;
 
-    switch (difficulty) {
-      case 'Novice':
-      case 'Easy':
-        // Always attack hero directly (simple)
-        return { targetPlayerId: targetHuman.id, targetInstanceId: undefined };
+    // Defender rule: if the human has any field cards, the AI must target one of them.
+    // The hero is only reachable once all defenders are cleared.
+    const defenders = targetHuman.field.filter(c => !c.stunned);
+    const activeField = targetHuman.field; // includes stunned (still blocking)
 
-      case 'Normal':
-        // Respect taunt; otherwise hero
-        const tauntNormal = targetHuman.field.find(c => c.keywords?.includes('taunt') && !c.stunned);
-        if (tauntNormal) return { targetPlayerId: targetHuman.id, targetInstanceId: tauntNormal.instanceId };
-        return { targetPlayerId: targetHuman.id, targetInstanceId: undefined };
+    if (activeField.length > 0) {
+      // Must target a field card. Strategy varies by difficulty.
+      switch (difficulty) {
+        case 'Novice':
+        case 'Easy':
+          // Pick a random non-stunned defender, or the first card available
+          return { targetPlayerId: targetHuman.id, targetInstanceId: (defenders[0] ?? activeField[0]).instanceId };
 
-      case 'Hard': {
-        // Respect taunt; if no taunt, attack weakest character if killable this turn
-        const tauntHard = targetHuman.field.find(c => c.keywords?.includes('taunt') && !c.stunned);
-        if (tauntHard) return { targetPlayerId: targetHuman.id, targetInstanceId: tauntHard.instanceId };
-        const untapped = cp.field.filter(c => !c.tapped && !c.hasAttackedThisTurn && !c.stunned);
-        const totalAtk = untapped.reduce((s, c) => s + c.currentAtk + c.tempAtkBonus, 0);
-        const killable = targetHuman.field.filter(c => c.currentDef <= totalAtk).sort((a, b) => b.currentAtk - a.currentAtk)[0];
-        if (killable) return { targetPlayerId: targetHuman.id, targetInstanceId: killable.instanceId };
-        return { targetPlayerId: targetHuman.id, targetInstanceId: undefined };
-      }
+        case 'Normal': {
+          // Prefer taunt; otherwise first defender
+          const tauntNormal = defenders.find(c => c.keywords?.includes('taunt'));
+          return { targetPlayerId: targetHuman.id, targetInstanceId: (tauntNormal ?? defenders[0] ?? activeField[0]).instanceId };
+        }
 
-      case 'Expert':
-      case 'Nightmare': {
-        // Respect taunt
-        const tauntEx = targetHuman.field.find(c => c.keywords?.includes('taunt') && !c.stunned);
-        if (tauntEx) return { targetPlayerId: targetHuman.id, targetInstanceId: tauntEx.instanceId };
-        // Kill highest-threat character if possible
-        const untappedEx = cp.field.filter(c => !c.tapped && !c.hasAttackedThisTurn && !c.stunned);
-        const singleAtk = untappedEx[0] ? untappedEx[0].currentAtk + untappedEx[0].tempAtkBonus : 0;
-        const killableEx = targetHuman.field.filter(c => c.currentDef <= singleAtk).sort((a, b) => b.currentAtk - a.currentAtk)[0];
-        if (killableEx) return { targetPlayerId: targetHuman.id, targetInstanceId: killableEx.instanceId };
-        // Remove any character that threatens (highest atk)
-        const biggestThreat = [...targetHuman.field].sort((a, b) => b.currentAtk - a.currentAtk)[0];
-        if (biggestThreat && singleAtk > 0) return { targetPlayerId: targetHuman.id, targetInstanceId: biggestThreat.instanceId };
-        return { targetPlayerId: targetHuman.id, targetInstanceId: undefined };
+        case 'Hard': {
+          // Prefer taunt; then try to kill the weakest killable defender
+          const tauntHard = defenders.find(c => c.keywords?.includes('taunt'));
+          if (tauntHard) return { targetPlayerId: targetHuman.id, targetInstanceId: tauntHard.instanceId };
+          const untapped = cp.field.filter(c => !c.tapped && !c.hasAttackedThisTurn && !c.stunned);
+          const totalAtk = untapped.reduce((s, c) => s + c.currentAtk + c.tempAtkBonus, 0);
+          const killable = defenders.filter(c => c.currentDef <= totalAtk).sort((a, b) => b.currentAtk - a.currentAtk)[0];
+          return { targetPlayerId: targetHuman.id, targetInstanceId: (killable ?? defenders[0] ?? activeField[0]).instanceId };
+        }
+
+        case 'Expert':
+        case 'Nightmare': {
+          // Prefer taunt; then kill highest-threat killable; then highest atk
+          const tauntEx = defenders.find(c => c.keywords?.includes('taunt'));
+          if (tauntEx) return { targetPlayerId: targetHuman.id, targetInstanceId: tauntEx.instanceId };
+          const untappedEx = cp.field.filter(c => !c.tapped && !c.hasAttackedThisTurn && !c.stunned);
+          const singleAtk = untappedEx[0] ? untappedEx[0].currentAtk + untappedEx[0].tempAtkBonus : 0;
+          const killableEx = defenders.filter(c => c.currentDef <= singleAtk).sort((a, b) => b.currentAtk - a.currentAtk)[0];
+          if (killableEx) return { targetPlayerId: targetHuman.id, targetInstanceId: killableEx.instanceId };
+          const biggestThreat = [...defenders].sort((a, b) => b.currentAtk - a.currentAtk)[0];
+          return { targetPlayerId: targetHuman.id, targetInstanceId: (biggestThreat ?? activeField[0]).instanceId };
+        }
       }
     }
+
+    // No defenders — hero is vulnerable
+    return { targetPlayerId: targetHuman.id, targetInstanceId: undefined };
   }
 
   /** Choose which card the AI plays based on difficulty */
@@ -751,12 +771,24 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (!human) return undefined;
 
     if (effect.includes('target')) {
+      const isDamageEffect = effect.startsWith('dmg_') || effect.includes('destroy') || effect.includes('poison') || effect.includes('burn');
+      // Defender rule: damage spells must target field cards if any exist
+      if (isDamageEffect && human.field.length > 0) {
+        if (difficulty === 'Hard' || difficulty === 'Expert' || difficulty === 'Nightmare') {
+          // Target highest-ATK field card
+          const best = [...human.field].sort((a, b) => b.currentAtk - a.currentAtk)[0];
+          return best.instanceId;
+        }
+        // Easier difficulties: target any field card
+        return human.field[0].instanceId;
+      }
       if (difficulty === 'Hard' || difficulty === 'Expert' || difficulty === 'Nightmare') {
-        // Target highest-ATK human field card, else hero
+        // Non-damage or no defenders: target highest-ATK field card if present, else hero
         const best = [...human.field].sort((a, b) => b.currentAtk - a.currentAtk)[0];
         return best ? best.instanceId : human.id.toString();
       }
-      return human.id.toString();
+      // Only target the hero with non-damage effects (stun, silence) when field is empty
+      return human.field.length === 0 ? human.id.toString() : human.field[0].instanceId;
     }
     return undefined;
   }
