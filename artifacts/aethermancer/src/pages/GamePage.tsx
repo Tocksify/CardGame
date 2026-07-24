@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useGame } from '../context/GameContext';
 import { useLobby } from '../context/LobbyContext';
+import { useChallenger } from '../context/ChallengerContext';
+import { RARITY_COLORS, RARITY_GLOW } from '../lib/challengers';
 import { CardInstance, FieldCard, Player } from '../store/gameStore';
 import { sounds } from '../lib/sounds';
 import {
@@ -827,6 +829,7 @@ export default function GamePage() {
     shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft,
   } = useGame();
   const { animatedBattlefield, autoCombat } = useLobby();
+  const { equippedChallenger } = useChallenger();
 
   const [countdown, setCountdown] = useState<number | null>(3);
   const [shopTab, setShopTab] = useState<'items' | 'perks' | 'artifacts' | 'cards'>('items');
@@ -1045,11 +1048,22 @@ export default function GamePage() {
         <div className="absolute left-0 top-0 w-24 h-full pointer-events-none"
              style={{ background: 'linear-gradient(90deg, rgba(201,162,39,0.04), transparent)' }} />
 
-        <div className="flex items-center gap-0.5 relative">
-          <div className="absolute -left-3 top-1/2 -translate-y-1/2 text-amber-800/40 text-xs select-none">❧</div>
-          {['draw','buy','main','combat','end'].map(p => (
-            <div key={p} className={`phase-pip ${gameState.phase === p ? 'active' : ''}`}>{p}</div>
-          ))}
+        <div className="flex items-center gap-2 relative">
+          {equippedChallenger && (
+            <div
+              title={`${equippedChallenger.name} — ${equippedChallenger.title}`}
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-base border-2 shrink-0 ${RARITY_COLORS[equippedChallenger.rarity].split(' ')[0]} ${RARITY_GLOW[equippedChallenger.rarity]}`}
+              style={{ background: 'rgba(10,6,2,0.85)' }}
+            >
+              {equippedChallenger.icon}
+            </div>
+          )}
+          <div className="flex items-center gap-0.5">
+            <div className="absolute -left-3 top-1/2 -translate-y-1/2 text-amber-800/40 text-xs select-none">❧</div>
+            {['draw','buy','main','combat','end'].map(p => (
+              <div key={p} className={`phase-pip ${gameState.phase === p ? 'active' : ''}`}>{p}</div>
+            ))}
+          </div>
         </div>
 
         <div className="flex flex-col items-center absolute left-1/2 -translate-x-1/2">
