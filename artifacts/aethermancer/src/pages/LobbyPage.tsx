@@ -27,6 +27,7 @@ export default function LobbyPage() {
   const {
     difficulty, setDifficulty,
     animatedBattlefield, setAnimatedBattlefield,
+    autoCombat, setAutoCombat,
     aiPlayers, addAi, removeAi,
     generatePlayers,
     gameMode, setGameMode,
@@ -187,6 +188,28 @@ export default function LobbyPage() {
                       key={v}
                       onClick={() => { sounds.play('uiClick'); setAnimatedBattlefield(v === 'ON'); }}
                       className={`px-4 py-1.5 border text-sm font-semibold transition-colors ${animatedBattlefield === (v === 'ON') ? 'bg-primary text-primary-foreground border-primary' : 'bg-secondary text-secondary-foreground border-border hover:border-primary/50'}`}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Gameplay */}
+            <div className="bg-card border border-border p-5 flex flex-col gap-3">
+              <h2 className="text-base font-display text-muted-foreground border-b border-border/50 pb-2">Gameplay</h2>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm text-muted-foreground">Automated Combat</span>
+                  <span className="text-xs text-muted-foreground/60">Your characters act automatically each combat phase — strongest ability on the lowest-HP enemy first. You still control the main phase.</span>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  {(['OFF', 'ON'] as const).map(v => (
+                    <button
+                      key={v}
+                      onClick={() => { sounds.play('uiClick'); setAutoCombat(v === 'ON'); }}
+                      className={`px-4 py-1.5 border text-sm font-semibold transition-colors ${autoCombat === (v === 'ON') ? 'bg-primary text-primary-foreground border-primary' : 'bg-secondary text-secondary-foreground border-border hover:border-primary/50'}`}
                     >
                       {v}
                     </button>

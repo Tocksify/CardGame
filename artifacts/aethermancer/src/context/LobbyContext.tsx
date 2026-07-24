@@ -33,6 +33,8 @@ interface LobbyContextType {
   setMaxAether: (a: number) => void;
   animatedBattlefield: boolean;
   setAnimatedBattlefield: (v: boolean) => void;
+  autoCombat: boolean;
+  setAutoCombat: (v: boolean) => void;
   aiPlayers: { id: number; name: string }[];
   addAi: () => void;
   removeAi: (id: number) => void;
@@ -53,6 +55,7 @@ export function LobbyProvider({ children }: { children: React.ReactNode }) {
   const [difficulty, setDifficulty] = useState<Difficulty>('Normal');
   const [maxAether, setMaxAether] = useState(10);
   const [animatedBattlefield, setAnimatedBattlefield] = useState(false);
+  const [autoCombat, setAutoCombat] = useState(false);
   const [gameMode, setGameMode] = useState<GameMode>('8card');
   const [matchType, setMatchType] = useState<MatchType>('singleplayer');
   const [ranked, setRanked] = useState(false);
@@ -124,6 +127,7 @@ export function LobbyProvider({ children }: { children: React.ReactNode }) {
       difficulty, setDifficulty,
       maxAether, setMaxAether,
       animatedBattlefield, setAnimatedBattlefield,
+      autoCombat, setAutoCombat,
       aiPlayers, addAi, removeAi,
       generatePlayers,
       gameMode, setGameMode,

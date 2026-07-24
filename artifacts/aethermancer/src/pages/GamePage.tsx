@@ -826,7 +826,7 @@ export default function GamePage() {
     buyItem, useInventoryItem, equipInventoryItem, endPhase, pickDraftCard, achievementToast, combatAnim, playedCardAnim, announcement,
     shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft,
   } = useGame();
-  const { animatedBattlefield } = useLobby();
+  const { animatedBattlefield, autoCombat } = useLobby();
 
   const [countdown, setCountdown] = useState<number | null>(3);
   const [shopTab, setShopTab] = useState<'items' | 'perks' | 'artifacts' | 'cards'>('items');
@@ -947,7 +947,7 @@ export default function GamePage() {
       return;
     }
 
-    if (gameState.phase === 'combat' && player.id === me.id && !fieldCard.tapped) {
+    if (gameState.phase === 'combat' && player.id === me.id && !fieldCard.tapped && !autoCombat) {
       dispatch({ type: 'SET_TARGETING', payload: { mode: 'attack', sourceId: fieldCard.instanceId, pendingAction: null } });
     }
   };
@@ -1136,7 +1136,7 @@ export default function GamePage() {
               maxAether={player.isHuman ? me.maxAether : undefined}
               onSellArtifact={player.isHuman ? sellArtifact : undefined}
               onSellCreature={player.isHuman ? sellCreature : undefined}
-              onAbilityClick={player.isHuman ? (cardInstanceId, abilityIndex) => {
+              onAbilityClick={player.isHuman && !autoCombat ? (cardInstanceId, abilityIndex) => {
                 const card = me.field.find(c => c.instanceId === cardInstanceId);
                 if (!card || card.tapped || card.stunned || !isMyTurn || gameState.phase !== 'combat') return;
                 if ((card.abilityCooldowns?.[abilityIndex] ?? 0) > 0) return;
@@ -1275,13 +1275,22 @@ export default function GamePage() {
                 )}
               </button>
             )}
-            {isMyTurn && ['buy','main','combat'].includes(gameState.phase) && (
+            {isMyTurn && ['buy','main','combat'].includes(gameState.phase) && !(autoCombat && gameState.phase === 'combat') && (
               <button
                 onClick={endPhase}
                 className="btn-fantasy btn-fantasy-primary px-5 py-1 text-[11px]"
               >
                 End {gameState.phase} ›
               </button>
+            )}
+            {isMyTurn && autoCombat && gameState.phase === 'combat' && (
+              <div
+                className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-display uppercase tracking-widest border animate-pulse"
+                style={{ borderColor: 'rgba(201,162,39,0.5)', color: '#c9a227', background: 'rgba(201,162,39,0.07)' }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#c9a227', boxShadow: '0 0 5px rgba(201,162,39,0.9)' }} />
+                Auto Combat
+              </div>
             )}
           </div>
 

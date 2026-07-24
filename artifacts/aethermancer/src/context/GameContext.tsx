@@ -4,7 +4,7 @@ import { getSettings } from '../store/settings';
 import { sounds, SoundName, ELEMENT_SOUNDS } from '../lib/sounds';
 import { SHOP_ITEMS, getCardTemplate, generateShopRotation, generateDraftOptions, drawFromPool, CardTemplate, getCardAbilities } from '../lib/cards';
 import { loadAchievements, saveAchievements, Achievement } from '../store/achievements';
-import { DIFFICULTY_CFG } from './LobbyContext';
+import { DIFFICULTY_CFG, useLobby } from './LobbyContext';
 import { loadAccount, applyEloChange } from '../store/account';
 import { useChallenger } from './ChallengerContext';
 import { SHARDS_PER_WIN } from '../store/challengers';
@@ -49,6 +49,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [shopRotationIds, setShopRotationIds] = useState<string[]>(() => generateShopRotation());
   const [shopRotationTimeLeft, setShopRotationTimeLeft] = useState(SHOP_ROTATION_SECONDS);
   const [buyPhaseTimeLeft, setBuyPhaseTimeLeft] = useState<number | null>(null);
+
+  // Lobby settings
+  const { autoCombat } = useLobby();
+  const autoCombatRef = useRef(autoCombat);
+  autoCombatRef.current = autoCombat;
 
   // Challenger system
   const { equippedChallenger, addShards } = useChallenger();
@@ -1145,17 +1150,166 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           sounds.play('cardPlay_spell');
           dispatchRef.current({ type: 'CLEAR_PENDING_SPELLS', payload: { playerId: currentPlayer.id } });
 
-          // After spells resolve, continue with AI creature attacks.
+          // After spells resolve, continue with creature attacks.
           // The effect will NOT re-run because phase/currentPlayerIndex haven't changed.
           if (!currentPlayer.isHuman) {
             gameLoopRef.current = setTimeout(runAiCombatLoop, 400);
+          } else if (autoCombatRef.current) {
+            gameLoopRef.current = setTimeout(runPlayerAutoCombatLoop, 400);
           }
         }, 400);
         return;
       }
 
+      // ── Player auto-combat loop ─────────────────────────────────────────
+      const runPlayerAutoCombatLoop = () => {
+        const state = stateRef.current;
+        const cp = state.players[state.currentPlayerIndex];
+        if (!cp || !cp.isHuman || state.phase !== 'combat') return;
+
+        const untapped = cp.field.filter(c => !c.tapped && !c.hasAttackedThisTurn && !c.stunned);
+        if (untapped.length === 0) {
+          dispatchRef.current({ type: 'ADVANCE_PHASE' });
+          return;
+        }
+
+        const enemy = state.players.find(p => !p.isHuman && p.hp > 0);
+        if (!enemy) {
+          dispatchRef.current({ type: 'ADVANCE_PHASE' });
+          return;
+        }
+
+        const attacker = untapped[0];
+        const enemyCards = enemy.field;
+
+        // Target: lowest-currentDef enemy card; hero only if field is empty
+        const targetPlayerId = enemy.id;
+        let targetInstanceId: string | undefined;
+        if (enemyCards.length > 0) {
+          const lowestHp = [...enemyCards].sort((a, b) => a.currentDef - b.currentDef)[0];
+          targetInstanceId = lowestHp.instanceId;
+        }
+
+        // Pick strongest ready ability (highest effective damage)
+        const abilities = getCardAbilities(attacker);
+        const readyAbilities = abilities
+          .map((ab, i) => ({ ab, i }))
+          .filter(({ i }) => (attacker.abilityCooldowns?.[i] ?? 0) === 0);
+
+        const cEffects = equippedEffectsRef.current;
+
+        if (readyAbilities.length > 0) {
+          const best = readyAbilities.reduce((a, b) =>
+            (attacker.currentAtk + attacker.tempAtkBonus + a.ab.atkDelta) >=
+            (attacker.currentAtk + attacker.tempAtkBonus + b.ab.atkDelta) ? a : b,
+          );
+          const dmg = attacker.currentAtk + attacker.tempAtkBonus + best.ab.atkDelta;
+
+          dispatchRef.current({
+            type: 'USE_ABILITY',
+            payload: { attackerPlayerId: cp.id, attackerInstanceId: attacker.instanceId, abilityIndex: best.i, targetPlayerId, targetInstanceId },
+          });
+          setCombatAnim({ targetId: targetInstanceId || targetPlayerId.toString(), damage: dmg, attackerId: attacker.instanceId });
+          setTimeout(() => setCombatAnim(null), 650);
+          sounds.play('attack');
+          dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${attacker.name} uses ${best.ab.name} for ${dmg} damage!`, type: 'damage' } });
+
+          if (targetInstanceId) {
+            const tgt = enemy.field.find(c => c.instanceId === targetInstanceId);
+            if (tgt && tgt.currentDef <= dmg) {
+              const doubleKill = cEffects.includes('double_kill_gold') || cEffects.includes('bonus_aether_4');
+              dispatchRef.current({ type: 'ADD_GOLD', payload: { playerId: cp.id, amount: doubleKill ? 100 : 50 } });
+              dispatchRef.current({ type: 'RECORD_KILL', payload: { playerId: cp.id } });
+              sounds.play('gold');
+              triggerAchievement('kill_5_creatures', 1);
+              if (cEffects.includes('steal_pct_on_kill')) {
+                const stolen = Math.max(1, Math.floor(enemy.gold * 0.05));
+                dispatchRef.current({ type: 'STEAL_GOLD', payload: { fromPlayerId: enemy.id, toPlayerId: cp.id, amount: stolen } });
+              }
+              if (cEffects.includes('heal_on_kill_2')) {
+                dispatchRef.current({ type: 'HEAL', payload: { targetPlayerId: cp.id, amount: 2 } });
+              }
+              if (attacker.keywords?.includes('heal_on_kill')) {
+                dispatchRef.current({ type: 'HEAL', payload: { targetPlayerId: cp.id, amount: 2 } });
+              }
+              if (cp.statBuffs.includes('bloodrite')) {
+                dispatchRef.current({ type: 'HEAL', payload: { targetPlayerId: cp.id, amount: 1 } });
+              }
+            }
+          }
+        } else {
+          // Regular attack
+          let dmg = attacker.currentAtk + attacker.tempAtkBonus;
+          if (cp.statBuffs.includes('stormrazor') && !attacker.hasAttackedThisTurn) dmg += 1;
+
+          // Thornmail
+          const targetOwnerState = state.players.find(p => p.id === targetPlayerId);
+          if (targetOwnerState?.statBuffs.includes('thornmail') && targetInstanceId) {
+            dispatchRef.current({ type: 'DAMAGE', payload: { targetPlayerId: cp.id, targetInstanceId: attacker.instanceId, amount: 1 } });
+          }
+
+          // Kill-steal for hero attack
+          if (!targetInstanceId && enemy.gold > 0) {
+            const resist = enemy.perks.includes('perk_resist_1') ? 1 : 0;
+            const effectiveDmg = Math.max(0, dmg - resist);
+            const wouldKill = enemy.hp - effectiveDmg <= 0 && !(enemy.perks.includes('perk_undying') && !enemy.undyingUsed);
+            if (wouldKill) {
+              const stolen = Math.floor(enemy.gold * 0.4);
+              if (stolen > 0) {
+                dispatchRef.current({ type: 'STEAL_GOLD', payload: { fromPlayerId: enemy.id, toPlayerId: cp.id, amount: stolen } });
+                dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name} plundered ${stolen}g from ${enemy.name}!`, type: 'gold' } });
+                sounds.play('gold');
+              }
+            }
+          }
+
+          dispatchRef.current({
+            type: 'ATTACK',
+            payload: { attackerPlayerId: cp.id, attackerInstanceId: attacker.instanceId, targetPlayerId, targetInstanceId, damageOverride: dmg },
+          });
+          setCombatAnim({ targetId: targetInstanceId || targetPlayerId.toString(), damage: dmg, attackerId: attacker.instanceId });
+          setTimeout(() => setCombatAnim(null), 650);
+
+          if (targetInstanceId && targetOwnerState) {
+            const tgt = targetOwnerState.field.find(c => c.instanceId === targetInstanceId);
+            if (tgt) {
+              applyStatusOnHit(cp, attacker, targetOwnerState, targetInstanceId);
+              const resist = targetOwnerState.perks.includes('perk_resist_1') ? 1 : 0;
+              if (tgt.currentDef <= (dmg - resist)) {
+                const doubleKill = cEffects.includes('double_kill_gold') || cEffects.includes('bonus_aether_4');
+                dispatchRef.current({ type: 'ADD_GOLD', payload: { playerId: cp.id, amount: doubleKill ? 100 : 50 } });
+                dispatchRef.current({ type: 'RECORD_KILL', payload: { playerId: cp.id } });
+                sounds.play('gold');
+                triggerAchievement('kill_5_creatures', 1);
+                if (cEffects.includes('steal_pct_on_kill')) {
+                  const stolen = Math.max(1, Math.floor(enemy.gold * 0.05));
+                  dispatchRef.current({ type: 'STEAL_GOLD', payload: { fromPlayerId: enemy.id, toPlayerId: cp.id, amount: stolen } });
+                  dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name} plunders ${stolen}g!`, type: 'gold' } });
+                }
+                if (cEffects.includes('heal_on_kill_2')) {
+                  dispatchRef.current({ type: 'HEAL', payload: { targetPlayerId: cp.id, amount: 2 } });
+                }
+                if (attacker.keywords?.includes('heal_on_kill')) {
+                  dispatchRef.current({ type: 'HEAL', payload: { targetPlayerId: cp.id, amount: 2 } });
+                }
+                if (cp.statBuffs.includes('bloodrite')) {
+                  dispatchRef.current({ type: 'HEAL', payload: { targetPlayerId: cp.id, amount: 1 } });
+                }
+              }
+            }
+          }
+
+          sounds.play('attack');
+          dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${attacker.name} attacks for ${dmg} damage!`, type: 'damage' } });
+        }
+
+        gameLoopRef.current = setTimeout(runPlayerAutoCombatLoop, 700);
+      };
+
       if (!currentPlayer.isHuman) {
         gameLoopRef.current = setTimeout(runAiCombatLoop, 900);
+      } else if (autoCombatRef.current) {
+        gameLoopRef.current = setTimeout(runPlayerAutoCombatLoop, 900);
       }
       return;
     }
