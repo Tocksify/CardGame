@@ -2,7 +2,11 @@ import { useLocation } from 'wouter';
 import { sounds } from '../lib/sounds';
 import { useLobby, Difficulty, DIFFICULTY_CFG } from '../context/LobbyContext';
 import { useGame } from '../context/GameContext';
-import { ArrowLeft, User, UserPlus, X, Swords, ScrollText } from 'lucide-react';
+import { useChallenger } from '../context/ChallengerContext';
+import { getChallengerById, RARITY_COLORS, RARITY_LABEL } from '../lib/challengers';
+import { getCardTemplate } from '../lib/cards';
+import { generateId } from '../store/gameStore';
+import { ArrowLeft, User, UserPlus, X, Swords, ScrollText, Zap } from 'lucide-react';
 
 const DIFFICULTIES: Difficulty[] = ['Novice', 'Easy', 'Normal', 'Hard', 'Expert', 'Nightmare'];
 
@@ -15,6 +19,9 @@ const DIFF_COLOR: Record<Difficulty, string> = {
   Nightmare: 'bg-purple-900 border-purple-500',
 };
 
+// Legendary character template IDs for the start_legendary effect
+const LEGENDARY_CHAR_IDS = ['c10', 'c11', 'h3', 'h9', 'h18', 'h19', 'l1', 'l2'];
+
 export default function LobbyPage() {
   const [, setLocation] = useLocation();
   const {
@@ -26,16 +33,57 @@ export default function LobbyPage() {
     getDifficultyConfig,
   } = useLobby();
   const { dispatch } = useGame();
+  const { save, equippedChallenger } = useChallenger();
 
   const handleStart = () => {
     sounds.play('uiClick');
-    const players = generatePlayers({ gameMode, matchType: 'singleplayer', ranked: false });
+    let players = generatePlayers({ gameMode, matchType: 'singleplayer', ranked: false });
+
+    // Apply challenger starter effects to the human player
+    if (equippedChallenger) {
+      const effects = equippedChallenger.effectKeys;
+      players = players.map(p => {
+        if (!p.isHuman) return p;
+        let modified = { ...p };
+
+        if (effects.includes('bonus_gold_start_300')) modified.gold += 300;
+        if (effects.includes('bonus_hp_10')) { modified.maxHp += 10; modified.hp += 10; }
+        if (effects.includes('bonus_aether_3')) { modified.aetherBonus += 3; modified.aether += 3; }
+        if (effects.includes('bonus_aether_4')) { modified.aetherBonus += 4; modified.aether += 4; }
+
+        // Perk-based effects applied at start
+        const perksToAdd: string[] = [];
+        if (effects.includes('perk_poison_immune')) perksToAdd.push('perk_poison_immune');
+        if (effects.includes('perk_stun_immune')) perksToAdd.push('perk_stun_immune');
+        if (effects.includes('perk_draw_1')) perksToAdd.push('perk_draw_1');
+        if (effects.includes('perk_resist_1')) perksToAdd.push('perk_resist_1');
+        if (effects.includes('perk_undying')) perksToAdd.push('perk_undying');
+        if (effects.includes('perk_deploy_bonus')) perksToAdd.push('perk_deploy_bonus');
+        if (perksToAdd.length > 0) modified.perks = [...modified.perks, ...perksToAdd];
+
+        // Start with a random legendary card in hand
+        if (effects.includes('start_legendary')) {
+          const shuffled = [...LEGENDARY_CHAR_IDS].sort(() => Math.random() - 0.5);
+          for (const tplId of shuffled) {
+            const tpl = getCardTemplate(tplId);
+            if (tpl) {
+              modified.hand = [...modified.hand, { ...tpl, instanceId: `card_${generateId()}` }];
+              break;
+            }
+          }
+        }
+
+        return modified;
+      });
+    }
+
     dispatch({ type: 'START_GAME', payload: { players, gameMode, matchType: 'singleplayer', ranked: false, difficulty } });
-    // Draft mode: show pre-game card selection screen first
     setLocation(gameMode === 'draft' ? '/pre-draft' : '/game');
   };
 
   const cfg = getDifficultyConfig(difficulty);
+  const equipped = equippedChallenger;
+  const rarityColorClass = equipped ? RARITY_COLORS[equipped.rarity] : '';
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground p-6 md:p-10 overflow-y-auto">
@@ -49,6 +97,32 @@ export default function LobbyPage() {
             SINGLE PLAYER
           </h1>
         </header>
+
+        {/* Equipped Challenger Banner */}
+        {equipped ? (
+          <div
+            className={`mb-5 flex items-center gap-3 border p-3 cursor-pointer hover:opacity-90 transition-opacity ${rarityColorClass.split(' ')[0]} bg-card`}
+            onClick={() => { sounds.play('uiClick'); setLocation('/challengers'); }}
+          >
+            <span className="text-3xl">{equipped.icon}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="font-display text-sm font-bold text-foreground">{equipped.name} <span className={`font-normal text-xs ${rarityColorClass.split(' ')[1]}`}>{equipped.title}</span></p>
+                <span className={`text-[10px] px-1.5 border ${rarityColorClass} font-bold uppercase`}>{RARITY_LABEL[equipped.rarity]}</span>
+              </div>
+              <p className="text-xs text-muted-foreground truncate">⚡ {equipped.abilityName}: {equipped.abilityDescription.split('.')[0]}.</p>
+            </div>
+            <span className="text-xs text-muted-foreground shrink-0">Change →</span>
+          </div>
+        ) : (
+          <button
+            onClick={() => { sounds.play('uiClick'); setLocation('/challengers'); }}
+            className="mb-5 w-full flex items-center justify-center gap-2 border border-dashed border-border p-3 text-muted-foreground hover:border-primary/50 hover:text-foreground transition-colors text-sm"
+          >
+            <Zap size={14} />
+            No Challenger equipped — tap to select one
+          </button>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Left: Settings */}
@@ -65,7 +139,7 @@ export default function LobbyPage() {
                   <Swords size={18} className="mt-0.5 shrink-0" />
                   <div>
                     <div className="font-semibold text-sm">8 Card Draw</div>
-                    <div className="text-xs opacity-70 mt-0.5">Start with 8 cards drawn from the pool. Draw 1 card each turn.</div>
+                    <div className="text-xs opacity-70 mt-0.5">Start with 8 cards drawn from the pool. Draw 2 cards each turn.</div>
                   </div>
                 </button>
                 <button
@@ -132,17 +206,17 @@ export default function LobbyPage() {
               {/* Human */}
               <div className="flex items-center justify-between bg-primary/10 border border-primary/30 p-3">
                 <div className="flex items-center gap-3">
-                  <User className="text-primary" size={18} />
+                  <span className="text-xl">{equipped?.icon ?? '⚔️'}</span>
                   <div>
-                    <div className="font-semibold text-sm">YOU</div>
-                    <div className="text-xs text-muted-foreground">Human · 30 HP</div>
+                    <div className="font-semibold text-sm">{equipped ? equipped.name : 'YOU'}</div>
+                    <div className="text-xs text-muted-foreground">Human · {equipped?.effectKeys.includes('bonus_hp_10') ? '40' : '30'} HP</div>
                   </div>
                 </div>
                 <span className="bg-primary text-primary-foreground text-xs px-2 py-1 font-bold">P1</span>
               </div>
 
               {/* AI Players */}
-              {aiPlayers.map((ai, i) => (
+              {aiPlayers.map((ai) => (
                 <div key={ai.id} className="flex items-center justify-between bg-secondary/50 border border-border p-3">
                   <div className="flex items-center gap-3">
                     <User className="text-muted-foreground" size={18} />

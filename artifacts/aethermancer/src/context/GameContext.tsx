@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useReducer, useEffect, useRef, useState } from 'react';
-import { GameState, GameAction, gameReducer, initialGameState, Player, StagedSpell, CardInstance, generateId, AiDifficulty } from '../store/gameStore';
+import { GameState, GameAction, gameReducer, initialGameState, Player, StagedSpell, CardInstance, FieldCard, generateId, AiDifficulty } from '../store/gameStore';
 import { getSettings } from '../store/settings';
 import { sounds, SoundName, ELEMENT_SOUNDS } from '../lib/sounds';
 import { SHOP_ITEMS, getCardTemplate, generateShopRotation, generateDraftOptions, drawFromPool, CardTemplate } from '../lib/cards';
 import { loadAchievements, saveAchievements, Achievement } from '../store/achievements';
 import { DIFFICULTY_CFG } from './LobbyContext';
 import { loadAccount, applyEloChange } from '../store/account';
+import { useChallenger } from './ChallengerContext';
+import { SHARDS_PER_WIN } from '../store/challengers';
 
 const SHOP_ROTATION_SECONDS = 180;
 const BUY_PHASE_SECONDS = 30;
@@ -46,6 +48,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [shopRotationIds, setShopRotationIds] = useState<string[]>(() => generateShopRotation());
   const [shopRotationTimeLeft, setShopRotationTimeLeft] = useState(SHOP_ROTATION_SECONDS);
   const [buyPhaseTimeLeft, setBuyPhaseTimeLeft] = useState<number | null>(null);
+
+  // Challenger system
+  const { equippedChallenger, addShards } = useChallenger();
+  const equippedEffectsRef = useRef<string[]>([]);
+  equippedEffectsRef.current = equippedChallenger?.effectKeys ?? [];
+  const challengerReviveUsedRef = useRef(false);
 
   useEffect(() => { setAchievements(loadAchievements()); }, []);
 
@@ -454,10 +462,27 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         applyStatusOnHit(player, attacker, targetOwner, targetInstanceId);
         const resist = targetOwner.perks.includes('perk_resist_1') ? 1 : 0;
         if (targetCreature.currentDef <= (dmg - resist)) {
-          dispatch({ type: 'ADD_GOLD', payload: { playerId: player.id, amount: 50 } });
+          const cEffects = equippedEffectsRef.current;
+          const doubleKill = player.isHuman && (cEffects.includes('double_kill_gold') || cEffects.includes('bonus_aether_4'));
+          dispatch({ type: 'ADD_GOLD', payload: { playerId: player.id, amount: doubleKill ? 100 : 50 } });
           dispatch({ type: 'RECORD_KILL', payload: { playerId: player.id } });
           sounds.play('gold');
-          if (player.isHuman) triggerAchievement('kill_5_creatures', 1);
+          if (player.isHuman) {
+            triggerAchievement('kill_5_creatures', 1);
+            // Challenger: steal on kill
+            if (cEffects.includes('steal_pct_on_kill')) {
+              const enemy = gameState.players.find(p => p.id !== player.id);
+              if (enemy && enemy.gold > 0) {
+                const stolen = Math.max(1, Math.floor(enemy.gold * 0.05));
+                dispatch({ type: 'STEAL_GOLD', payload: { fromPlayerId: enemy.id, toPlayerId: player.id, amount: stolen } });
+                dispatch({ type: 'ADD_LOG', payload: { msg: `Zeth plunders ${stolen}g!`, type: 'gold' } });
+              }
+            }
+            // Challenger: heal on kill
+            if (cEffects.includes('heal_on_kill_2')) {
+              dispatch({ type: 'HEAL', payload: { targetPlayerId: player.id, amount: 2 } });
+            }
+          }
           if (attacker.keywords?.includes('heal_on_kill')) {
             dispatch({ type: 'HEAL', payload: { targetPlayerId: player.id, amount: 2 } });
           }
@@ -478,7 +503,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const item = SHOP_ITEMS.find(i => i.id === shopItemId);
     if (!item) return;
     const player = gameState.players[gameState.currentPlayerIndex];
-    if (player.gold < item.cost) return;
+    // Challenger: 15% shop discount
+    const cEffects = equippedEffectsRef.current;
+    const effectiveCost = player.isHuman && cEffects.includes('discount_shop_15')
+      ? Math.floor(item.cost * 0.85)
+      : item.cost;
+    if (player.gold < effectiveCost) return;
 
     if (!item.stackable && item.type !== 'card') {
       const alreadyInInventory = player.inventory.some(i => i.itemId === item.id);
@@ -493,10 +523,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if ((item.type === 'card' || item.type === 'artifact') && item.cardTemplateId) {
       const tpl = getCardTemplate(item.cardTemplateId);
       if (tpl) {
-        dispatch({ type: 'BUY_SHOP_ITEM', payload: { playerId: player.id, itemTemplateId: item.id, cost: item.cost, itemType: 'card', name: tpl.name, description: tpl.description, cardTemplate: tpl } });
+        dispatch({ type: 'BUY_SHOP_ITEM', payload: { playerId: player.id, itemTemplateId: item.id, cost: effectiveCost, itemType: 'card', name: tpl.name, description: tpl.description, cardTemplate: tpl } });
       }
     } else {
-      dispatch({ type: 'BUY_SHOP_ITEM', payload: { playerId: player.id, itemTemplateId: item.id, cost: item.cost, itemType: item.type, name: item.name, description: item.description, effectKey: item.effectKey } });
+      dispatch({ type: 'BUY_SHOP_ITEM', payload: { playerId: player.id, itemTemplateId: item.id, cost: effectiveCost, itemType: item.type, name: item.name, description: item.description, effectKey: item.effectKey } });
     }
 
     sounds.play('gold');
@@ -707,10 +737,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const eloAppliedRef = useRef(false);
 
   useEffect(() => {
-    // Reset ELO guard when a new game starts
+    // Reset ELO guard and challenger revive when a new game starts
     const phase = gameState.phase as string;
     if (phase === 'countdown') {
       eloAppliedRef.current = false;
+      challengerReviveUsedRef.current = false;
       return;
     }
     if (phase === 'gameover') {
@@ -720,6 +751,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         triggerAchievement('first_win');
         triggerAchievement('win_3_games', 1);
         if (!winner.damageTakenThisGame) triggerAchievement('win_no_damage');
+        // Award Arcane Shards for winning
+        addShards(SHARDS_PER_WIN);
       } else {
         sounds.play('defeat');
       }
@@ -793,6 +826,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         if (cp.isHuman) {
           sounds.play('gold');
           triggerAchievement('earn_50_gold', goldGain);
+          // Challenger: heal on draw / heal per turn
+          const cEffects = equippedEffectsRef.current;
+          if (cEffects.includes('heal_on_draw_1') || cEffects.includes('heal_per_turn_1')) {
+            dispatchRef.current({ type: 'HEAL', payload: { targetPlayerId: cp.id, amount: 1 } });
+          }
         }
 
         // Both modes: draw 2 cards per turn from pool
@@ -875,6 +913,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        // Capture human field before attack for revive check
+        const humanBeforeAttack = state.players.find(p => p.isHuman);
+        const humanFieldBefore: FieldCard[] = humanBeforeAttack ? [...humanBeforeAttack.field] : [];
+
         dispatchRef.current({
           type: 'ATTACK',
           payload: {
@@ -887,6 +929,42 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         });
         setCombatAnim({ targetId: target.targetInstanceId || target.targetPlayerId.toString(), damage: dmg, attackerId: attacker.instanceId });
         setTimeout(() => setCombatAnim(null), 650);
+
+        // Challenger: revive first death
+        if (
+          target.targetInstanceId &&
+          equippedEffectsRef.current.includes('revive_first_death') &&
+          !challengerReviveUsedRef.current
+        ) {
+          setTimeout(() => {
+            const newState = stateRef.current;
+            const humanAfter = newState.players.find(p => p.isHuman);
+            if (!humanAfter) return;
+            const currIds = new Set(humanAfter.field.map(c => c.instanceId));
+            const deadCards = humanFieldBefore.filter(c => !currIds.has(c.instanceId));
+            if (deadCards.length > 0) {
+              challengerReviveUsedRef.current = true;
+              const dead = deadCards[0];
+              const revivedCard: CardInstance = {
+                templateId: dead.templateId,
+                instanceId: `card_${generateId()}`,
+                name: dead.name,
+                type: dead.type,
+                cost: dead.cost,
+                atk: dead.atk,
+                def: dead.def,
+                description: dead.description,
+                rarity: dead.rarity,
+                keywords: dead.keywords,
+                effect: dead.effect,
+                artTheme: dead.artTheme,
+              };
+              dispatchRef.current({ type: 'GIVE_STARTING_CARDS', payload: { playerId: humanAfter.id, cards: [revivedCard] } });
+              dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `✨ Draela's spirit revives ${dead.name} — returned to your hand!`, type: 'card' } });
+              announce(`${dead.name} REVIVED!`);
+            }
+          }, 200);
+        }
 
         // AI status on hit
         if (target.targetInstanceId) {
@@ -927,7 +1005,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         gameLoopRef.current = setTimeout(() => {
           const state = stateRef.current;
           const cp = state.players[state.currentPlayerIndex];
-          const spellBonus = cp?.statBuffs.includes('rabadon') ? 2 : 0;
+          const spellBonus = (cp?.statBuffs.includes('rabadon') ? 2 : 0)
+            + (equippedEffectsRef.current.includes('spell_power_2') && cp?.isHuman ? 2 : 0)
+            + (equippedEffectsRef.current.includes('spell_power_1') && cp?.isHuman ? 1 : 0);
           spells.forEach(spell => {
             if (spell.effect) handleSpellEffect(currentPlayer.id, spell.instanceId, spell.effect, spell.targetId, spellBonus);
             dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${currentPlayer.name}'s ${spell.name} fires!`, type: 'card' } });
