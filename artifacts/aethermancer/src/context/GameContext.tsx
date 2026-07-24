@@ -541,7 +541,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               if (enemy && enemy.gold > 0) {
                 const stolen = Math.max(1, Math.floor(enemy.gold * 0.05));
                 dispatch({ type: 'STEAL_GOLD', payload: { fromPlayerId: enemy.id, toPlayerId: player.id, amount: stolen } });
-                dispatch({ type: 'ADD_LOG', payload: { msg: `Zeth plunders ${stolen}g!`, type: 'gold' } });
+                dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} plunders ${stolen}g!`, type: 'gold' } });
               }
             }
             // Challenger: heal on kill
@@ -587,13 +587,35 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     sounds.play('attack');
     dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name}'s ${attacker.name} uses ${ability.name} for ${dmg} damage!`, type: 'damage' } });
 
-    // Kill bonus if target card is destroyed
+    // Kill bonus if target card is destroyed — same rules as auto-combat loop
     if (targetOwner && targetInstanceId) {
       const targetCard = targetOwner.field.find(c => c.instanceId === targetInstanceId);
       if (targetCard && targetCard.currentDef <= dmg) {
-        dispatch({ type: 'ADD_GOLD', payload: { playerId: player.id, amount: 50 } });
+        const cEffects = equippedEffectsRef.current;
+        const doubleKill = player.isHuman && (cEffects.includes('double_kill_gold') || cEffects.includes('bonus_aether_4'));
+        dispatch({ type: 'ADD_GOLD', payload: { playerId: player.id, amount: doubleKill ? 100 : 50 } });
         dispatch({ type: 'RECORD_KILL', payload: { playerId: player.id } });
         sounds.play('gold');
+        if (player.isHuman) {
+          triggerAchievement('kill_5_creatures', 1);
+          if (cEffects.includes('steal_pct_on_kill')) {
+            const enemy = gameState.players.find(p => p.id !== player.id);
+            if (enemy && enemy.gold > 0) {
+              const stolen = Math.max(1, Math.floor(enemy.gold * 0.05));
+              dispatch({ type: 'STEAL_GOLD', payload: { fromPlayerId: enemy.id, toPlayerId: player.id, amount: stolen } });
+              dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} plunders ${stolen}g!`, type: 'gold' } });
+            }
+          }
+          if (cEffects.includes('heal_on_kill_2')) {
+            dispatch({ type: 'HEAL', payload: { targetPlayerId: player.id, amount: 2 } });
+          }
+        }
+        if (attacker.keywords?.includes('heal_on_kill')) {
+          dispatch({ type: 'HEAL', payload: { targetPlayerId: player.id, amount: 2 } });
+        }
+        if (player.statBuffs.includes('bloodrite')) {
+          dispatch({ type: 'HEAL', payload: { targetPlayerId: player.id, amount: 1 } });
+        }
       }
     }
   };
@@ -1177,7 +1199,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       }
 
       // ── Player auto-combat loop ─────────────────────────────────────────
-      const runPlayerAutoCombatLoop = () => {
+      // Declared as a function (not const) so it is hoisted and accessible
+      // inside the spell-resolution closure above without a TDZ error.
+      function runPlayerAutoCombatLoop() {
         const state = stateRef.current;
         const cp = state.players[state.currentPlayerIndex];
         if (!cp || !cp.isHuman || state.phase !== 'combat') return;
@@ -1319,7 +1343,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
 
         gameLoopRef.current = setTimeout(runPlayerAutoCombatLoop, 700);
-      };
+      }
 
       if (!currentPlayer.isHuman) {
         gameLoopRef.current = setTimeout(runAiCombatLoop, 900);

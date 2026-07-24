@@ -1050,12 +1050,28 @@ export default function GamePage() {
 
         <div className="flex items-center gap-2 relative">
           {equippedChallenger && (
-            <div
-              title={`${equippedChallenger.name} — ${equippedChallenger.title}`}
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-base border-2 shrink-0 ${RARITY_COLORS[equippedChallenger.rarity].split(' ')[0]} ${RARITY_GLOW[equippedChallenger.rarity]}`}
-              style={{ background: 'rgba(10,6,2,0.85)' }}
-            >
-              {equippedChallenger.icon}
+            <div className="relative group shrink-0">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${RARITY_COLORS[equippedChallenger.rarity].split(' ')[0]} ${RARITY_GLOW[equippedChallenger.rarity]}`}
+                style={{
+                  background: 'radial-gradient(circle at 38% 38%, rgba(201,162,39,0.18) 0%, rgba(10,6,2,0.92) 70%)',
+                  fontFamily: 'serif',
+                }}
+              >
+                <span
+                  className="text-sm font-black leading-none select-none"
+                  style={{ color: '#c9a227', textShadow: '0 0 6px rgba(201,162,39,0.6)' }}
+                >
+                  {equippedChallenger.name.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              {/* Hover name tooltip */}
+              <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap">
+                <div className="px-2 py-1 text-[10px] font-display font-bold uppercase tracking-widest"
+                     style={{ background: 'rgba(10,6,2,0.95)', border: '1px solid rgba(201,162,39,0.45)', color: '#c9a227' }}>
+                  {equippedChallenger.name}
+                </div>
+              </div>
             </div>
           )}
           <div className="flex items-center gap-0.5">
