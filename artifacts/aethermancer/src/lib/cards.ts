@@ -43,6 +43,12 @@ const ABILITY_THEMES: Record<string, [string, string, string]> = {
   electric:  ['Shock',         'Arc Lightning',        'Thunderstrike'],
   huntress:  ['Arrow Shot',    'Piercing Shot',        'Deadshot'],
   unknown:   ['Enigma Strike', 'Void Pulse',           'Annihilation'],
+  nature:    ['Vine Lash',     'Overgrowth',           "Nature's Fury"],
+  blood:     ['Blood Strike',  'Hemorrhage',           'Bloodbath'],
+  crystal:   ['Crystal Slash', 'Prismatic Burst',      'Crystal Annihilation'],
+  wind:      ['Gust Strike',   'Cyclone Slash',        'Hurricane'],
+  arcane:    ['Arcane Strike', 'Mana Surge',           'Arcane Overload'],
+  bone:      ['Bone Strike',   'Skeletal Crush',       'Death Rattle'],
 };
 
 /**
@@ -643,6 +649,279 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     description: 'From before time itself. Taunt. Heavy Armor. Poison on every hit.',
     keywords: ['taunt', 'heavy_armor', 'poison_on_hit'],
     rarity: 'secret', artTheme: 'earth',
+  },
+
+  // ── New Common Characters ─────────────────────────────────────────────────
+  {
+    templateId: 'nh1', name: 'Marsh Shaman', type: 'character', cost: 3,
+    atk: 2, def: 4,
+    description: 'A swamp druid who channels toxic miasma through every strike.',
+    keywords: ['poison_on_hit'],
+    rarity: 'common', artTheme: 'poison',
+  },
+  {
+    templateId: 'nh2', name: 'Crystal Golem', type: 'character', cost: 3,
+    atk: 1, def: 8,
+    description: 'A living wall of prismatic crystal. Enemies must face it first.',
+    keywords: ['taunt'],
+    rarity: 'common', artTheme: 'crystal',
+  },
+  {
+    templateId: 'nh3', name: 'Wind Dancer', type: 'character', cost: 2,
+    atk: 3, def: 1,
+    description: 'Moves with the breeze. Strikes before enemies can react.',
+    keywords: ['haste'],
+    rarity: 'common', artTheme: 'wind',
+  },
+  {
+    templateId: 'nh4', name: 'Blood Acolyte', type: 'character', cost: 2,
+    atk: 1, def: 3,
+    description: 'Each fallen enemy restores vitality to your hero.',
+    keywords: ['heal_on_kill'],
+    rarity: 'common', artTheme: 'blood',
+  },
+  {
+    templateId: 'nh5', name: 'Bone Archer', type: 'character', cost: 2,
+    atk: 3, def: 2,
+    description: 'Fires bone-tipped arrows laced with deadly venom.',
+    keywords: ['poison_on_hit'],
+    rarity: 'common', artTheme: 'bone',
+  },
+  {
+    templateId: 'nh6', name: 'Arcane Novice', type: 'character', cost: 2,
+    atk: 2, def: 2,
+    description: 'A student of pure magic, channeling raw arcane power.',
+    rarity: 'common', artTheme: 'arcane',
+  },
+  {
+    templateId: 'nh7', name: 'Peat Striker', type: 'character', cost: 2,
+    atk: 2, def: 3,
+    description: 'A bog-born brawler who stuns enemies with earth-shaking blows.',
+    keywords: ['stun_on_hit'],
+    rarity: 'common', artTheme: 'earth',
+  },
+
+  // ── New Rare Characters ───────────────────────────────────────────────────
+  {
+    templateId: 'nh8', name: 'Crimson Berserker', type: 'character', cost: 4,
+    atk: 6, def: 2,
+    description: 'A blood-crazed warrior who charges into battle with reckless fury.',
+    keywords: ['haste'],
+    rarity: 'rare', artTheme: 'blood',
+  },
+  {
+    templateId: 'nh9', name: 'Crystal Specter', type: 'character', cost: 3,
+    atk: 4, def: 2,
+    description: 'A being of pure crystal light that phases through defenses unseen.',
+    keywords: ['stealth'],
+    rarity: 'rare', artTheme: 'crystal',
+  },
+  {
+    templateId: 'nh10', name: 'Windrunner', type: 'character', cost: 3,
+    atk: 5, def: 1,
+    description: 'Lightning-fast winds leave enemies reeling. Strikes first and stuns.',
+    keywords: ['haste', 'stun_on_hit'],
+    rarity: 'rare', artTheme: 'wind',
+  },
+  {
+    templateId: 'nh11', name: 'Bone Reaper', type: 'character', cost: 4,
+    atk: 3, def: 5,
+    description: 'A skeletal harvester that leaves cursed wounds on every strike.',
+    keywords: ['poison_on_hit'],
+    rarity: 'rare', artTheme: 'bone',
+  },
+  {
+    templateId: 'nh12', name: 'Storm Channeler', type: 'character', cost: 4,
+    atk: 5, def: 2,
+    description: 'A conduit of raw storm energy. Strikes first; shocks on contact.',
+    keywords: ['electric', 'haste'],
+    rarity: 'rare', artTheme: 'storm',
+  },
+  {
+    templateId: 'nh13', name: 'Lava Colossus', type: 'character', cost: 5,
+    atk: 2, def: 9,
+    description: 'An immovable pillar of molten rock. Enemies must break against it.',
+    keywords: ['taunt', 'flame_aura'],
+    rarity: 'rare', artTheme: 'fire',
+  },
+  {
+    templateId: 'nh14', name: 'Nature Warden', type: 'character', cost: 4,
+    atk: 3, def: 6,
+    description: 'A forest guardian that roots itself and heals the hero with each victory.',
+    keywords: ['taunt', 'heal_on_kill'],
+    rarity: 'rare', artTheme: 'nature',
+  },
+  {
+    templateId: 'nh15', name: 'Voidborn Shade', type: 'character', cost: 3,
+    atk: 5, def: 2,
+    description: 'Emerges from the void, leaving necrotic wounds on every strike.',
+    keywords: ['stealth', 'poison_on_hit'],
+    rarity: 'rare', artTheme: 'void',
+  },
+  {
+    templateId: 'nh16', name: 'Thunder Warden', type: 'character', cost: 4,
+    atk: 4, def: 4,
+    description: 'Arrives with a thunderclap and stuns anything it touches.',
+    keywords: ['haste', 'stun_on_hit'],
+    rarity: 'rare', artTheme: 'electric',
+  },
+
+  // ── New Legendary Characters ──────────────────────────────────────────────
+  {
+    templateId: 'nh17', name: 'Sylvan Titan', type: 'character', cost: 6,
+    atk: 6, def: 6,
+    description: 'An ancient forest colossus. Taunt. All slain foes restore life to its master.',
+    keywords: ['taunt', 'heal_on_kill'],
+    rarity: 'legendary', artTheme: 'nature',
+  },
+  {
+    templateId: 'nh18', name: 'Bloodlord Kael', type: 'character', cost: 6,
+    atk: 8, def: 3,
+    description: 'The feared lord of bloodshed. Charges instantly and poisons all wounds.',
+    keywords: ['haste', 'poison_on_hit'],
+    rarity: 'legendary', artTheme: 'blood',
+  },
+  {
+    templateId: 'nh19', name: 'Grand Arcanist', type: 'character', cost: 7,
+    atk: 5, def: 7,
+    description: 'A master of arcane barriers. Magic itself is their shield (Heavy Armor).',
+    keywords: ['heavy_armor'],
+    rarity: 'legendary', artTheme: 'arcane',
+  },
+  {
+    templateId: 'nh20', name: 'Osseus Dragon', type: 'character', cost: 8,
+    atk: 5, def: 9,
+    description: 'A skeletal dragon of immense endurance. Taunt. Heavy Armor.',
+    keywords: ['taunt', 'heavy_armor'],
+    rarity: 'legendary', artTheme: 'dragon',
+  },
+  {
+    templateId: 'nh21', name: 'Void Reaper', type: 'character', cost: 6,
+    atk: 9, def: 2,
+    description: 'The scythe of the void. Bypasses guards; every wound rots with poison.',
+    keywords: ['stealth', 'poison_on_hit'],
+    rarity: 'legendary', artTheme: 'void',
+  },
+  {
+    templateId: 'nh22', name: 'Tempest King', type: 'character', cost: 7,
+    atk: 8, def: 4,
+    description: 'The sovereign of storms. Strikes immediately and stuns all in its path.',
+    keywords: ['haste', 'stun_on_hit'],
+    rarity: 'legendary', artTheme: 'storm',
+  },
+  {
+    templateId: 'nh23', name: 'Crystal Archon', type: 'character', cost: 7,
+    atk: 5, def: 10,
+    description: 'An ancient guardian of crystalline walls. Enemies must face this fortress.',
+    keywords: ['taunt'],
+    rarity: 'legendary', artTheme: 'crystal',
+  },
+
+  // ── New Secret Characters ─────────────────────────────────────────────────
+  {
+    templateId: 'nh24', name: 'The Eclipse', type: 'character', cost: 9,
+    atk: 8, def: 8,
+    description: 'Neither light nor darkness. It is all things at once, and nothing. Taunt. Stealth. Haste.',
+    keywords: ['taunt', 'stealth', 'haste'],
+    rarity: 'secret', artTheme: 'void',
+  },
+  {
+    templateId: 'nh25', name: 'Terminus', type: 'character', cost: 10,
+    atk: 11, def: 7,
+    description: 'The last thing. The end of all. Heavy Armor. Taunt. It cannot be stopped.',
+    keywords: ['heavy_armor', 'taunt'],
+    rarity: 'secret', artTheme: 'unknown',
+  },
+
+  // ── New Common Spells ─────────────────────────────────────────────────────
+  {
+    templateId: 'ns1', name: 'Verdant Mend', type: 'spell', cost: 2,
+    description: "Nature's essence flows through wounds, restoring 4 HP.",
+    effect: 'heal_4_hero', rarity: 'common',
+  },
+  {
+    templateId: 'ns2', name: 'Bone Shard', type: 'spell', cost: 2,
+    description: 'A cursed bone fragment that festers in the target — 2 poison stacks.',
+    effect: 'poison_target_2', rarity: 'common',
+  },
+
+  // ── New Rare Spells ───────────────────────────────────────────────────────
+  {
+    templateId: 'ns3', name: 'Tempest Bolt', type: 'spell', cost: 3,
+    description: 'A concentrated spear of storm energy tears through armor. 5 damage.',
+    effect: 'dmg_5_target', rarity: 'rare',
+  },
+  {
+    templateId: 'ns4', name: 'Blood Storm', type: 'spell', cost: 4,
+    description: 'A crimson wave crashes across the entire enemy field. 2 damage to all.',
+    effect: 'dmg_2_all_enemies', rarity: 'rare',
+  },
+  {
+    templateId: 'ns5', name: 'Arcane Barrage', type: 'spell', cost: 4,
+    description: 'A barrage of arcane bolts laced with corrupting energy. 2 damage + 4 poison.',
+    effect: 'dmg_2_and_poison_4', rarity: 'rare',
+  },
+
+  // ── New Legendary Spell ───────────────────────────────────────────────────
+  {
+    templateId: 'ns6', name: 'Grand Arcana', type: 'spell', cost: 6,
+    description: 'Pure arcane force focused to a single destructive point. 6 damage to enemy hero.',
+    effect: 'dmg_6_enemy_hero', rarity: 'legendary',
+  },
+
+  // ── New Common Artifacts ──────────────────────────────────────────────────
+  {
+    templateId: 'na1', name: 'Bone Totem', type: 'artifact', cost: 2,
+    description: 'Carved from ancient bone, it hardens all who stand near. +1 DEF to all.',
+    effect: 'aura_def_1', rarity: 'common',
+  },
+
+  // ── New Rare Artifacts ────────────────────────────────────────────────────
+  {
+    templateId: 'na2', name: 'Bloodstone Banner', type: 'artifact', cost: 4,
+    description: 'A banner soaked in warrior blood, rousing allies to fury. +2 ATK to all.',
+    effect: 'aura_atk_2', rarity: 'rare',
+  },
+  {
+    templateId: 'na3', name: 'Crystal Ward', type: 'artifact', cost: 3,
+    description: 'A lattice of crystal energy shielding all allies. +2 DEF to all.',
+    effect: 'aura_def_2', rarity: 'rare',
+  },
+  {
+    templateId: 'na4', name: "Nature's Mantle", type: 'artifact', cost: 3,
+    description: "The forest's wisdom grants its bearer endless insight. Draw a card each turn.",
+    effect: 'aura_draw_1', rarity: 'rare',
+  },
+
+  // ── New Legendary Artifact ────────────────────────────────────────────────
+  {
+    templateId: 'na5', name: 'Void Crown', type: 'artifact', cost: 7,
+    description: 'The crown of the void monarch grants dominion over combat. +2 ATK and +2 DEF to all.',
+    effect: 'aura_atk_2_def_2', rarity: 'legendary',
+  },
+
+  // ── New Common Enchantments ───────────────────────────────────────────────
+  {
+    templateId: 'ne1', name: 'Vine Wrap', type: 'enchantment', cost: 2,
+    description: 'Attach to character: +2/+2. Twisted vines reinforce body and strength.',
+    effect: 'buff_2_2', rarity: 'common',
+  },
+  {
+    templateId: 'ne2', name: 'Crystal Shell', type: 'enchantment', cost: 2,
+    description: 'Attach to character: +0/+4. A coating of prismatic crystal deflects blows.',
+    effect: 'buff_0_4', rarity: 'common',
+  },
+
+  // ── New Rare Enchantments ─────────────────────────────────────────────────
+  {
+    templateId: 'ne3', name: 'Bloodrite Mark', type: 'enchantment', cost: 3,
+    description: 'Attach to character: +3 ATK, -1 DEF. A blood oath drives them to extremes.',
+    effect: 'buff_3_m1', rarity: 'rare',
+  },
+  {
+    templateId: 'ne4', name: 'Storm Brand', type: 'enchantment', cost: 3,
+    description: 'Attach to character: Gains Stun on Hit. Lightning energy crackles through each strike.',
+    effect: 'add_stun_keyword', rarity: 'rare',
   },
 
   // ── Evolutions ────────────────────────────────────────────────────────────

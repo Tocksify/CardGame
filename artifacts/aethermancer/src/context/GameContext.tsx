@@ -8,6 +8,7 @@ import { DIFFICULTY_CFG, useLobby } from './LobbyContext';
 import { loadAccount, applyEloChange } from '../store/account';
 import { useChallenger } from './ChallengerContext';
 import { SHARDS_PER_WIN } from '../store/challengers';
+import { useCodex } from './CodexContext';
 
 const SHOP_ROTATION_SECONDS = 180;
 const BUY_PHASE_SECONDS = 30;
@@ -60,6 +61,20 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const equippedEffectsRef = useRef<string[]>([]);
   equippedEffectsRef.current = equippedChallenger?.effectKeys ?? [];
   const challengerReviveUsedRef = useRef(false);
+
+  // Codex discovery: mark cards as discovered when they enter the human player's hand or field
+  const { discoverCards } = useCodex();
+  const discoverCardsRef = useRef(discoverCards);
+  discoverCardsRef.current = discoverCards;
+  useEffect(() => {
+    const human = gameState.players.find(p => p.isHuman);
+    if (!human) return;
+    const ids = [
+      ...human.hand.map(c => c.templateId),
+      ...human.field.map(c => c.templateId),
+    ].filter(Boolean);
+    if (ids.length > 0) discoverCardsRef.current(ids);
+  }, [gameState.players]);
 
   useEffect(() => { setAchievements(loadAchievements()); }, []);
 

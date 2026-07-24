@@ -47,6 +47,13 @@ export default function MainMenuPage() {
           </button>
 
           <button
+            onClick={() => { sounds.play('uiClick'); setLocation('/codex'); }}
+            className="w-full py-4 px-6 bg-secondary/60 hover:bg-secondary/80 text-secondary-foreground font-semibold text-lg transition-colors border border-border hover:border-cyan-500/50"
+          >
+            CARD CODEX
+          </button>
+
+          <button
             onClick={() => { sounds.play('uiClick'); setLocation('/achievements'); }}
             className="w-full py-4 px-6 bg-card hover:bg-secondary text-muted-foreground font-semibold text-lg transition-colors border border-border"
           >

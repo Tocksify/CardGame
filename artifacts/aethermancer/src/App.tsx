@@ -12,11 +12,13 @@ import AchievementsPage from './pages/AchievementsPage';
 import MultiplayerRoomsPage from './pages/MultiplayerRoomsPage';
 import PreDraftPage from './pages/PreDraftPage';
 import ChallengersPage from './pages/ChallengersPage';
+import CodexPage from './pages/CodexPage';
 
 import { LobbyProvider } from './context/LobbyContext';
 import { GameProvider } from './context/GameContext';
 import { MultiplayerProvider } from './context/MultiplayerContext';
 import { ChallengerProvider } from './context/ChallengerContext';
+import { CodexProvider } from './context/CodexContext';
 
 const queryClient = new QueryClient();
 
@@ -31,6 +33,7 @@ function Router() {
       <Route path="/game" component={GamePage} />
       <Route path="/achievements" component={AchievementsPage} />
       <Route path="/challengers" component={ChallengersPage} />
+      <Route path="/codex" component={CodexPage} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -40,6 +43,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <CodexProvider>
         <ChallengerProvider>
         <MultiplayerProvider>
           <LobbyProvider>
@@ -51,6 +55,7 @@ function App() {
           </LobbyProvider>
         </MultiplayerProvider>
         </ChallengerProvider>
+        </CodexProvider>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>
