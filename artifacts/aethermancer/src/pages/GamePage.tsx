@@ -113,18 +113,18 @@ const ArenaCardUI = ({
             return (
               <button
                 key={i}
-                title={`${ability.name}: ${dmg} dmg — ${ready ? 'READY' : `${cd}t cooldown`}`}
-                className="flex-1 flex flex-col items-center justify-center"
+                title={ready ? `${ability.name}: ${dmg} dmg (READY)` : `${ability.name}: ${cd} turns until ready`}
+                className="flex-1 flex items-center justify-center"
                 style={{
                   borderRight: i < 2 ? '1px solid rgba(40,25,0,0.6)' : 'none',
                   background: clickable ? 'rgba(201,162,39,0.12)' : 'transparent',
                   cursor: clickable ? 'pointer' : 'default',
-                  gap: 1,
                 }}
                 onClick={(e) => { e.stopPropagation(); if (clickable) onAbilityClick!(i); }}
               >
-                <span style={{ fontSize: 7, fontWeight: 700, lineHeight: 1, color: ready ? '#e8a030' : '#3a2800' }}>{dmg}</span>
-                <span style={{ fontSize: 5, lineHeight: 1, color: ready ? '#5db860' : '#2a1800' }}>{ready ? '✓' : `${cd}t`}</span>
+                <span style={{ fontSize: 7, fontWeight: 700, lineHeight: 1, color: ready ? '#e8a030' : '#4a3010' }}>
+                  {ready ? dmg : `${cd}t`}
+                </span>
               </button>
             );
           })}
