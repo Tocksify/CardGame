@@ -136,6 +136,7 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     description: 'Chills on hit — the struck enemy is stunned.',
     keywords: ['stun_on_hit'],
     rarity: 'common', artTheme: 'frost',
+    evolvesTo: 'ev_h7', evolveCondition: { turnsOnField: 3 },
   },
   {
     templateId: 'h8', name: 'Plague Rat', type: 'character', cost: 1,
@@ -143,6 +144,7 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     description: 'Poisons enemies it attacks (2 stacks).',
     keywords: ['poison_on_hit'],
     rarity: 'common', artTheme: 'poison',
+    evolvesTo: 'ev_h8', evolveCondition: { damageDealt: 4 },
   },
   {
     templateId: 'h10', name: 'Bog Crawler', type: 'character', cost: 2,
@@ -178,6 +180,7 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     description: 'A spectral warrior that strikes from the shadows.',
     keywords: ['stealth'],
     rarity: 'common', artTheme: 'shadow',
+    evolvesTo: 'ev_c15', evolveCondition: { damageDealt: 6 },
   },
   {
     templateId: 'c16', name: 'Crystal Wisp', type: 'character', cost: 1,
@@ -193,6 +196,7 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     description: 'A quick fire scout. Applies burn on every hit.',
     keywords: ['flame_aura'],
     rarity: 'common', artTheme: 'fire',
+    evolvesTo: 'ev_c17', evolveCondition: { turnsOnField: 2 },
   },
   {
     templateId: 'c18', name: 'Shield Bearer', type: 'character', cost: 2,
@@ -200,6 +204,7 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     description: 'Stalwart defender. Forces enemies to strike it first.',
     keywords: ['taunt'],
     rarity: 'common', artTheme: 'iron',
+    evolvesTo: 'ev_c18', evolveCondition: { turnsOnField: 4 },
   },
   {
     templateId: 'c19', name: 'Frost Archer', type: 'character', cost: 2,
@@ -234,6 +239,7 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     description: 'Carries a blazing torch. Enemies beware.',
     keywords: ['flame_aura'],
     rarity: 'common', artTheme: 'fire',
+    evolvesTo: 'ev_c23', evolveCondition: { turnsOnField: 3 },
   },
 
   // ── Common Spells ─────────────────────────────────────────────────────────
@@ -672,6 +678,7 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     description: 'Moves with the breeze. Strikes before enemies can react.',
     keywords: ['haste'],
     rarity: 'common', artTheme: 'wind',
+    evolvesTo: 'ev_nh3', evolveCondition: { damageDealt: 5 },
   },
   {
     templateId: 'nh4', name: 'Blood Acolyte', type: 'character', cost: 2,
@@ -679,6 +686,7 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     description: 'Each fallen enemy restores vitality to your hero.',
     keywords: ['heal_on_kill'],
     rarity: 'common', artTheme: 'blood',
+    evolvesTo: 'ev_nh4', evolveCondition: { turnsOnField: 3 },
   },
   {
     templateId: 'nh5', name: 'Bone Archer', type: 'character', cost: 2,
@@ -686,12 +694,14 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     description: 'Fires bone-tipped arrows laced with deadly venom.',
     keywords: ['poison_on_hit'],
     rarity: 'common', artTheme: 'bone',
+    evolvesTo: 'ev_nh5', evolveCondition: { turnsOnField: 3 },
   },
   {
     templateId: 'nh6', name: 'Arcane Novice', type: 'character', cost: 2,
     atk: 2, def: 2,
     description: 'A student of pure magic, channeling raw arcane power.',
     rarity: 'common', artTheme: 'arcane',
+    evolvesTo: 'ev_nh6', evolveCondition: { damageDealt: 6 },
   },
   {
     templateId: 'nh7', name: 'Peat Striker', type: 'character', cost: 2,
@@ -934,14 +944,75 @@ export const CARD_TEMPLATES: CardTemplate[] = [
   {
     templateId: 'ev_c2', name: 'Stone Colossus', type: 'character', cost: 0,
     atk: 6, def: 7,
-    description: 'Ancient Golem awakened. Evolved.',
-    rarity: 'legendary', artTheme: 'earth',
+    description: 'Ancient Golem awakened. Taunt. Heavy Armor.',
+    keywords: ['taunt', 'heavy_armor'], rarity: 'legendary', artTheme: 'earth',
   },
   {
     templateId: 'ev_c6', name: 'Elder Drake', type: 'character', cost: 0,
     atk: 8, def: 6,
     description: 'The Ancient Drake reaches its final form.',
     keywords: ['haste'], rarity: 'legendary', artTheme: 'dragon',
+  },
+  // ── New Evolutions (weaker cards that bloom into something worth defending) ──
+  {
+    templateId: 'ev_c17', name: 'Ember Raider', type: 'character', cost: 0,
+    atk: 4, def: 3,
+    description: 'The scout ignites into a blazing raider. Haste. Burns everything it touches.',
+    keywords: ['haste', 'flame_aura'], rarity: 'rare', artTheme: 'fire',
+  },
+  {
+    templateId: 'ev_c18', name: 'Iron Bulwark', type: 'character', cost: 0,
+    atk: 3, def: 8,
+    description: 'The shield bearer becomes an unbreakable wall. Taunt. Heavy Armor.',
+    keywords: ['taunt', 'heavy_armor'], rarity: 'rare', artTheme: 'iron',
+  },
+  {
+    templateId: 'ev_c23', name: 'Torch Warden', type: 'character', cost: 0,
+    atk: 4, def: 4,
+    description: 'Patience forged the torch bearer into a blazing sentinel. Taunt. Burns enemies.',
+    keywords: ['taunt', 'flame_aura'], rarity: 'rare', artTheme: 'fire',
+  },
+  {
+    templateId: 'ev_h7', name: 'Frost Titan', type: 'character', cost: 0,
+    atk: 4, def: 6,
+    description: 'The guardian ascends to a titan of ice. Taunt. Freezes everything it strikes.',
+    keywords: ['taunt', 'stun_on_hit'], rarity: 'rare', artTheme: 'frost',
+  },
+  {
+    templateId: 'ev_h8', name: 'Plague Beast', type: 'character', cost: 0,
+    atk: 4, def: 4,
+    description: 'The plague rat swells into a monstrous beast. Poisons all it touches.',
+    keywords: ['poison_on_hit'], rarity: 'rare', artTheme: 'poison',
+  },
+  {
+    templateId: 'ev_c15', name: 'Shadow Warlord', type: 'character', cost: 0,
+    atk: 5, def: 4,
+    description: 'The hollow knight rises as a warlord of shadow. Stealth. Haste.',
+    keywords: ['stealth', 'haste'], rarity: 'rare', artTheme: 'shadow',
+  },
+  {
+    templateId: 'ev_nh3', name: 'Gale Striker', type: 'character', cost: 0,
+    atk: 5, def: 3,
+    description: 'The wind dancer becomes a hurricane. Haste. Stuns with every blow.',
+    keywords: ['haste', 'stun_on_hit'], rarity: 'rare', artTheme: 'wind',
+  },
+  {
+    templateId: 'ev_nh4', name: 'Blood Ascendant', type: 'character', cost: 0,
+    atk: 4, def: 5,
+    description: 'The acolyte ascends through bloodshed. Heals on kill. Poisons on hit.',
+    keywords: ['heal_on_kill', 'poison_on_hit'], rarity: 'rare', artTheme: 'blood',
+  },
+  {
+    templateId: 'ev_nh5', name: 'Bone Specter', type: 'character', cost: 0,
+    atk: 5, def: 4,
+    description: 'The archer sheds flesh and becomes a ghost of bone. Stealth. Poison on hit.',
+    keywords: ['stealth', 'poison_on_hit'], rarity: 'rare', artTheme: 'bone',
+  },
+  {
+    templateId: 'ev_nh6', name: 'Arcane Adept', type: 'character', cost: 0,
+    atk: 5, def: 4,
+    description: 'Mastery unlocked — the novice erupts with arcane power. Haste.',
+    keywords: ['haste'], rarity: 'rare', artTheme: 'arcane',
   },
 ];
 

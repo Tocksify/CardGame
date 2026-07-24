@@ -147,7 +147,10 @@ const ArenaCardUI = ({
       <div className="flex-1 min-h-0 px-1 py-0.5 text-[9px] leading-tight overflow-y-auto scrollbar-thin"
            style={{ background: 'linear-gradient(180deg, #1a1208 0%, #120e06 100%)', color: '#c8b888' }}>
         {card.description}
-        {isEvolved && <div className="text-amber-400 font-bold text-[9px] mt-0.5">✦ EVOLVED</div>}
+        {isEvolved
+          ? <div className="inline-block mt-0.5 px-1 font-bold text-[8px] leading-tight rounded-sm" style={{ background: 'linear-gradient(90deg,#c9a227,#ffe066)', color: '#1a0d00' }}>Evo+</div>
+          : card.evolvesTo && <div className="inline-block mt-0.5 px-1 font-bold text-[8px] leading-tight rounded-sm" style={{ background: 'rgba(40,120,40,0.25)', color: '#7ac95a', border: '1px solid rgba(80,160,40,0.5)' }}>evoR</div>
+        }
         <EvoProgress card={fc} />
       </div>
       {/* Status effect badges */}
@@ -352,6 +355,9 @@ const HandCardUI = ({
       <div className="flex-1 min-h-0 p-1.5 text-[11px] leading-snug overflow-y-auto scrollbar-thin"
            style={{ background: 'linear-gradient(180deg, #1c1508 0%, #120e06 100%)', color: '#cbb888' }}>
         {card.description}
+        {card.evolvesTo && (
+          <div className="inline-block mt-1 px-1 font-bold text-[9px] leading-tight rounded-sm" style={{ background: 'rgba(40,120,40,0.25)', color: '#7ac95a', border: '1px solid rgba(80,160,40,0.5)' }}>evoR</div>
+        )}
       </div>
       <div className="h-[12%] flex-shrink-0 flex items-center justify-between px-1.5"
            style={{ background: 'linear-gradient(180deg, #0e0a05, #070503)', borderTop: '1px solid rgba(74,48,0,0.5)' }}>
