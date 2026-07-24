@@ -97,7 +97,7 @@ const ArenaCardUI = ({
       transition={isAttacker ? { duration: 0.58, ease: 'easeOut' } : undefined}
       onClick={onClick}
       title={card.name}
-      className={`relative ${w} ${h} flex-shrink-0 border-2 cursor-pointer transition-colors duration-200 overflow-hidden
+      className={`relative ${w} ${h} flex flex-col flex-shrink-0 border-2 cursor-pointer transition-colors duration-200 overflow-hidden
         ${targetable ? 'border-amber-400 shadow-[0_0_12px_rgba(201,162,39,0.8)] animate-pulse' : borderCls}
         ${tapped ? 'opacity-55 rotate-[8deg]' : ''}
         ${isHit ? 'animate-[flash-red_0.3s_ease]' : ''}
@@ -106,7 +106,7 @@ const ArenaCardUI = ({
     >
       {/* Ability bar — character field cards only */}
       {card.type === 'character' && (fc.abilityCooldowns !== undefined) && (
-        <div className="flex shrink-0 border-b" style={{ height: 18, background: '#060403', borderColor: 'rgba(40,25,0,0.7)' }}>
+        <div className="flex flex-shrink-0 border-b" style={{ height: 18, background: '#060403', borderColor: 'rgba(40,25,0,0.7)' }}>
           {getCardAbilities(card).map((ability, i) => {
             const cd = fc.abilityCooldowns?.[i] ?? 0;
             const ready = cd === 0;
@@ -132,7 +132,7 @@ const ArenaCardUI = ({
           })}
         </div>
       )}
-      <div className="h-[19%] flex items-center justify-between px-1 relative"
+      <div className="h-[19%] flex-shrink-0 flex items-center justify-between px-1 relative"
            style={{ background: `linear-gradient(90deg, ${frame.bar}dd, ${frame.bar}88)` }}>
         <span className="text-[10px] font-display font-bold text-amber-100 leading-tight truncate pr-0.5">{card.name}</span>
         <div className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 font-bold text-[10px] text-white"
@@ -140,12 +140,12 @@ const ArenaCardUI = ({
           {card.cost}
         </div>
       </div>
-      <div className="h-[35%] w-full"><CardArt templateId={card.templateId} type={card.type} /></div>
-      <div className="h-[7%] w-full flex items-center px-1" style={{ background: `${frame.bar}99` }}>
+      <div className="h-[35%] flex-shrink-0 w-full"><CardArt templateId={card.templateId} type={card.type} /></div>
+      <div className="h-[7%] flex-shrink-0 w-full flex items-center px-1" style={{ background: `${frame.bar}99` }}>
         <span className="text-[9px] text-amber-200/80 font-display uppercase tracking-widest truncate leading-none">{card.type}</span>
       </div>
-      <div className="flex-1 px-1 py-0.5 text-[9px] leading-tight overflow-y-auto scrollbar-thin"
-           style={{ background: 'linear-gradient(180deg, #1a1208 0%, #120e06 100%)', color: '#c8b888', minHeight: 0 }}>
+      <div className="flex-1 min-h-0 px-1 py-0.5 text-[9px] leading-tight overflow-y-auto scrollbar-thin"
+           style={{ background: 'linear-gradient(180deg, #1a1208 0%, #120e06 100%)', color: '#c8b888' }}>
         {card.description}
         {isEvolved && <div className="text-amber-400 font-bold text-[9px] mt-0.5">✦ EVOLVED</div>}
         <EvoProgress card={fc} />
@@ -322,7 +322,7 @@ const HandCardUI = ({
       whileHover={{ scale: 1.25, y: -24, zIndex: 60 }}
       onClick={onClick}
       onMouseEnter={() => playable && sounds.play('cardHover')}
-      className={`relative w-36 h-56 flex-shrink-0 border-[2px] cursor-pointer transition-all duration-200 overflow-hidden
+      className={`relative w-36 h-56 flex flex-col flex-shrink-0 border-[2px] cursor-pointer transition-all duration-200 overflow-hidden
         ${playable
           ? 'border-amber-400 shadow-[0_0_18px_rgba(201,162,39,0.8),0_0_6px_rgba(201,162,39,0.4)]'
           : staged
@@ -337,7 +337,7 @@ const HandCardUI = ({
           <span className="text-[8px] font-display font-bold uppercase tracking-wider text-red-200">⚡ Staged</span>
         </div>
       )}
-      <div className="h-[18%] flex items-center justify-between px-1.5"
+      <div className="h-[18%] flex-shrink-0 flex items-center justify-between px-1.5"
            style={{ background: `linear-gradient(90deg, ${frame.bar}ff, ${frame.bar}99)` }}>
         <span className="text-[13px] font-display font-bold text-amber-100 leading-tight truncate">{card.name}</span>
         <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 font-display font-black text-[13px] text-amber-100"
@@ -345,12 +345,12 @@ const HandCardUI = ({
           {card.cost}
         </div>
       </div>
-      <div className="h-[33%] w-full"><CardArt templateId={card.templateId} type={card.type} /></div>
-      <div className="h-[7%] flex items-center px-1.5" style={{ background: `${frame.bar}bb` }}>
+      <div className="h-[33%] flex-shrink-0 w-full"><CardArt templateId={card.templateId} type={card.type} /></div>
+      <div className="h-[7%] flex-shrink-0 flex items-center px-1.5" style={{ background: `${frame.bar}bb` }}>
         <span className="text-[10px] text-amber-100/80 font-display uppercase tracking-widest">{card.type}</span>
       </div>
-      <div className="flex-1 p-1.5 text-[11px] leading-snug overflow-y-auto scrollbar-thin"
-           style={{ background: 'linear-gradient(180deg, #1c1508 0%, #120e06 100%)', color: '#cbb888', minHeight: 0 }}>
+      <div className="flex-1 min-h-0 p-1.5 text-[11px] leading-snug overflow-y-auto scrollbar-thin"
+           style={{ background: 'linear-gradient(180deg, #1c1508 0%, #120e06 100%)', color: '#cbb888' }}>
         {card.description}
       </div>
       <div className="h-[12%] flex-shrink-0 flex items-center justify-between px-1.5"

@@ -78,11 +78,6 @@ export default function LobbyPage() {
       });
     }
 
-    // In single player, show the challenger's name as our name
-    if (equippedChallenger) {
-      players = players.map(p => p.isHuman ? { ...p, name: equippedChallenger.name } : p);
-    }
-
     dispatch({ type: 'START_GAME', payload: { players, gameMode, matchType: 'singleplayer', ranked: false, difficulty } });
     setLocation(gameMode === 'draft' ? '/pre-draft' : '/game');
   };

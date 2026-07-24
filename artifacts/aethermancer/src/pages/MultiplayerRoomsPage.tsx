@@ -4,8 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { sounds } from '../lib/sounds';
 import { useLobby } from '../context/LobbyContext';
 import { useGame } from '../context/GameContext';
+import { useChallenger } from '../context/ChallengerContext';
 import { useMultiplayer, GameStartedPayload, RoomBot } from '../context/MultiplayerContext';
-import { drawFromPool, generateDeck } from '../lib/cards';
+import { drawFromPool, generateDeck, getCardTemplate } from '../lib/cards';
 import { generateId } from '../store/gameStore';
 import { ArrowLeft, Plus, Minus, Bot, User, Copy, LogIn, Swords, CheckCheck, Pencil, Wifi, WifiOff, Loader2 } from 'lucide-react';
 
@@ -39,6 +40,7 @@ export default function MultiplayerRoomsPage() {
   const [, setLocation] = useLocation();
   const { setGameMode, setMatchType } = useLobby();
   const { dispatch } = useGame();
+  const { equippedChallenger } = useChallenger();
   const {
     status, roomState, yourSocketId, serverError,
     setServerError, setRoomState,
@@ -84,17 +86,49 @@ export default function MultiplayerRoomsPage() {
       ...payload.bots.map(b => b.name),
     ]);
 
+    // Build the local human player, then apply any equipped challenger effects
+    let humanPlayer: any = {
+      id: 1, name: humanNames[0], isHuman: true,
+      hp: 30, maxHp: 30, aether: 3, maxAether: 3,
+      deck: makeDeck(), hand: makeHand(),
+      field: [], artifactSlot: null, artifactSlotTurns: 0,
+      pendingSpells: [], cardsPlayedByType: {}, discardPile: [],
+      gold: 10, inventory: [], goldPerTurn: 0,
+      aetherBonus: 0, perks: [], statBuffs: [],
+      damageDealtThisTurn: 0, bonusGoldPending: 0,
+    };
+
+    if (equippedChallenger) {
+      const effects = equippedChallenger.effectKeys;
+      if (effects.includes('bonus_gold_start_300')) humanPlayer.gold += 300;
+      if (effects.includes('bonus_hp_10')) { humanPlayer.maxHp += 10; humanPlayer.hp += 10; }
+      if (effects.includes('bonus_aether_3')) { humanPlayer.aetherBonus += 3; humanPlayer.aether += 3; }
+      if (effects.includes('bonus_aether_4')) { humanPlayer.aetherBonus += 4; humanPlayer.aether += 4; }
+
+      const perksToAdd: string[] = [];
+      if (effects.includes('perk_poison_immune')) perksToAdd.push('perk_poison_immune');
+      if (effects.includes('perk_stun_immune')) perksToAdd.push('perk_stun_immune');
+      if (effects.includes('perk_draw_1')) perksToAdd.push('perk_draw_1');
+      if (effects.includes('perk_resist_1')) perksToAdd.push('perk_resist_1');
+      if (effects.includes('perk_undying')) perksToAdd.push('perk_undying');
+      if (effects.includes('perk_deploy_bonus')) perksToAdd.push('perk_deploy_bonus');
+      if (perksToAdd.length > 0) humanPlayer.perks = [...humanPlayer.perks, ...perksToAdd];
+
+      if (effects.includes('start_legendary')) {
+        const LEGENDARY_CHAR_IDS = ['c10', 'c11', 'h3', 'h9', 'h18', 'h19', 'l1', 'l2'];
+        const shuffled = [...LEGENDARY_CHAR_IDS].sort(() => Math.random() - 0.5);
+        for (const tplId of shuffled) {
+          const tpl = getCardTemplate(tplId);
+          if (tpl) {
+            humanPlayer.hand = [...humanPlayer.hand, { ...tpl, instanceId: `card_${generateId()}` }];
+            break;
+          }
+        }
+      }
+    }
+
     const players = [
-      {
-        id: 1, name: humanNames[0], isHuman: true,
-        hp: 30, maxHp: 30, aether: 3, maxAether: 3,
-        deck: makeDeck(), hand: makeHand(),
-        field: [], artifactSlot: null, artifactSlotTurns: 0,
-        pendingSpells: [], cardsPlayedByType: {}, discardPile: [],
-        gold: 10, inventory: [], goldPerTurn: 0,
-        aetherBonus: 0, perks: [], statBuffs: [],
-        damageDealtThisTurn: 0, bonusGoldPending: 0,
-      },
+      humanPlayer,
       ...[
         ...payload.players.filter(p => p.socketId !== yourSocketId).map(p => p.name),
         ...payload.bots.map(b => b.name),
@@ -126,7 +160,7 @@ export default function MultiplayerRoomsPage() {
     });
 
     setLocation(payload.gameMode === 'draft' ? '/pre-draft' : '/game');
-  }, [username, yourSocketId, setGameMode, setMatchType, dispatch, setLocation]);
+  }, [username, yourSocketId, equippedChallenger, setGameMode, setMatchType, dispatch, setLocation]);
 
   // Register the GAME_STARTED callback with the persistent context
   useEffect(() => {
