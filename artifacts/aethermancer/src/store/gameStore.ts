@@ -1,4 +1,4 @@
-import { CardTemplate, CardType, CardRarity } from '../lib/cards';
+import { CardTemplate, CardType, CardRarity, getCardAbilities } from '../lib/cards';
 
 export type GamePhase = 'countdown' | 'draw' | 'draft' | 'buy' | 'main' | 'combat' | 'end' | 'gameover';
 export type GameMode = '8card' | 'draft';
@@ -31,6 +31,8 @@ export interface FieldCard extends CardInstance {
   burnStacks: number;
   silenced: boolean;
   silenceTurnsLeft: number;
+  /** Remaining cooldown for each of the 3 abilities (0 = ready). Counts down on owner's turns. */
+  abilityCooldowns: [number, number, number];
 }
 
 export interface InventoryItem {
@@ -99,9 +101,11 @@ export interface GameState {
   winner: number | null;
   shopOpen: boolean;
   inventoryOpen: boolean;
-  targetingMode: 'none' | 'spell' | 'attack' | 'item' | 'enchantment';
+  targetingMode: 'none' | 'spell' | 'attack' | 'item' | 'enchantment' | 'ability';
   sourceId: string | null;
   pendingAction: any | null;
+  /** Index of the ability being targeted (0 | 1 | 2), set when targetingMode === 'ability'. */
+  abilityIndex?: number;
   gameMode: GameMode;
   matchType: MatchType;
   ranked: boolean;
@@ -133,7 +137,9 @@ export type GameAction =
   | { type: 'ADD_LOG'; payload: { msg: string; type?: 'damage' | 'card' | 'gold' | 'other' } }
   | { type: 'TOGGLE_SHOP'; payload: boolean }
   | { type: 'TOGGLE_INVENTORY'; payload: boolean }
-  | { type: 'SET_TARGETING'; payload: { mode: GameState['targetingMode']; sourceId: string | null; pendingAction: any | null } }
+  | { type: 'SET_TARGETING'; payload: { mode: GameState['targetingMode']; sourceId: string | null; pendingAction: any | null; abilityIndex?: number } }
+  | { type: 'USE_ABILITY'; payload: { attackerPlayerId: number; attackerInstanceId: string; abilityIndex: number; targetPlayerId: number; targetInstanceId?: string } }
+  | { type: 'TICK_COOLDOWNS'; payload: { playerId: number } }
   | { type: 'CLEAR_TARGETING' }
   | { type: 'EVOLVE_CREATURE'; payload: { playerId: number; instanceId: string; newTemplate: CardTemplate } }
   | { type: 'RECORD_KILL'; payload: { playerId: number } }
@@ -228,10 +234,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
 
     case 'SET_TARGETING':
-      return { ...state, targetingMode: action.payload.mode, sourceId: action.payload.sourceId, pendingAction: action.payload.pendingAction };
+      return { ...state, targetingMode: action.payload.mode, sourceId: action.payload.sourceId, pendingAction: action.payload.pendingAction, abilityIndex: action.payload.abilityIndex };
 
     case 'CLEAR_TARGETING':
-      return { ...state, targetingMode: 'none', sourceId: null, pendingAction: null };
+      return { ...state, targetingMode: 'none', sourceId: null, pendingAction: null, abilityIndex: undefined };
 
     case 'SET_DRAFT_OPTIONS':
       return { ...state, draftOptions: action.payload, phase: 'draft' };
@@ -651,6 +657,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             turnsOnField: 0, damageDealt: 0, evolved: false,
             poisonStacks: 0, stunned: false, stunTurnsLeft: 0,
             burnStacks: 0, silenced: false, silenceTurnsLeft: 0,
+            abilityCooldowns: [0, 0, 0],
           };
           newField = [...p.field, newCard];
         } else if (cardToPlay.type === 'artifact') {
@@ -931,6 +938,77 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       return { ...state, players: newPlayers, winner, phase };
     }
+
+    case 'USE_ABILITY': {
+      const { attackerPlayerId, attackerInstanceId, abilityIndex, targetPlayerId, targetInstanceId } = action.payload;
+      const attackerPlayer = state.players.find(p => p.id === attackerPlayerId);
+      const attacker = attackerPlayer?.field.find(c => c.instanceId === attackerInstanceId);
+      if (!attacker || !attackerPlayer) return state;
+
+      const abilities = getCardAbilities(attacker);
+      const ability = abilities[abilityIndex];
+      if (!ability || (attacker.abilityCooldowns[abilityIndex] ?? 0) > 0) return state;
+
+      const dmg = Math.max(1, attacker.currentAtk + attacker.tempAtkBonus + ability.atkDelta);
+
+      // 1. Tap attacker + set cooldown
+      let newPlayers = state.players.map(p => {
+        if (p.id !== attackerPlayerId) return p;
+        return {
+          ...p,
+          field: p.field.map(c => {
+            if (c.instanceId !== attackerInstanceId) return c;
+            const newCds: [number, number, number] = [...(c.abilityCooldowns ?? [0, 0, 0])] as [number, number, number];
+            newCds[abilityIndex] = ability.cooldown;
+            return { ...c, tapped: true, hasAttackedThisTurn: true, abilityCooldowns: newCds };
+          }),
+          damageDealtThisTurn: (p.damageDealtThisTurn || 0) + dmg,
+          damageDealtThisGame: (p.damageDealtThisGame || 0) + dmg,
+        };
+      });
+
+      // 2. Apply damage to target
+      newPlayers = newPlayers.map(p => {
+        if (p.id !== targetPlayerId) return p;
+        if (targetInstanceId) {
+          return {
+            ...p,
+            field: p.field.map(c => {
+              if (c.instanceId !== targetInstanceId) return c;
+              const armor = getArmorReduction(c);
+              const actualDmg = Math.max(1, dmg - armor);
+              return { ...c, currentDef: c.currentDef - actualDmg };
+            }).filter(c => c.currentDef > 0),
+          };
+        } else {
+          const resist = p.perks.includes('perk_resist_1') ? 1 : 0;
+          let finalDmg = Math.max(0, dmg - resist);
+          if (finalDmg >= p.hp && p.perks.includes('perk_undying') && !p.undyingUsed) finalDmg = p.hp - 1;
+          return { ...p, hp: Math.max(0, p.hp - finalDmg), damageTakenThisGame: true };
+        }
+      });
+
+      const alivePlayers = newPlayers.filter(p => p.hp > 0 && !p.isDead);
+      let winner = state.winner;
+      let phase = state.phase;
+      if (alivePlayers.length === 1 && state.players.length > 1) { winner = alivePlayers[0].id; phase = 'gameover'; }
+      return { ...state, players: newPlayers, winner, phase };
+    }
+
+    case 'TICK_COOLDOWNS':
+      return {
+        ...state,
+        players: state.players.map(p => {
+          if (p.id !== action.payload.playerId) return p;
+          return {
+            ...p,
+            field: p.field.map(c => ({
+              ...c,
+              abilityCooldowns: (c.abilityCooldowns ?? [0, 0, 0]).map(cd => Math.max(0, cd - 1)) as [number, number, number],
+            })),
+          };
+        }),
+      };
 
     case 'HEAL':
       return {

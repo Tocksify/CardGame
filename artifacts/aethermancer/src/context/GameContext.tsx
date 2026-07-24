@@ -2,7 +2,7 @@ import React, { createContext, useContext, useReducer, useEffect, useRef, useSta
 import { GameState, GameAction, gameReducer, initialGameState, Player, StagedSpell, CardInstance, FieldCard, generateId, AiDifficulty } from '../store/gameStore';
 import { getSettings } from '../store/settings';
 import { sounds, SoundName, ELEMENT_SOUNDS } from '../lib/sounds';
-import { SHOP_ITEMS, getCardTemplate, generateShopRotation, generateDraftOptions, drawFromPool, CardTemplate } from '../lib/cards';
+import { SHOP_ITEMS, getCardTemplate, generateShopRotation, generateDraftOptions, drawFromPool, CardTemplate, getCardAbilities } from '../lib/cards';
 import { loadAchievements, saveAchievements, Achievement } from '../store/achievements';
 import { DIFFICULTY_CFG } from './LobbyContext';
 import { loadAccount, applyEloChange } from '../store/account';
@@ -21,6 +21,7 @@ interface GameContextType {
   sellCreature: (instanceId: string) => void;
   sellHandCard: (instanceId: string) => void;
   attackWith: (attackerInstanceId: string, targetPlayerId: number, targetInstanceId?: string) => void;
+  useAbility: (attackerInstanceId: string, abilityIndex: number, targetPlayerId: number, targetInstanceId?: string) => void;
   buyItem: (shopItemId: string) => void;
   useInventoryItem: (inventoryInstanceId: string, targetId?: string) => void;
   equipInventoryItem: (instanceId: string) => void;
@@ -543,6 +544,40 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} attacks for ${dmg} damage!`, type: 'damage' } });
   };
 
+  // ── Use ability ───────────────────────────────────────────────────────────
+  const useAbility = (attackerInstanceId: string, abilityIndex: number, targetPlayerId: number, targetInstanceId?: string) => {
+    const player = gameState.players[gameState.currentPlayerIndex];
+    const attacker = player.field.find(c => c.instanceId === attackerInstanceId);
+    if (!attacker || attacker.tapped || attacker.stunned) return;
+
+    const ability = getCardAbilities(attacker)[abilityIndex];
+    if (!ability || (attacker.abilityCooldowns?.[abilityIndex] ?? 0) > 0) return;
+
+    // Defender rule: block direct hero damage if enemy has field cards
+    const targetOwner = gameState.players.find(p => p.id === targetPlayerId);
+    if (!targetInstanceId && targetOwner && targetOwner.field.length > 0) {
+      dispatch({ type: 'ADD_LOG', payload: { msg: `${targetOwner.name} is protected by their defenders!`, type: 'other' } });
+      return;
+    }
+
+    const dmg = attacker.currentAtk + attacker.tempAtkBonus + ability.atkDelta;
+    dispatch({ type: 'USE_ABILITY', payload: { attackerPlayerId: player.id, attackerInstanceId, abilityIndex, targetPlayerId, targetInstanceId } });
+    setCombatAnim({ targetId: targetInstanceId || targetPlayerId.toString(), damage: dmg, attackerId: attackerInstanceId });
+    setTimeout(() => setCombatAnim(null), 600);
+    sounds.play('attack');
+    dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name}'s ${attacker.name} uses ${ability.name} for ${dmg} damage!`, type: 'damage' } });
+
+    // Kill bonus if target card is destroyed
+    if (targetOwner && targetInstanceId) {
+      const targetCard = targetOwner.field.find(c => c.instanceId === targetInstanceId);
+      if (targetCard && targetCard.currentDef <= dmg) {
+        dispatch({ type: 'ADD_GOLD', payload: { playerId: player.id, amount: 50 } });
+        dispatch({ type: 'RECORD_KILL', payload: { playerId: player.id } });
+        sounds.play('gold');
+      }
+    }
+  };
+
   // ── Buy ───────────────────────────────────────────────────────────────────
   const buyItem = (shopItemId: string) => {
     const item = SHOP_ITEMS.find(i => i.id === shopItemId);
@@ -850,6 +885,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         const wasPlayerStunned = (cp.playerStunTurns ?? 0) > 0;
         dispatchRef.current({ type: 'REPLENISH_AETHER', payload: { playerId: cp.id } });
         dispatchRef.current({ type: 'PROCESS_STATUS_EFFECTS', payload: { playerId: cp.id } });
+        dispatchRef.current({ type: 'TICK_COOLDOWNS', payload: { playerId: cp.id } });
 
         if (wasPlayerStunned) {
           dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name} is imprisoned — their turn is skipped!`, type: 'other' } });
@@ -957,6 +993,36 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         const target = chooseAiAttackTarget(cp, diff, state.players);
         if (!target) {
           dispatchRef.current({ type: 'ADVANCE_PHASE' });
+          return;
+        }
+
+        // AI: use a ready ability if one is available (Hard+ always, others 50% chance)
+        const aiAbilities = getCardAbilities(attacker);
+        const readyAbilities = aiAbilities
+          .map((ab, i) => ({ ab, i }))
+          .filter(({ i }) => (attacker.abilityCooldowns?.[i] ?? 0) === 0);
+        const shouldUseAbility = readyAbilities.length > 0 &&
+          (diff === 'Hard' || diff === 'Expert' || diff === 'Nightmare' ? true : Math.random() < 0.5);
+
+        if (shouldUseAbility) {
+          const best = readyAbilities.reduce((a, b) => a.ab.atkDelta >= b.ab.atkDelta ? a : b);
+          const abilityDmg = attacker.currentAtk + attacker.tempAtkBonus + best.ab.atkDelta;
+          dispatchRef.current({
+            type: 'USE_ABILITY',
+            payload: { attackerPlayerId: cp.id, attackerInstanceId: attacker.instanceId, abilityIndex: best.i, targetPlayerId: target.targetPlayerId, targetInstanceId: target.targetInstanceId },
+          });
+          setCombatAnim({ targetId: target.targetInstanceId || target.targetPlayerId.toString(), damage: abilityDmg, attackerId: attacker.instanceId });
+          setTimeout(() => setCombatAnim(null), 650);
+          dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name}'s ${attacker.name} uses ${best.ab.name} for ${abilityDmg} damage!`, type: 'damage' } });
+          sounds.play('attack');
+          if (target.targetInstanceId) {
+            const tgtCreature = targetHuman.field.find(c => c.instanceId === target.targetInstanceId);
+            if (tgtCreature && tgtCreature.currentDef <= abilityDmg) {
+              dispatchRef.current({ type: 'ADD_GOLD', payload: { playerId: cp.id, amount: 50 } });
+              dispatchRef.current({ type: 'RECORD_KILL', payload: { playerId: cp.id } });
+            }
+          }
+          gameLoopRef.current = setTimeout(runAiCombatLoop, 700);
           return;
         }
 
@@ -1147,7 +1213,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <GameContext.Provider value={{
-      gameState, dispatch, playCard, stageSpell, sellArtifact, sellCreature, sellHandCard, attackWith,
+      gameState, dispatch, playCard, stageSpell, sellArtifact, sellCreature, sellHandCard, attackWith, useAbility,
       buyItem, useInventoryItem, equipInventoryItem, endPhase, pickDraftCard,
       achievements, achievementToast, combatAnim, playedCardAnim, announcement,
       shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft,

@@ -9,7 +9,7 @@ import {
   Activity, User, ScrollText, Zap, Clock, RefreshCw, Sparkles, Coins,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SHOP_ITEMS, ShopItemTemplate, CARD_TEMPLATES } from '../lib/cards';
+import { SHOP_ITEMS, ShopItemTemplate, CARD_TEMPLATES, getCardAbilities } from '../lib/cards';
 import { CardArt } from '../components/game/CardArt';
 
 // ── Tab → type mapping ────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ const EvoProgress = ({ card }: { card: FieldCard }) => {
 
 // ── Field / Arena card ────────────────────────────────────────────────────
 const ArenaCardUI = ({
-  card, onClick, tapped = false, targetable = false, combatAnim = null, attackOffset = { x: 18, y: 0 }, size = 'md',
+  card, onClick, tapped = false, targetable = false, combatAnim = null, attackOffset = { x: 18, y: 0 }, size = 'md', onAbilityClick,
 }: {
   card: CardInstance | FieldCard;
   onClick?: () => void;
@@ -73,6 +73,7 @@ const ArenaCardUI = ({
   combatAnim?: { targetId: string; damage: number; attackerId?: string } | null;
   attackOffset?: { x: number; y: number };
   size?: 'sm' | 'md';
+  onAbilityClick?: (abilityIndex: number) => void;
 }) => {
   const frame = TYPE_FRAME[card.type] || TYPE_FRAME.character;
   const fc = card as FieldCard;
@@ -101,6 +102,34 @@ const ArenaCardUI = ({
       `}
       style={{ background: frame.bg }}
     >
+      {/* Ability bar — character field cards only */}
+      {card.type === 'character' && (fc.abilityCooldowns !== undefined) && (
+        <div className="flex shrink-0 border-b" style={{ height: 18, background: '#060403', borderColor: 'rgba(40,25,0,0.7)' }}>
+          {getCardAbilities(card).map((ability, i) => {
+            const cd = fc.abilityCooldowns?.[i] ?? 0;
+            const ready = cd === 0;
+            const dmg = (fc.currentAtk ?? card.atk ?? 0) + ability.atkDelta;
+            const clickable = ready && !!onAbilityClick;
+            return (
+              <button
+                key={i}
+                title={`${ability.name}: ${dmg} dmg — ${ready ? 'READY' : `${cd}t cooldown`}`}
+                className="flex-1 flex flex-col items-center justify-center"
+                style={{
+                  borderRight: i < 2 ? '1px solid rgba(40,25,0,0.6)' : 'none',
+                  background: clickable ? 'rgba(201,162,39,0.12)' : 'transparent',
+                  cursor: clickable ? 'pointer' : 'default',
+                  gap: 1,
+                }}
+                onClick={(e) => { e.stopPropagation(); if (clickable) onAbilityClick!(i); }}
+              >
+                <span style={{ fontSize: 7, fontWeight: 700, lineHeight: 1, color: ready ? '#e8a030' : '#3a2800' }}>{dmg}</span>
+                <span style={{ fontSize: 5, lineHeight: 1, color: ready ? '#5db860' : '#2a1800' }}>{ready ? '✓' : `${cd}t`}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div className="h-[19%] flex items-center justify-between px-1 relative"
            style={{ background: `linear-gradient(90deg, ${frame.bar}dd, ${frame.bar}88)` }}>
         <span className="text-[10px] font-display font-bold text-amber-100 leading-tight truncate pr-0.5">{card.name}</span>
@@ -377,7 +406,7 @@ function getPositions(count: number): PositionId[] {
 // ── Player Zone ───────────────────────────────────────────────────────────
 const PlayerZone = ({
   player, posId, isMe, isMyTurn, phase, targetingMode, onHeroClick, onCardClick,
-  combatAnim, aether, maxAether, onSellArtifact, onSellCreature,
+  combatAnim, aether, maxAether, onSellArtifact, onSellCreature, onAbilityClick,
 }: {
   player: Player;
   posId: PositionId;
@@ -392,10 +421,11 @@ const PlayerZone = ({
   maxAether?: number;
   onSellArtifact?: () => void;
   onSellCreature?: (instanceId: string) => void;
+  onAbilityClick?: (cardInstanceId: string, abilityIndex: number) => void;
 }) => {
   const cfg = POSITION_CFG[posId];
   const isHeroHit = combatAnim?.targetId === player.id.toString();
-  const heroTargetable = targetingMode === 'attack' || targetingMode === 'spell';
+  const heroTargetable = targetingMode === 'attack' || targetingMode === 'spell' || targetingMode === 'ability';
   const hp = player.hp, maxHp = player.maxHp;
   const hpPct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
   const hpColor = hpPct > 60 ? '#4ade80' : hpPct > 25 ? '#f59e0b' : '#ef4444';
@@ -514,6 +544,11 @@ const PlayerZone = ({
                     onClick={() => onCardClick(card)}
                     combatAnim={combatAnim}
                     attackOffset={ATTACK_DIRECTION[posId]}
+                    onAbilityClick={
+                      isMe && isMyTurn && phase === 'combat' && !card.tapped && !card.stunned && onAbilityClick
+                        ? (i) => onAbilityClick(card.instanceId, i)
+                        : undefined
+                    }
                   />
                   {canSellThis && (
                     <button
@@ -787,7 +822,7 @@ const PendingSpellBadge = ({ spell }: { spell: { name: string; targetId?: string
 export default function GamePage() {
   const [, setLocation] = useLocation();
   const {
-    gameState, dispatch, playCard, stageSpell, sellArtifact, sellCreature, sellHandCard, attackWith,
+    gameState, dispatch, playCard, stageSpell, sellArtifact, sellCreature, sellHandCard, attackWith, useAbility,
     buyItem, useInventoryItem, equipInventoryItem, endPhase, pickDraftCard, achievementToast, combatAnim, playedCardAnim, announcement,
     shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft,
   } = useGame();
@@ -905,6 +940,13 @@ export default function GamePage() {
       return;
     }
 
+    // Ability targeting: click enemy field card to use ability on it
+    if (gameState.targetingMode === 'ability' && player.id !== me.id) {
+      useAbility(gameState.sourceId!, gameState.abilityIndex ?? 0, player.id, fieldCard.instanceId);
+      dispatch({ type: 'CLEAR_TARGETING' });
+      return;
+    }
+
     if (gameState.phase === 'combat' && player.id === me.id && !fieldCard.tapped) {
       dispatch({ type: 'SET_TARGETING', payload: { mode: 'attack', sourceId: fieldCard.instanceId, pendingAction: null } });
     }
@@ -926,6 +968,17 @@ export default function GamePage() {
         return;
       }
       attackWith(gameState.sourceId!, player.id);
+      dispatch({ type: 'CLEAR_TARGETING' });
+      return;
+    }
+    // Ability targeting: click enemy hero to deal ability damage
+    if (gameState.targetingMode === 'ability' && player.id !== me.id) {
+      if (player.field.length > 0) {
+        flashReason('Defeat all enemy characters before using abilities on their hero');
+        dispatch({ type: 'CLEAR_TARGETING' });
+        return;
+      }
+      useAbility(gameState.sourceId!, gameState.abilityIndex ?? 0, player.id);
       dispatch({ type: 'CLEAR_TARGETING' });
       return;
     }
@@ -958,6 +1011,7 @@ export default function GamePage() {
     attack:      'Select an enemy to attack',
     enchantment: 'Select your character to enchant',
     item:        'Select a target for this item',
+    ability:     'Select a target for your ability',
   };
 
   return (
@@ -1082,6 +1136,12 @@ export default function GamePage() {
               maxAether={player.isHuman ? me.maxAether : undefined}
               onSellArtifact={player.isHuman ? sellArtifact : undefined}
               onSellCreature={player.isHuman ? sellCreature : undefined}
+              onAbilityClick={player.isHuman ? (cardInstanceId, abilityIndex) => {
+                const card = me.field.find(c => c.instanceId === cardInstanceId);
+                if (!card || card.tapped || card.stunned || !isMyTurn || gameState.phase !== 'combat') return;
+                if ((card.abilityCooldowns?.[abilityIndex] ?? 0) > 0) return;
+                dispatch({ type: 'SET_TARGETING', payload: { mode: 'ability', sourceId: cardInstanceId, pendingAction: null, abilityIndex } });
+              } : undefined}
             />
           );
         })}

@@ -3,3 +3,4 @@
 - [Aethermancer feature batch 3](aethermancer-features-3.md) — Multiplayer reworked to rooms (no matchmaking/ranked), bigger cards/text, cantPlayReason toast, TS fix in GameContext.
 - [Aethermancer combat stats](aethermancer-combat-stats.md) — derive card performance from reducer-side post-mitigation damage, not UI estimates, so armor/resistance stays reflected.
 - [Aethermancer challengers](aethermancer-challengers.md) — 19 pre-game characters with abilities, Arcane Shards currency (150/win), roster UI, achievement unlocks for 3 challengers.
+- [Aethermancer ability system](aethermancer-features-4.md) — 3-ability bar per character card, themed by artTheme, turn cooldowns, USE_ABILITY/TICK_COOLDOWNS reducers, AI usage, defender rule enforced.

@@ -18,6 +18,49 @@ export interface CardTemplate {
   artTheme?: string;
 }
 
+export interface CardAbility {
+  name: string;
+  /** Added to the card's currentAtk at the time of use. */
+  atkDelta: number;
+  /** Turns the owner must wait (counting only their own turns) before using again. */
+  cooldown: number;
+}
+
+// ── Ability name sets keyed by art theme ───────────────────────────────────
+const ABILITY_THEMES: Record<string, [string, string, string]> = {
+  fire:      ['Ember Strike',  'Inferno Blast',       'Pyroclasm'],
+  water:     ['Tidal Surge',   'Torrent',              'Maelstrom'],
+  earth:     ['Rock Throw',    'Earthshatter',         'Tremor'],
+  poison:    ['Venom Strike',  'Plague Bite',          'Toxic Explosion'],
+  frost:     ['Ice Shard',     'Blizzard Bolt',        'Absolute Zero'],
+  shadow:    ['Shadow Strike', 'Dark Lance',           'Oblivion'],
+  void:      ['Null Ray',      'Void Rift',            'Dimensional Collapse'],
+  aether:    ['Aether Bolt',   'Arcane Nova',          'Aetheric Cataclysm'],
+  iron:      ['Iron Strike',   'Shield Bash',          'Bastion Crush'],
+  dragon:    ['Dragon Bite',   'Flame Breath',         'Ancient Fury'],
+  celestial: ['Divine Smite',  'Holy Surge',           'Celestial Wrath'],
+  storm:     ['Gale Strike',   'Thunder Bolt',         'Tempest'],
+  electric:  ['Shock',         'Arc Lightning',        'Thunderstrike'],
+  huntress:  ['Arrow Shot',    'Piercing Shot',        'Deadshot'],
+  unknown:   ['Enigma Strike', 'Void Pulse',           'Annihilation'],
+};
+
+/**
+ * Returns the 3 abilities for a character card based on its art theme.
+ *   Ability 1 — Basic  : same ATK, cooldown 1 turn
+ *   Ability 2 — Stronger: ATK +2,  cooldown 2 turns
+ *   Ability 3 — Ultimate: ATK +4,  cooldown 4 turns
+ */
+export function getCardAbilities(card: { artTheme?: string }): [CardAbility, CardAbility, CardAbility] {
+  const names: [string, string, string] =
+    (card.artTheme ? ABILITY_THEMES[card.artTheme] : undefined) ?? ['Strike', 'Power Blow', 'Devastate'];
+  return [
+    { name: names[0], atkDelta: 0, cooldown: 1 },
+    { name: names[1], atkDelta: 2, cooldown: 2 },
+    { name: names[2], atkDelta: 4, cooldown: 4 },
+  ];
+}
+
 export interface ShopItemTemplate {
   id: string;
   name: string;
