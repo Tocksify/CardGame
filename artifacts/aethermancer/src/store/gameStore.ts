@@ -28,6 +28,9 @@ export interface FieldCard extends CardInstance {
   stunned: boolean;
   stunTurnsLeft: number;
   tempArmorTurns?: number;
+  burnStacks: number;
+  silenced: boolean;
+  silenceTurnsLeft: number;
 }
 
 export interface InventoryItem {
@@ -147,7 +150,10 @@ export type GameAction =
   | { type: 'SELL_HAND_CARD'; payload: { playerId: number; instanceId: string } }
   | { type: 'EQUIP_INVENTORY_ITEM'; payload: { playerId: number; instanceId: string } }
   | { type: 'STUN_HERO'; payload: { playerId: number } }
-  | { type: 'STUN_PLAYER'; payload: { playerId: number } };
+  | { type: 'STUN_PLAYER'; payload: { playerId: number } }
+  | { type: 'APPLY_BURN'; payload: { playerId: number; instanceId: string; stacks: number } }
+  | { type: 'APPLY_SILENCE'; payload: { playerId: number; instanceId: string; turns: number } }
+  | { type: 'APPLY_ELEMENTAL_COMBO'; payload: { playerId: number; artTheme: string } };
 
 export const initialGameState: GameState = {
   phase: 'countdown',
@@ -419,6 +425,80 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
     }
 
+    case 'APPLY_BURN': {
+      const { playerId, instanceId, stacks } = action.payload;
+      return {
+        ...state,
+        players: state.players.map(p => {
+          if (p.id !== playerId) return p;
+          return {
+            ...p,
+            field: p.field.map(c =>
+              c.instanceId === instanceId
+                ? { ...c, burnStacks: c.burnStacks + stacks }
+                : c
+            ),
+          };
+        }),
+      };
+    }
+
+    case 'APPLY_SILENCE': {
+      const { playerId, instanceId, turns } = action.payload;
+      return {
+        ...state,
+        players: state.players.map(p => {
+          if (p.id !== playerId) return p;
+          return {
+            ...p,
+            field: p.field.map(c =>
+              c.instanceId === instanceId
+                ? { ...c, silenced: true, silenceTurnsLeft: Math.max(c.silenceTurnsLeft, turns) }
+                : c
+            ),
+          };
+        }),
+      };
+    }
+
+    case 'APPLY_ELEMENTAL_COMBO': {
+      const { playerId, artTheme } = action.payload;
+      const COMBO_BONUSES: Record<string, { atk?: number; def?: number }> = {
+        fire:     { atk: 1 },
+        water:    { def: 1 },
+        earth:    { def: 2 },
+        electric: { atk: 1 },
+        frost:    { def: 1 },
+        poison:   { atk: 1 },
+        shadow:   { atk: 1 },
+        void:     { atk: 1, def: 1 },
+        iron:     { def: 2 },
+        dragon:   { atk: 1, def: 1 },
+        aether:   { atk: 1, def: 1 },
+        celestial:{ def: 2 },
+        storm:    { atk: 2 },
+        huntress: { atk: 1 },
+      };
+      const bonus = COMBO_BONUSES[artTheme] || { atk: 1 };
+      return {
+        ...state,
+        players: state.players.map(p => {
+          if (p.id !== playerId) return p;
+          return {
+            ...p,
+            field: p.field.map(c => {
+              if (c.artTheme !== artTheme) return c;
+              return {
+                ...c,
+                currentAtk: c.currentAtk + (bonus.atk || 0),
+                currentDef: c.currentDef + (bonus.def || 0),
+              };
+            }),
+          };
+        }),
+      };
+    }
+
     case 'PROCESS_STATUS_EFFECTS': {
       const { playerId } = action.payload;
       let newPlayers = state.players.map(p => {
@@ -431,10 +511,20 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             card.currentDef = card.currentDef - card.poisonStacks;
             card.poisonStacks = Math.max(0, card.poisonStacks - 1);
           }
+          // Burn tick
+          if (card.burnStacks > 0) {
+            card.currentDef = card.currentDef - 1;
+            card.burnStacks = Math.max(0, card.burnStacks - 1);
+          }
           // Stun tick
           if (card.stunned) {
             card.stunTurnsLeft = Math.max(0, card.stunTurnsLeft - 1);
             if (card.stunTurnsLeft <= 0) card.stunned = false;
+          }
+          // Silence tick
+          if (card.silenced) {
+            card.silenceTurnsLeft = Math.max(0, card.silenceTurnsLeft - 1);
+            if (card.silenceTurnsLeft <= 0) card.silenced = false;
           }
           if (card.currentDef > 0) newField.push(card);
         }
@@ -560,6 +650,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             attachments: [], tempAtkBonus: 0, tempDefBonus: 0,
             turnsOnField: 0, damageDealt: 0, evolved: false,
             poisonStacks: 0, stunned: false, stunTurnsLeft: 0,
+            burnStacks: 0, silenced: false, silenceTurnsLeft: 0,
           };
           newField = [...p.field, newCard];
         } else if (cardToPlay.type === 'artifact') {

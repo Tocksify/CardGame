@@ -145,6 +145,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setTimeout(() => setPlayedCardAnim(null), 750);
     dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} played ${card.name}.`, type: 'card' } });
 
+    // Elemental combo detection — triggers when 2nd card of same theme joins field
+    if (card.type === 'character' && card.artTheme) {
+      const existingSameTheme = player.field.filter(c => c.artTheme === card.artTheme).length;
+      if (existingSameTheme === 1) {
+        dispatch({ type: 'APPLY_ELEMENTAL_COMBO', payload: { playerId: player.id, artTheme: card.artTheme } });
+        const COMBO_NAMES: Record<string, string> = {
+          fire: '🔥 FLAME PACT', water: '💧 TIDE BOND', earth: '🪨 EARTH WARD',
+          electric: '⚡ STORM LINK', frost: '❄️ FROST BIND', poison: '☠️ VENOM PACT',
+          shadow: '🌑 SHADOW LINK', void: '🌌 VOID PACT', iron: '⚙️ IRON BOND',
+          dragon: '🐉 DRAGON PACT', aether: '✨ AETHER BOND', celestial: '⭐ CELESTIAL PACT',
+          storm: '⛈️ TEMPEST SURGE', huntress: '🏹 HUNTER BOND',
+        };
+        announce(COMBO_NAMES[card.artTheme] || `${card.artTheme.toUpperCase()} SYNERGY!`);
+      }
+    }
+
     if (player.isHuman) {
       triggerAchievement('play_10_cards', 1);
       if (card.rarity === 'legendary' || card.rarity === 'secret') triggerAchievement('legendary_played');
@@ -305,6 +321,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         announce('SOUL CAGED!');
         sounds.play('stun');
       }
+    } else if (effect === 'silence_target' && targetId) {
+      const targetOwner = gameState.players.find(p => p.field.some(c => c.instanceId === targetId));
+      if (targetOwner) {
+        dispatch({ type: 'APPLY_SILENCE', payload: { playerId: targetOwner.id, instanceId: targetId, turns: 2 } });
+        announce('SILENCED!');
+        sounds.play('stun');
+      }
     } else if (effect === 'dmg_5_target' && targetId) {
       dmgTarget(targetId, 5 + spellBonus);
       sounds.play('damage');
@@ -352,20 +375,29 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const isImmuneToPoison = targetPlayer.perks.includes('perk_poison_immune');
     const isImmuneToStun = targetPlayer.perks.includes('perk_stun_immune');
 
-    if (attacker.keywords?.includes('poison_on_hit') || attackerPlayer.statBuffs.includes('plague_standard')) {
+    const isSilenced = (attacker as any).silenced === true;
+    if (!isSilenced && (attacker.keywords?.includes('poison_on_hit') || attackerPlayer.statBuffs.includes('plague_standard'))) {
       if (!isImmuneToPoison) {
         dispatchRef.current({ type: 'APPLY_POISON', payload: { playerId: targetPlayer.id, instanceId: targetInstanceId, stacks: 2 } });
         sounds.play('poison');
       }
     }
-    if (attacker.keywords?.includes('stun_on_hit') || attackerPlayer.statBuffs.includes('frost_mantle')) {
+    if (!isSilenced && (attacker.keywords?.includes('stun_on_hit') || attackerPlayer.statBuffs.includes('frost_mantle'))) {
       if (!isImmuneToStun) {
         dispatchRef.current({ type: 'APPLY_STUN', payload: { playerId: targetPlayer.id, instanceId: targetInstanceId, turns: 1 } });
         sounds.play('stun');
       }
     }
-    if (attacker.keywords?.includes('electric')) {
+    if (!isSilenced && attacker.keywords?.includes('electric')) {
       sounds.play('electric');
+    }
+    // Burn: flame_aura cards apply burn stacks on hit
+    if (!isSilenced && attacker.keywords?.includes('flame_aura')) {
+      dispatchRef.current({ type: 'APPLY_BURN', payload: { playerId: targetPlayer.id, instanceId: targetInstanceId, stacks: 1 } });
+    }
+    // Shadow silence: shadow cards with silence keyword silence the target
+    if (!isSilenced && attacker.keywords?.includes('shadow_silence')) {
+      dispatchRef.current({ type: 'APPLY_SILENCE', payload: { playerId: targetPlayer.id, instanceId: targetInstanceId, turns: 1 } });
     }
   };
 

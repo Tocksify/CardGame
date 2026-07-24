@@ -12,6 +12,7 @@ import {
   RARITY_LABEL,
   CHALLENGER_RARITY_ORDER,
 } from '../lib/challengers';
+import { ChallengerSprite } from '../components/game/ChallengerSprite';
 
 const FILTER_OPTIONS = ['All', 'Owned', 'Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'] as const;
 type Filter = typeof FILTER_OPTIONS[number];
@@ -47,9 +48,11 @@ function ChallengerModal({ challenger, owned, equipped, canAfford, onBuy, onEqui
           <X size={18} />
         </button>
 
-        {/* Icon + Name */}
+        {/* Sprite + Name */}
         <div className="text-center">
-          <div className="text-6xl mb-2">{challenger.icon}</div>
+          <div className={`w-36 mx-auto mb-3 overflow-hidden border-2 ${rarityColor.split(' ')[0]} ${rarityGlow}`}>
+            <ChallengerSprite challengerId={challenger.id} mode="full" className="w-full" />
+          </div>
           <h2 className="text-2xl font-display text-foreground">{challenger.name}</h2>
           <p className={`text-sm font-semibold ${rarityColor.split(' ')[1]}`}>{challenger.title}</p>
           <span className={`inline-block mt-1 text-xs px-2 py-0.5 border ${rarityColor} font-bold uppercase tracking-wider`}>
@@ -123,47 +126,35 @@ function ChallengerCard({ challenger, owned, equipped, onClick }: ChallengerCard
   return (
     <button
       onClick={() => { sounds.play('uiClick'); onClick(); }}
-      className={`relative flex flex-col items-center gap-2 p-4 border-2 transition-all text-left cursor-pointer hover:scale-[1.02] active:scale-[0.98] ${
+      className={`relative flex flex-col items-center border-2 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] overflow-hidden ${
         equipped
           ? 'border-green-400 bg-green-950/40 shadow-[0_0_15px_rgba(74,222,128,0.4)]'
-          : `${rarityColor.split(' ')[0]} ${rarityBg} ${owned ? rarityGlow : 'opacity-60'}`
+          : `${rarityColor.split(' ')[0]} ${rarityBg} ${owned ? rarityGlow : ''}`
       }`}
     >
       {/* Status badge */}
-      <div className="absolute top-2 right-2">
+      <div className="absolute top-1.5 right-1.5 z-10">
         {equipped ? (
-          <CheckCircle2 size={16} className="text-green-400" />
+          <CheckCircle2 size={14} className="text-green-400 drop-shadow-[0_0_3px_rgba(0,0,0,0.9)]" />
         ) : owned ? (
-          <CheckCircle2 size={16} className="text-muted-foreground/50" />
+          <CheckCircle2 size={12} className="text-muted-foreground/60 drop-shadow-[0_0_3px_rgba(0,0,0,0.9)]" />
         ) : challenger.unlockedByAchievement ? (
-          <Lock size={14} className="text-amber-400" />
+          <Lock size={12} className="text-amber-400 drop-shadow-[0_0_3px_rgba(0,0,0,0.9)]" />
         ) : (
-          <Lock size={14} className="text-muted-foreground/50" />
+          <Lock size={12} className="text-muted-foreground/40 drop-shadow-[0_0_3px_rgba(0,0,0,0.9)]" />
         )}
       </div>
 
-      {/* Icon */}
-      <div className={`text-4xl ${!owned ? 'grayscale' : ''}`}>{challenger.icon}</div>
-
-      {/* Name */}
-      <div className="text-center">
-        <p className="font-display text-sm text-foreground font-bold">{challenger.name}</p>
-        <p className={`text-xs ${rarityColor.split(' ')[1]}`}>{challenger.title}</p>
+      {/* Sprite face */}
+      <div className={`w-full ${!owned ? 'opacity-45 grayscale' : ''}`}>
+        <ChallengerSprite challengerId={challenger.id} mode="face" className="w-full block" />
       </div>
 
-      {/* Rarity tag */}
-      <span className={`text-[10px] px-1.5 py-0.5 border ${rarityColor} font-bold uppercase tracking-wider`}>
-        {RARITY_LABEL[challenger.rarity]}
-      </span>
-
-      {/* Cost or status */}
-      {owned ? (
-        <span className="text-xs text-green-400 font-semibold">{equipped ? 'Equipped' : 'Owned'}</span>
-      ) : challenger.unlockedByAchievement ? (
-        <span className="text-xs text-amber-400 font-semibold">Achievement</span>
-      ) : (
-        <span className="text-xs text-amber-300 font-semibold">{formatShards(challenger.cost)} ◆</span>
-      )}
+      {/* Name + title */}
+      <div className={`w-full text-center py-2 px-1.5 border-t ${rarityColor.split(' ')[0]}`} style={{ background: 'rgba(0,0,0,0.4)' }}>
+        <p className="font-display text-sm text-foreground font-bold leading-tight truncate">{challenger.name}</p>
+        <p className={`text-[10px] ${rarityColor.split(' ')[1]} leading-tight truncate`}>{challenger.title}</p>
+      </div>
     </button>
   );
 }

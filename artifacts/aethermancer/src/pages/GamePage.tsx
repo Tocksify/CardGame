@@ -119,6 +119,36 @@ const ArenaCardUI = ({
         {isEvolved && <div className="text-amber-400 font-bold text-[9px] mt-0.5">✦ EVOLVED</div>}
         <EvoProgress card={fc} />
       </div>
+      {/* Status effect badges */}
+      {(fc.poisonStacks > 0 || fc.burnStacks > 0 || fc.stunned || fc.silenced || (fc.tempArmorTurns ?? 0) > 0) && (
+        <div className="flex flex-wrap gap-0.5 px-0.5 py-0.5 flex-shrink-0" style={{ background: '#080604', borderTop: '1px solid rgba(60,40,0,0.4)' }}>
+          {fc.poisonStacks > 0 && (
+            <span className="text-[6px] px-0.5 font-bold leading-tight" style={{ background: 'rgba(30,90,10,0.8)', color: '#6aff4a', border: '1px solid rgba(60,140,20,0.6)', borderRadius: 2 }}>
+              ☠️{fc.poisonStacks}
+            </span>
+          )}
+          {fc.burnStacks > 0 && (
+            <span className="text-[6px] px-0.5 font-bold leading-tight" style={{ background: 'rgba(120,30,0,0.8)', color: '#ff7040', border: '1px solid rgba(180,50,0,0.6)', borderRadius: 2 }}>
+              🔥{fc.burnStacks}
+            </span>
+          )}
+          {fc.stunned && (
+            <span className="text-[6px] px-0.5 font-bold leading-tight" style={{ background: 'rgba(40,60,130,0.8)', color: '#80b8ff', border: '1px solid rgba(60,90,200,0.6)', borderRadius: 2 }}>
+              ⚡{fc.stunTurnsLeft}
+            </span>
+          )}
+          {fc.silenced && (
+            <span className="text-[6px] px-0.5 font-bold leading-tight" style={{ background: 'rgba(50,50,50,0.8)', color: '#aaa', border: '1px solid rgba(100,100,100,0.5)', borderRadius: 2 }}>
+              🔇{fc.silenceTurnsLeft}
+            </span>
+          )}
+          {(fc.tempArmorTurns ?? 0) > 0 && (
+            <span className="text-[6px] px-0.5 font-bold leading-tight" style={{ background: 'rgba(10,50,90,0.8)', color: '#60aaff', border: '1px solid rgba(30,70,150,0.6)', borderRadius: 2 }}>
+              🛡️{fc.tempArmorTurns}
+            </span>
+          )}
+        </div>
+      )}
       <div className="h-[14%] flex-shrink-0 flex items-center justify-between px-1"
            style={{ background: 'linear-gradient(180deg, #0e0a05, #080603)', borderTop: '1px solid rgba(74,48,0,0.5)' }}>
         {card.type === 'character' ? (
@@ -404,6 +434,13 @@ const PlayerZone = ({
                 <span className="text-[8px] font-display font-black text-red-400 tracking-widest">DEAD</span>
               </div>
             )}
+            {((player.playerStunTurns ?? 0) > 0 || (player.heroStunTurns ?? 0) > 0) && !(player.isDead || player.hp <= 0) && (
+              <div className="absolute inset-0 flex items-center justify-center bg-yellow-950/80 z-20">
+                <span className="text-[6px] font-display font-black text-yellow-300 tracking-widest leading-tight text-center">
+                  {(player.playerStunTurns ?? 0) > 0 ? 'CAGED' : 'DAZED'}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="text-[8px] font-display font-bold text-center leading-tight max-w-[60px] truncate flex items-center gap-1"
@@ -504,6 +541,41 @@ const PlayerZone = ({
             <span className="text-[7px] font-display uppercase" style={{ color: `${crestColor}30` }}>Empty</span>
           </div>
         )}
+
+        {/* Elemental combo banners */}
+        {(() => {
+          const COMBO_COLORS: Record<string, { bg: string; text: string; label: string }> = {
+            fire:     { bg: 'rgba(160,40,0,0.85)',   text: '#ff8040', label: '🔥 FLAME PACT' },
+            water:    { bg: 'rgba(0,60,140,0.85)',   text: '#60c8ff', label: '💧 TIDE BOND' },
+            earth:    { bg: 'rgba(40,80,20,0.85)',   text: '#80d050', label: '🪨 EARTH WARD' },
+            electric: { bg: 'rgba(100,80,0,0.85)',   text: '#ffe040', label: '⚡ STORM LINK' },
+            frost:    { bg: 'rgba(0,80,130,0.85)',   text: '#a0e8ff', label: '❄️ FROST BIND' },
+            poison:   { bg: 'rgba(40,100,20,0.85)',  text: '#70ff50', label: '☠️ VENOM PACT' },
+            shadow:   { bg: 'rgba(30,10,60,0.85)',   text: '#b080ff', label: '🌑 SHADOW LINK' },
+            void:     { bg: 'rgba(10,0,40,0.85)',    text: '#8060d0', label: '🌌 VOID PACT' },
+            iron:     { bg: 'rgba(50,50,60,0.85)',   text: '#b0b8d0', label: '⚙️ IRON BOND' },
+            dragon:   { bg: 'rgba(120,30,10,0.85)',  text: '#ff9060', label: '🐉 DRAGON PACT' },
+            aether:   { bg: 'rgba(80,20,100,0.85)',  text: '#d080ff', label: '✨ AETHER BOND' },
+            celestial:{ bg: 'rgba(80,70,0,0.85)',    text: '#ffe880', label: '⭐ CELESTIAL' },
+            storm:    { bg: 'rgba(20,40,100,0.85)',  text: '#80aaff', label: '⛈️ TEMPEST SURGE' },
+            huntress: { bg: 'rgba(20,70,20,0.85)',   text: '#80ff80', label: '🏹 HUNTER BOND' },
+          };
+          const themeCounts: Record<string, number> = {};
+          player.field.forEach(c => { if (c.artTheme) themeCounts[c.artTheme] = (themeCounts[c.artTheme] || 0) + 1; });
+          const activeCombo = Object.entries(themeCounts).find(([_, count]) => count >= 2);
+          if (!activeCombo) return null;
+          const [theme] = activeCombo;
+          const info = COMBO_COLORS[theme];
+          if (!info) return null;
+          return (
+            <div className="flex items-center justify-center px-1 py-0.5 shrink-0"
+                 style={{ background: info.bg, border: `1px solid ${info.text}40` }}>
+              <span className="text-[7px] font-display font-black tracking-widest" style={{ color: info.text }}>
+                {info.label}
+              </span>
+            </div>
+          );
+        })()}
 
         {/* Opponent hand — face-down card backs with count */}
         {!isMe && (
