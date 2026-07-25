@@ -442,7 +442,7 @@ const PlayerZone = ({
 }) => {
   const cfg = POSITION_CFG[posId];
   const isHeroHit = combatAnim?.targetId === player.id.toString();
-  const heroTargetable = targetingMode === 'attack' || targetingMode === 'spell' || targetingMode === 'ability';
+  const heroTargetable = targetingMode === 'spell' || targetingMode === 'ability';
   const hp = player.hp, maxHp = player.maxHp;
   const hpPct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
   const hpColor = hpPct > 60 ? '#4ade80' : hpPct > 25 ? '#f59e0b' : '#ef4444';
@@ -950,23 +950,11 @@ export default function GamePage() {
       return;
     }
 
-    if (gameState.targetingMode === 'attack') {
-      if (player.id !== me.id) {
-        attackWith(gameState.sourceId!, player.id, fieldCard.instanceId);
-        dispatch({ type: 'CLEAR_TARGETING' });
-      }
-      return;
-    }
-
     // Ability targeting: click enemy field card to use ability on it
     if (gameState.targetingMode === 'ability' && player.id !== me.id) {
       useAbility(gameState.sourceId!, gameState.abilityIndex ?? 0, player.id, fieldCard.instanceId);
       dispatch({ type: 'CLEAR_TARGETING' });
       return;
-    }
-
-    if (gameState.phase === 'combat' && player.id === me.id && !fieldCard.tapped && !autoCombat) {
-      dispatch({ type: 'SET_TARGETING', payload: { mode: 'attack', sourceId: fieldCard.instanceId, pendingAction: null } });
     }
   };
 
@@ -975,17 +963,6 @@ export default function GamePage() {
     if (gameState.targetingMode === 'spell') {
       // Stage spell targeting hero
       stageSpell(gameState.sourceId!, player.id.toString());
-      dispatch({ type: 'CLEAR_TARGETING' });
-      return;
-    }
-    if (gameState.targetingMode === 'attack' && player.id !== me.id) {
-      // Defender rule: cannot attack hero directly while they have field cards
-      if (player.field.length > 0) {
-        flashReason('Defeat all enemy characters before attacking their hero');
-        dispatch({ type: 'CLEAR_TARGETING' });
-        return;
-      }
-      attackWith(gameState.sourceId!, player.id);
       dispatch({ type: 'CLEAR_TARGETING' });
       return;
     }
@@ -1026,7 +1003,6 @@ export default function GamePage() {
 
   const targetingLabel: Record<string, string> = {
     spell:       'Select a target for your spell',
-    attack:      'Select an enemy to attack',
     enchantment: 'Select your character to enchant',
     item:        'Select a target for this item',
     ability:     'Select a target for your ability',
