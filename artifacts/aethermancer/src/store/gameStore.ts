@@ -160,7 +160,8 @@ export type GameAction =
   | { type: 'APPLY_BURN'; payload: { playerId: number; instanceId: string; stacks: number } }
   | { type: 'APPLY_SILENCE'; payload: { playerId: number; instanceId: string; turns: number } }
   | { type: 'APPLY_ELEMENTAL_COMBO'; payload: { playerId: number; artTheme: string } }
-  | { type: 'APPLY_CROSS_COMBO'; payload: { playerId: number; themeA: string; themeB: string; atk: number; def: number } };
+  | { type: 'APPLY_CROSS_COMBO'; payload: { playerId: number; themeA: string; themeB: string; atk: number; def: number } }
+  | { type: 'RECALL_FIELD_CARD'; payload: { playerId: number; instanceId: string } };
 
 export const initialGameState: GameState = {
   phase: 'countdown',
@@ -528,6 +529,33 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
                 currentDef: c.currentDef + def,
               };
             }),
+          };
+        }),
+      };
+    }
+
+    case 'RECALL_FIELD_CARD': {
+      const { playerId, instanceId } = action.payload;
+      return {
+        ...state,
+        players: state.players.map(p => {
+          if (p.id !== playerId) return p;
+          const fieldCard = p.field.find(c => c.instanceId === instanceId);
+          if (!fieldCard) return p;
+          // Strip FieldCard-only props to recover the original CardInstance shape
+          const {
+            tapped, currentAtk, currentDef, attachments, tempAtkBonus, tempDefBonus,
+            turnsOnField, damageDealt, evolved, poisonStacks, stunned, stunTurnsLeft,
+            burnStacks, silenced, silenceTurnsLeft, abilityCooldowns,
+            hasAttackedThisTurn, tempArmorTurns,
+            ...cardInstance
+          } = fieldCard;
+          return {
+            ...p,
+            field: p.field.filter(c => c.instanceId !== instanceId),
+            hand: [...p.hand, cardInstance as CardInstance],
+            aether: Math.min(p.maxAether, p.aether + fieldCard.cost),
+            cardsPlayedByType: { ...p.cardsPlayedByType, character: false },
           };
         }),
       };

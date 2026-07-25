@@ -424,6 +424,7 @@ function getPositions(count: number): PositionId[] {
 const PlayerZone = ({
   player, posId, isMe, isMyTurn, phase, targetingMode, onHeroClick, onCardClick,
   combatAnim, aether, maxAether, onSellArtifact, onSellCreature, onAbilityClick,
+  onRecallDragStart, onRecallDragEnd,
 }: {
   player: Player;
   posId: PositionId;
@@ -439,6 +440,8 @@ const PlayerZone = ({
   onSellArtifact?: () => void;
   onSellCreature?: (instanceId: string) => void;
   onAbilityClick?: (cardInstanceId: string, abilityIndex: number) => void;
+  onRecallDragStart?: (instanceId: string) => void;
+  onRecallDragEnd?: () => void;
 }) => {
   const cfg = POSITION_CFG[posId];
   const isHeroHit = combatAnim?.targetId === player.id.toString();
@@ -551,8 +554,19 @@ const PlayerZone = ({
             {player.field.map(card => {
               const isTargetable = targetingMode !== 'none' && !isMe;
               const canSellThis = isMe && isMyTurn && phase === 'main' && onSellCreature;
+              const canRecall = isMe && isMyTurn && phase === 'main' && !!onRecallDragStart;
               return (
-                <div key={card.instanceId} className="relative">
+                <div
+                  key={card.instanceId}
+                  className="relative"
+                  draggable={canRecall}
+                  onDragStart={canRecall ? (e) => {
+                    e.dataTransfer.setData('recallFieldCardId', card.instanceId);
+                    e.dataTransfer.effectAllowed = 'move';
+                    onRecallDragStart!(card.instanceId);
+                  } : undefined}
+                  onDragEnd={canRecall ? () => onRecallDragEnd?.() : undefined}
+                >
                   <ArenaCardUI
                     card={card}
                     size="sm"
@@ -567,6 +581,12 @@ const PlayerZone = ({
                         : undefined
                     }
                   />
+                  {canRecall && (
+                    <div className="absolute bottom-0 inset-x-0 flex items-center justify-center pb-0.5 pointer-events-none"
+                         style={{ background: 'linear-gradient(0deg, rgba(60,100,200,0.2), transparent)' }}>
+                      <span className="text-[4px] font-display uppercase tracking-wider" style={{ color: 'rgba(120,160,255,0.6)' }}>drag to recall</span>
+                    </div>
+                  )}
                   {canSellThis && (
                     <button
                       onClick={(e) => { e.stopPropagation(); onSellCreature!(card.instanceId); }}
@@ -840,7 +860,8 @@ export default function GamePage() {
   const [, setLocation] = useLocation();
   const {
     gameState, dispatch, playCard, stageSpell, sellArtifact, sellCreature, sellHandCard, attackWith, useAbility,
-    buyItem, useInventoryItem, equipInventoryItem, endPhase, pickDraftCard, achievementToast, combatAnim, playedCardAnim, announcement,
+    buyItem, useInventoryItem, equipInventoryItem, endPhase, pickDraftCard, recallFieldCard,
+    achievementToast, combatAnim, playedCardAnim, announcement,
     shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft, mainPhaseTimeLeft,
   } = useGame();
   const { animatedBattlefield, autoCombat } = useLobby();
@@ -852,6 +873,8 @@ export default function GamePage() {
   const [logOpen, setLogOpen] = useState(false);
   const [isSpectating, setIsSpectating] = useState(false);
   const [relicDragOver, setRelicDragOver] = useState(false);
+  const [handDragOver, setHandDragOver] = useState(false);
+  const [recallingField, setRecallingField] = useState(false);
   const [cantPlayReason, setCantPlayReason] = useState<string | null>(null);
   const cantPlayTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1168,6 +1191,8 @@ export default function GamePage() {
                 if ((card.abilityCooldowns?.[abilityIndex] ?? 0) > 0) return;
                 dispatch({ type: 'SET_TARGETING', payload: { mode: 'ability', sourceId: cardInstanceId, pendingAction: null, abilityIndex } });
               } : undefined}
+              onRecallDragStart={player.isHuman ? () => setRecallingField(true) : undefined}
+              onRecallDragEnd={player.isHuman ? () => setRecallingField(false) : undefined}
             />
           );
         })}
@@ -1450,7 +1475,23 @@ export default function GamePage() {
           })()}
 
           {/* ── Hand cards ── */}
-          <div className="flex-1 overflow-x-auto overflow-y-visible min-h-0">
+          <div
+            className="flex-1 overflow-x-auto overflow-y-visible min-h-0 transition-all duration-150"
+            style={handDragOver ? { background: 'rgba(60,100,200,0.08)', boxShadow: 'inset 0 0 18px rgba(60,100,200,0.25)' } : undefined}
+            onDragOver={(e) => {
+              if (e.dataTransfer.types.includes('recallFieldCardId')) {
+                e.preventDefault();
+                setHandDragOver(true);
+              }
+            }}
+            onDragLeave={() => setHandDragOver(false)}
+            onDrop={(e) => {
+              setHandDragOver(false);
+              setRecallingField(false);
+              const id = e.dataTransfer.getData('recallFieldCardId');
+              if (id) { e.preventDefault(); recallFieldCard(id); }
+            }}
+          >
             <div className="flex justify-center items-end min-w-max h-full px-4 pb-2 pt-1 gap-1">
               {me.hand.map((card, index) => {
                 const offset = index - (me.hand.length - 1) / 2;

@@ -55,6 +55,7 @@ interface GameContextType {
   equipInventoryItem: (instanceId: string) => void;
   endPhase: () => void;
   pickDraftCard: (template: CardTemplate) => void;
+  recallFieldCard: (instanceId: string) => void;
   achievements: Achievement[];
   achievementToast: string | null;
   combatAnim: { targetId: string; damage: number; attackerId?: string } | null;
@@ -563,6 +564,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SELL_HAND_CARD', payload: { playerId: player.id, instanceId } });
     dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} discarded ${card.name} for ${sellPrice}g.`, type: 'gold' } });
     sounds.play('gold');
+  };
+
+  // ── Recall field card to hand ─────────────────────────────────────────────
+  const recallFieldCard = (instanceId: string) => {
+    const player = gameState.players[gameState.currentPlayerIndex];
+    if (gameState.phase !== 'main' || !player.isHuman) return;
+    const card = player.field.find(c => c.instanceId === instanceId);
+    if (!card) return;
+    dispatch({ type: 'RECALL_FIELD_CARD', payload: { playerId: player.id, instanceId } });
+    dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} recalled ${card.name} to hand.`, type: 'card' } });
   };
 
   // ── Attack ────────────────────────────────────────────────────────────────
@@ -1492,7 +1503,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   return (
     <GameContext.Provider value={{
       gameState, dispatch, playCard, stageSpell, sellArtifact, sellCreature, sellHandCard, attackWith, useAbility,
-      buyItem, useInventoryItem, equipInventoryItem, endPhase, pickDraftCard,
+      buyItem, useInventoryItem, equipInventoryItem, endPhase, pickDraftCard, recallFieldCard,
       achievements, achievementToast, combatAnim, playedCardAnim, announcement,
       shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft, mainPhaseTimeLeft,
     }}>
