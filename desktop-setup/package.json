@@ -5,8 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "dist": "electron-builder --win"
   },
   "build": {
     "appId": "com.aethermancer.desktop",
@@ -16,11 +15,35 @@
     },
     "files": [
       "main.js",
-      "vite.desktop.config.ts",
-      "node_modules/**"
+      "vite.desktop.config.ts"
+    ],
+    "extraResources": [
+      {
+        "from": "../artifacts/api-server/dist",
+        "to": "api-server",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../artifacts/aethermancer/dist/public",
+        "to": "frontend",
+        "filter": ["**/*"]
+      }
     ],
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "../artifacts/aethermancer/public/favicon.svg"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Aethermancer"
     },
     "mac": {
       "target": "dmg"
@@ -29,7 +52,6 @@
       "target": "AppImage"
     }
   },
-  "dependencies": {},
   "devDependencies": {
     "electron": "^36.4.0",
     "electron-builder": "^26.0.12"

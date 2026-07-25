@@ -1,6 +1,6 @@
 # Aethermancer — Desktop Setup
 
-Run Aethermancer as a native desktop app via Electron.
+Run Aethermancer as a native Windows desktop app via Electron.
 
 ---
 
@@ -14,86 +14,88 @@ Run Aethermancer as a native desktop app via Electron.
 
 ---
 
-## First-time setup
+## Build the Windows installer  ← start here
 
-```bash
-# 1. Clone the repo
-git clone <your-repo-url>
-cd <repo-folder>
+From the repo root, double-click **`desktop-setup\build.bat`** or run it from a terminal:
 
-# 2. Install all monorepo dependencies (do this from the repo root)
-pnpm install
-
-# 3. Install desktop-specific dependencies (Electron)
-cd desktop-setup
-npm install
+```bat
+desktop-setup\build.bat
 ```
+
+What it does, in order:
+
+| Step | Command |
+|---|---|
+| Install monorepo deps | `pnpm install` |
+| Build the API server | `pnpm --filter @workspace/api-server run build` |
+| Build the frontend | `pnpm --filter @workspace/aethermancer run build` |
+| Install Electron deps | `npm install` (inside `desktop-setup/`) |
+| Package installer | `npm run dist` (electron-builder → NSIS `.exe`) |
+
+The finished installer lands in **`desktop-setup\out\`** as
+`Aethermancer Setup x.x.x.exe`.
 
 ---
 
-## Running the app
+## Installing the game
 
-From the `desktop-setup` folder:
+1. Run `desktop-setup\out\Aethermancer Setup *.exe`
+2. Follow the installer wizard — you can choose the install folder
+3. A desktop shortcut and Start Menu entry are created automatically
+4. Launch **Aethermancer** from either shortcut
+
+No Node.js or pnpm required on the target machine — everything is bundled.
+
+---
+
+## How it works (production)
+
+```
+Aethermancer.exe
+  └─ Electron (Chromium + Node.js)
+       ├─ main.js  ──► spawns API server (port 3000)
+       │                  ├─ Express /api routes
+       │                  ├─ WebSocket  /api/ws
+       │                  └─ Serves pre-built frontend static files
+       └─ BrowserWindow → http://localhost:3000
+```
+
+Single port, no reverse-proxy needed. The API server handles HTTP, WebSocket,
+and static file serving together.
+
+---
+
+## Running in dev mode (without building an installer)
 
 ```bash
+# 1. Install all dependencies (from repo root)
+pnpm install
+
+# 2. Install Electron
+cd desktop-setup
+npm install
+
+# 3. Launch
 npm start
 ```
 
-This will:
-1. Start the Express + WebSocket API server on port **3001**
-2. Start the Vite dev server on port **3000** (proxies `/api` → the API server)
-3. Open the game in an Electron window once both are ready
-
-Allow up to ~20 seconds for the first cold start while Vite compiles.
-
----
-
-## Building a distributable (optional)
-
-To package Aethermancer into a standalone installer for your platform:
-
-```bash
-# First, build the frontend
-cd ..   # go back to repo root
-pnpm --filter @workspace/aethermancer run build
-
-# Then package with electron-builder
-cd desktop-setup
-npm run dist
-```
-
-Output will be in `desktop-setup/out/`.
-
-| Platform | Output |
-|---|---|
-| Windows | `.exe` installer (NSIS) |
-| macOS | `.dmg` |
-| Linux | `.AppImage` |
-
----
-
-## Ports used
-
-| Service | Port |
-|---|---|
-| Vite (frontend) | 3000 |
-| Express API + WebSockets | 3001 |
-
-If either port is already in use on your machine, edit the `FRONTEND_PORT` /
-`API_PORT` constants at the top of `main.js`.
+Dev mode starts the Vite dev server on port **3000** and the API server on
+port **3001**, with `/api` proxied automatically.
 
 ---
 
 ## Troubleshooting
 
-**"pnpm: command not found" on Windows**  
+**`pnpm: command not found`**  
 Run `npm install -g pnpm` in PowerShell (as Administrator if needed), then
-restart your terminal.
+reopen the terminal.
 
-**Electron window stays blank / shows "site can't be reached"**  
-The services are still starting. Wait a few seconds — the window will refresh
-automatically once Vite is ready. If it stays blank, check the terminal for
-errors from the API or Vite process.
+**Installer build fails at the Electron packaging step**  
+Make sure you ran `pnpm install` from the **repo root** first so all workspace
+dependencies are present before electron-builder tries to copy them.
 
-**Port already in use**  
-Change `FRONTEND_PORT` or `API_PORT` at the top of `main.js`, then restart.
+**Window opens but shows a blank page**  
+The server is still starting — wait a few seconds and reload (`Ctrl+R`).
+
+**Port 3000 already in use**  
+Edit the `FRONTEND_PORT` constant at the top of `main.js` and rebuild.
