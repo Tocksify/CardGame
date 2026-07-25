@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import { sounds } from '../lib/sounds';
@@ -8,7 +8,7 @@ import { useChallenger } from '../context/ChallengerContext';
 import { useMultiplayer, GameStartedPayload, RoomBot } from '../context/MultiplayerContext';
 import { drawFromPool, generateDeck, getCardTemplate } from '../lib/cards';
 import { generateId } from '../store/gameStore';
-import { ArrowLeft, Plus, Minus, Bot, User, Copy, LogIn, Swords, CheckCheck, Pencil, Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, Bot, User, Copy, LogIn, Swords, CheckCheck, Pencil, Wifi, WifiOff, Loader2, Send, MessageSquare } from 'lucide-react';
 
 const BOT_NAMES = [
   'Void Herald', 'Storm Arcane', 'Dusk Weaver', 'Iron Sage',
@@ -45,8 +45,12 @@ export default function MultiplayerRoomsPage() {
     status, roomState, yourSocketId, serverError,
     setServerError, setRoomState,
     createRoom, joinRoom, leaveRoom, updateSettings, startGame,
+    sendChatMessage, chatMessages,
     setOnGameStarted,
   } = useMultiplayer();
+
+  const [chatInput, setChatInput] = useState('');
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   const [view, setView] = useState<View>(() =>
     localStorage.getItem(USERNAME_KEY) ? 'lobby' : 'username'
@@ -67,6 +71,17 @@ export default function MultiplayerRoomsPage() {
   useEffect(() => {
     if (roomState) setIsJoining(false);
   }, [roomState]);
+
+  // Auto-scroll chat to bottom when new messages arrive
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
+
+  const handleChatSend = () => {
+    if (!chatInput.trim()) return;
+    sendChatMessage(chatInput);
+    setChatInput('');
+  };
 
   const handleGameStarted = useCallback((payload: GameStartedPayload) => {
     const makeCardInstance = (tpl: any) => ({ ...tpl, instanceId: `card_${generateId()}` });
@@ -596,6 +611,44 @@ export default function MultiplayerRoomsPage() {
                 <div className="text-xs opacity-70 leading-snug">{m.desc}</div>
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* Chat */}
+        <div className="bg-card border border-border flex flex-col" style={{ height: 240 }}>
+          <div className="px-5 py-3 border-b border-border flex items-center gap-2 shrink-0">
+            <MessageSquare size={14} className="text-primary" />
+            <h2 className="font-display text-base text-primary">Room Chat</h2>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 py-2 flex flex-col gap-1 min-h-0">
+            {chatMessages.length === 0 ? (
+              <p className="text-xs text-muted-foreground/40 text-center mt-4">No messages yet. Say hello!</p>
+            ) : (
+              chatMessages.map((m, i) => (
+                <div key={i} className="flex gap-1.5 items-start text-sm">
+                  <span className="font-semibold text-primary/80 shrink-0 text-xs leading-5">{m.fromName}:</span>
+                  <span className="text-muted-foreground text-xs leading-5 break-words">{m.text}</span>
+                </div>
+              ))
+            )}
+            <div ref={chatEndRef} />
+          </div>
+          <div className="px-3 py-2 border-t border-border shrink-0 flex gap-2">
+            <input
+              type="text"
+              value={chatInput}
+              onChange={e => setChatInput(e.target.value.slice(0, 200))}
+              onKeyDown={e => e.key === 'Enter' && handleChatSend()}
+              placeholder="Type a message…"
+              className="flex-1 bg-input border border-border px-3 py-1.5 text-sm outline-none focus:border-primary/60 transition-colors text-foreground"
+            />
+            <button
+              onClick={handleChatSend}
+              disabled={!chatInput.trim()}
+              className="px-3 py-1.5 bg-primary/10 hover:bg-primary/20 border border-primary/40 text-primary disabled:opacity-30 transition-colors"
+            >
+              <Send size={14} />
+            </button>
           </div>
         </div>
 

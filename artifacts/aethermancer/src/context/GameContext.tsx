@@ -12,6 +12,32 @@ import { useCodex } from './CodexContext';
 
 const SHOP_ROTATION_SECONDS = 180;
 const BUY_PHASE_SECONDS = 30;
+const MAIN_PHASE_SECONDS = 60;
+
+// ── Cross-element combo definitions ──────────────────────────────────────────
+const CROSS_COMBOS: [string, string, number, number, string][] = [
+  // [themeA, themeB, atk, def, displayName]
+  ['fire',      'shadow',    2, 0, '🔥🌑 DARK FLAME'],
+  ['frost',     'water',     0, 2, '❄️💧 GLACIAL SURGE'],
+  ['electric',  'storm',     2, 0, '⚡⛈️ TEMPEST FORCE'],
+  ['poison',    'nature',    1, 1, '☠️🌿 TOXIC BLOOM'],
+  ['void',      'shadow',    2, 0, '🌌🌑 ABYSS PACT'],
+  ['earth',     'iron',      0, 3, '🪨⚙️ FORTRESS WARD'],
+  ['celestial', 'aether',    1, 1, '⭐✨ DIVINE AETHER'],
+  ['fire',      'dragon',    2, 0, '🔥🐉 ANCIENT FLAME'],
+  ['wind',      'storm',     2, 0, '💨⛈️ GALE FORCE'],
+  ['blood',     'fire',      2, 0, '🩸🔥 SANGUINE BLAZE'],
+  ['frost',     'shadow',    1, 1, '❄️🌑 FROZEN DARKNESS'],
+  ['crystal',   'aether',    0, 2, '💎✨ CRYSTAL RESONANCE'],
+  ['bone',      'shadow',    1, 1, '💀🌑 SOUL HARVEST'],
+  ['nature',    'earth',     0, 2, '🌿🪨 VERDANT STONE'],
+  ['arcane',    'aether',    1, 1, '🔮✨ ARCANE RESONANCE'],
+  ['electric',  'water',     1, 1, '⚡💧 STORM SURGE'],
+  ['poison',    'blood',     2, 0, '☠️🩸 VIRULENT STRIKE'],
+  ['iron',      'bone',      0, 2, '⚙️💀 IRON CRYPT'],
+  ['wind',      'frost',     1, 1, '💨❄️ ARCTIC GALE'],
+  ['void',      'arcane',    1, 1, '🌌🔮 VOID ARCANA'],
+];
 
 interface GameContextType {
   gameState: GameState;
@@ -36,6 +62,7 @@ interface GameContextType {
   shopRotationIds: string[];
   shopRotationTimeLeft: number;
   buyPhaseTimeLeft: number | null;
+  mainPhaseTimeLeft: number | null;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -50,6 +77,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [shopRotationIds, setShopRotationIds] = useState<string[]>(() => generateShopRotation());
   const [shopRotationTimeLeft, setShopRotationTimeLeft] = useState(SHOP_ROTATION_SECONDS);
   const [buyPhaseTimeLeft, setBuyPhaseTimeLeft] = useState<number | null>(null);
+  const [mainPhaseTimeLeft, setMainPhaseTimeLeft] = useState<number | null>(null);
 
   // Lobby settings
   const { autoCombat } = useLobby();
@@ -96,6 +124,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } else {
       setBuyPhaseTimeLeft(null);
     }
+    if (gameState.phase === 'main' && currentPlayer?.isHuman) {
+      setMainPhaseTimeLeft(MAIN_PHASE_SECONDS);
+    } else {
+      setMainPhaseTimeLeft(null);
+    }
   }, [gameState.phase, gameState.currentPlayerIndex]);
 
   const dispatchRef = useRef(dispatch);
@@ -112,6 +145,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const timer = setTimeout(() => setBuyPhaseTimeLeft(t => (t ?? 0) - 1), 1000);
     return () => clearTimeout(timer);
   }, [buyPhaseTimeLeft]);
+
+  useEffect(() => {
+    if (mainPhaseTimeLeft === null) return;
+    if (mainPhaseTimeLeft <= 0) {
+      dispatchRef.current({ type: 'ADVANCE_PHASE' });
+      setMainPhaseTimeLeft(null);
+      return;
+    }
+    const timer = setTimeout(() => setMainPhaseTimeLeft(t => (t ?? 0) - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [mainPhaseTimeLeft]);
 
   const triggerAchievement = (id: string, progressInc = 0) => {
     setAchievements(prev => {
@@ -177,8 +221,28 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           shadow: '🌑 SHADOW LINK', void: '🌌 VOID PACT', iron: '⚙️ IRON BOND',
           dragon: '🐉 DRAGON PACT', aether: '✨ AETHER BOND', celestial: '⭐ CELESTIAL PACT',
           storm: '⛈️ TEMPEST SURGE', huntress: '🏹 HUNTER BOND',
+          nature: '🌿 NATURE PACT', blood: '🩸 BLOOD BOND', crystal: '💎 CRYSTAL LINK',
+          wind: '💨 WIND PACT', arcane: '🔮 ARCANE BOND', bone: '💀 BONE PACT',
         };
         announce(COMBO_NAMES[card.artTheme] || `${card.artTheme.toUpperCase()} SYNERGY!`);
+      }
+
+      // Cross-element combo detection — triggers when this is the FIRST card of its theme
+      // but a matching partner theme is already present
+      const existingCurrentTheme = player.field.filter(c => c.artTheme === card.artTheme).length;
+      if (existingCurrentTheme === 0) {
+        for (const [themeA, themeB, atk, def, comboName] of CROSS_COMBOS) {
+          const isMatch = card.artTheme === themeA || card.artTheme === themeB;
+          if (!isMatch) continue;
+          const partnerTheme = card.artTheme === themeA ? themeB : themeA;
+          const hasPartner = player.field.some(c => c.artTheme === partnerTheme);
+          if (hasPartner) {
+            dispatch({ type: 'APPLY_CROSS_COMBO', payload: { playerId: player.id, themeA, themeB, atk, def } });
+            announce(comboName);
+            if (player.isHuman) triggerAchievement('trigger_cross_combo');
+            break; // only one cross-combo per card play
+          }
+        }
       }
     }
 
@@ -535,6 +599,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           sounds.play('gold');
           if (player.isHuman) {
             triggerAchievement('kill_5_creatures', 1);
+            triggerAchievement('kill_50_creatures', 1);
             // Challenger: steal on kill
             if (cEffects.includes('steal_pct_on_kill')) {
               const enemy = gameState.players.find(p => p.id !== player.id);
@@ -598,6 +663,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         sounds.play('gold');
         if (player.isHuman) {
           triggerAchievement('kill_5_creatures', 1);
+          triggerAchievement('kill_50_creatures', 1);
           if (cEffects.includes('steal_pct_on_kill')) {
             const enemy = gameState.players.find(p => p.id !== player.id);
             if (enemy && enemy.gold > 0) {
@@ -891,6 +957,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         sounds.play('victory');
         triggerAchievement('first_win');
         triggerAchievement('win_3_games', 1);
+        triggerAchievement('win_10_games', 1);
+        triggerAchievement('mythic_50_wins', 1);
         if (!winner.damageTakenThisGame) triggerAchievement('win_no_damage');
         // Award Arcane Shards for winning
         addShards(SHARDS_PER_WIN);
@@ -1261,6 +1329,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               dispatchRef.current({ type: 'RECORD_KILL', payload: { playerId: cp.id } });
               sounds.play('gold');
               triggerAchievement('kill_5_creatures', 1);
+              triggerAchievement('kill_50_creatures', 1);
               if (cEffects.includes('steal_pct_on_kill')) {
                 const stolen = Math.max(1, Math.floor(enemy.gold * 0.05));
                 dispatchRef.current({ type: 'STEAL_GOLD', payload: { fromPlayerId: enemy.id, toPlayerId: cp.id, amount: stolen } });
@@ -1320,6 +1389,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
                 dispatchRef.current({ type: 'RECORD_KILL', payload: { playerId: cp.id } });
                 sounds.play('gold');
                 triggerAchievement('kill_5_creatures', 1);
+                triggerAchievement('kill_50_creatures', 1);
                 if (cEffects.includes('steal_pct_on_kill')) {
                   const stolen = Math.max(1, Math.floor(enemy.gold * 0.05));
                   dispatchRef.current({ type: 'STEAL_GOLD', payload: { fromPlayerId: enemy.id, toPlayerId: cp.id, amount: stolen } });
@@ -1409,7 +1479,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       gameState, dispatch, playCard, stageSpell, sellArtifact, sellCreature, sellHandCard, attackWith, useAbility,
       buyItem, useInventoryItem, equipInventoryItem, endPhase, pickDraftCard,
       achievements, achievementToast, combatAnim, playedCardAnim, announcement,
-      shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft,
+      shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft, mainPhaseTimeLeft,
     }}>
       {children}
     </GameContext.Provider>

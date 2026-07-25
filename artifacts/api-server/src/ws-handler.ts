@@ -23,7 +23,8 @@ type ClientMsg =
   | { type: 'LEAVE_ROOM' }
   | { type: 'UPDATE_SETTINGS'; gameMode: '8card' | 'draft'; bots: RoomBot[] }
   | { type: 'START_GAME' }
-  | { type: 'PLAYER_DRAFT_DONE' };
+  | { type: 'PLAYER_DRAFT_DONE' }
+  | { type: 'CHAT_MESSAGE'; text: string };
 
 function send(ws: WebSocket, msg: object) {
   if (ws.readyState === WebSocket.OPEN) {
@@ -184,6 +185,17 @@ export function handleWsConnection(wss: WebSocketServer) {
           room.draftReadyPlayers.add(client.socketId);
           logger.info({ socketId: client.socketId, ready: room.draftReadyPlayers.size, total: room.players.length }, 'Player draft done');
           checkDraftComplete(wss, room);
+          break;
+        }
+
+        case 'CHAT_MESSAGE': {
+          const room = getRoomBySocket(client.socketId);
+          if (!room) return;
+          const sender = room.players.find(p => p.socketId === client.socketId);
+          if (!sender) return;
+          const text = (msg.text ?? '').toString().trim().slice(0, 200);
+          if (!text) return;
+          broadcast(wss, room, { type: 'CHAT_MESSAGE', fromName: sender.name, text });
           break;
         }
 

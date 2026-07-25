@@ -832,7 +832,7 @@ export default function GamePage() {
   const {
     gameState, dispatch, playCard, stageSpell, sellArtifact, sellCreature, sellHandCard, attackWith, useAbility,
     buyItem, useInventoryItem, equipInventoryItem, endPhase, pickDraftCard, achievementToast, combatAnim, playedCardAnim, announcement,
-    shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft,
+    shopRotationIds, shopRotationTimeLeft, buyPhaseTimeLeft, mainPhaseTimeLeft,
   } = useGame();
   const { animatedBattlefield, autoCombat } = useLobby();
   const { equippedChallenger } = useChallenger();
@@ -1104,6 +1104,11 @@ export default function GamePage() {
                     [{buyPhaseTimeLeft}s]
                   </span>
                 )}
+                {gameState.phase === 'main' && mainPhaseTimeLeft !== null && (
+                  <span className={`ml-1 font-mono ${mainPhaseTimeLeft <= 15 ? 'text-red-400 animate-pulse' : mainPhaseTimeLeft <= 30 ? 'text-amber-400' : ''}`}>
+                    [{mainPhaseTimeLeft}s]
+                  </span>
+                )}
               </span>
             ) : `${currentPlayer.name}'s Turn`}
           </div>
@@ -1310,6 +1315,11 @@ export default function GamePage() {
                   </span>
                 )}
               </button>
+            )}
+            {isMyTurn && gameState.phase === 'main' && mainPhaseTimeLeft !== null && mainPhaseTimeLeft <= 30 && (
+              <div className={`flex items-center gap-1 px-2 py-1 text-[10px] font-mono border ${mainPhaseTimeLeft <= 15 ? 'text-red-400 border-red-500/50 animate-pulse bg-red-950/30' : 'text-amber-400 border-amber-600/40 bg-amber-950/20'}`}>
+                ⏱ {mainPhaseTimeLeft}s
+              </div>
             )}
             {isMyTurn && ['buy','main','combat'].includes(gameState.phase) && !(autoCombat && gameState.phase === 'combat') && (
               <button

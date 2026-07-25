@@ -19,6 +19,12 @@ export const DEFAULT_ACHIEVEMENTS: Achievement[] = [
   { id: 'legendary_played', name: 'Legend Unleashed', description: 'Play a Legendary card', icon: 'star', unlocked: false },
   { id: 'win_3_games', name: 'Veteran', description: 'Win 3 games total', icon: 'award', unlocked: false, progress: 0, target: 3 },
   { id: 'survive_10_turns', name: 'Endurance', description: 'Survive 10 turns in a single game', icon: 'clock', unlocked: false, progress: 0, target: 10 },
+  // ── New achievements (challenger unlocks) ────────────────────────────────
+  { id: 'win_10_games', name: 'Warlord', description: 'Win 10 games total', icon: 'trophy', unlocked: false, progress: 0, target: 10 },
+  { id: 'kill_50_creatures', name: 'Field Clearer', description: 'Destroy 50 enemy creatures total across all games', icon: 'swords', unlocked: false, progress: 0, target: 50 },
+  { id: 'trigger_cross_combo', name: 'Synergist', description: 'Trigger a cross-element combo', icon: 'zap', unlocked: false },
+  // ── Mythic achievement — very hard ───────────────────────────────────────
+  { id: 'mythic_50_wins', name: 'Eternal Sovereign', description: 'Win 50 games total', icon: 'crown', unlocked: false, progress: 0, target: 50 },
 ];
 
 export function loadAchievements(): Achievement[] {

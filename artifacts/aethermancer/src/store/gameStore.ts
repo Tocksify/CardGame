@@ -159,7 +159,8 @@ export type GameAction =
   | { type: 'STUN_PLAYER'; payload: { playerId: number } }
   | { type: 'APPLY_BURN'; payload: { playerId: number; instanceId: string; stacks: number } }
   | { type: 'APPLY_SILENCE'; payload: { playerId: number; instanceId: string; turns: number } }
-  | { type: 'APPLY_ELEMENTAL_COMBO'; payload: { playerId: number; artTheme: string } };
+  | { type: 'APPLY_ELEMENTAL_COMBO'; payload: { playerId: number; artTheme: string } }
+  | { type: 'APPLY_CROSS_COMBO'; payload: { playerId: number; themeA: string; themeB: string; atk: number; def: number } };
 
 export const initialGameState: GameState = {
   phase: 'countdown',
@@ -484,6 +485,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         celestial:{ def: 2 },
         storm:    { atk: 2 },
         huntress: { atk: 1 },
+        nature:   { def: 1 },
+        blood:    { atk: 1 },
+        crystal:  { def: 2 },
+        wind:     { atk: 1 },
+        arcane:   { atk: 1, def: 1 },
+        bone:     { atk: 1 },
       };
       const bonus = COMBO_BONUSES[artTheme] || { atk: 1 };
       return {
@@ -498,6 +505,27 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
                 ...c,
                 currentAtk: c.currentAtk + (bonus.atk || 0),
                 currentDef: c.currentDef + (bonus.def || 0),
+              };
+            }),
+          };
+        }),
+      };
+    }
+
+    case 'APPLY_CROSS_COMBO': {
+      const { playerId, themeA, themeB, atk, def } = action.payload;
+      return {
+        ...state,
+        players: state.players.map(p => {
+          if (p.id !== playerId) return p;
+          return {
+            ...p,
+            field: p.field.map(c => {
+              if (c.artTheme !== themeA && c.artTheme !== themeB) return c;
+              return {
+                ...c,
+                currentAtk: c.currentAtk + atk,
+                currentDef: c.currentDef + def,
               };
             }),
           };

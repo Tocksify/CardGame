@@ -27,6 +27,12 @@ export interface GameStartedPayload {
   seed: number;
 }
 
+export interface ChatMessage {
+  fromName: string;
+  text: string;
+  ts: number;
+}
+
 type Status = 'idle' | 'connecting' | 'connected' | 'error' | 'closed';
 
 // ── Context shape ─────────────────────────────────────────────────────────────
@@ -37,6 +43,7 @@ interface MultiplayerContextType {
   serverError: string;
   /** Seconds remaining for draft wait (null = not waiting) */
   draftSecondsLeft: number | null;
+  chatMessages: ChatMessage[];
 
   setServerError: (msg: string) => void;
   /** Optimistically update room state (e.g. host bot changes) */
@@ -47,6 +54,7 @@ interface MultiplayerContextType {
   leaveRoom: () => void;
   updateSettings: (gameMode: '8card' | 'draft', bots: RoomBot[]) => void;
   startGame: () => void;
+  sendChatMessage: (text: string) => void;
   /** Sent by each real player when they finish the 3-card draft pick */
   signalDraftDone: () => void;
   /** Disconnect WS (call after navigating away from multiplayer entirely) */
@@ -73,6 +81,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
   const [yourSocketId, setYourSocketId] = useState('');
   const [serverError, setServerError] = useState('');
   const [draftSecondsLeft, setDraftSecondsLeft] = useState<number | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   const onGameStartedRef = useRef<((payload: GameStartedPayload) => void) | null>(null);
   const onAllDraftDoneRef = useRef<(() => void) | null>(null);
@@ -130,6 +139,12 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
             clearDraftCountdown();
             onAllDraftDoneRef.current?.();
             break;
+          case 'CHAT_MESSAGE':
+            setChatMessages(prev => [
+              ...prev.slice(-49), // keep last 50
+              { fromName: msg.fromName as string, text: msg.text as string, ts: Date.now() },
+            ]);
+            break;
           case 'ERROR':
             setServerError((msg as any).message ?? 'Unknown error');
             break;
@@ -153,6 +168,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     clearDraftCountdown();
     setRoomState(null);
     setYourSocketId('');
+    setChatMessages([]);
     wsRef.current?.close();
     wsRef.current = null;
     setStatus('idle');
@@ -171,6 +187,12 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
 
   const startGame = useCallback(() => {
     send({ type: 'START_GAME' });
+  }, [send]);
+
+  const sendChatMessage = useCallback((text: string) => {
+    const trimmed = text.trim().slice(0, 200);
+    if (!trimmed) return;
+    send({ type: 'CHAT_MESSAGE', text: trimmed });
   }, [send]);
 
   const signalDraftDone = useCallback(() => {
@@ -201,9 +223,9 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
 
   return (
     <MultiplayerContext.Provider value={{
-      status, roomState, yourSocketId, serverError, draftSecondsLeft,
+      status, roomState, yourSocketId, serverError, draftSecondsLeft, chatMessages,
       setServerError, setRoomState,
-      createRoom, joinRoom, leaveRoom, updateSettings, startGame,
+      createRoom, joinRoom, leaveRoom, updateSettings, startGame, sendChatMessage,
       signalDraftDone, disconnect,
       setOnGameStarted, setOnAllDraftDone,
     }}>

@@ -1,4 +1,4 @@
-export type ChallengerRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+export type ChallengerRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'mythic';
 
 export interface Challenger {
   id: string;
@@ -223,6 +223,47 @@ export const CHALLENGERS: Challenger[] = [
     unlockedByAchievement: 'legendary_played',
   },
 
+  // ─── NEW ACHIEVEMENT-LOCKED CHALLENGERS ──────────────────────────────────
+  {
+    id: 'kora',
+    name: 'Kora',
+    title: 'the Retaliant',
+    rarity: 'common',
+    cost: 0,
+    icon: '🩸',
+    description: 'Pain fuels her. Every wound she takes sharpens her blade.',
+    abilityName: 'Bloodrage',
+    abilityDescription: 'Each time your hero takes damage, all your characters on the field gain +1 ATK until the end of your next turn.',
+    effectKeys: ['bloodrage_atk_on_hit'],
+    unlockedByAchievement: 'kill_50_creatures',
+  },
+  {
+    id: 'vex',
+    name: 'Vex',
+    title: 'the Schemer',
+    rarity: 'rare',
+    cost: 0,
+    icon: '🧠',
+    description: 'Ten victories taught him that information is the deadliest weapon.',
+    abilityName: 'Tactical Mastery',
+    abilityDescription: 'At the start of each game, draw 2 extra cards and gain 1 additional Aether on your first turn. Your opening hand is always loaded.',
+    effectKeys: ['start_2_extra_cards', 'bonus_aether_1_turn1'],
+    unlockedByAchievement: 'win_10_games',
+  },
+  {
+    id: 'synara',
+    name: 'Synara',
+    title: 'the Elementalist',
+    rarity: 'uncommon',
+    cost: 0,
+    icon: '🌀',
+    description: 'She speaks every element fluently — and makes them speak to each other.',
+    abilityName: 'Elemental Harmony',
+    abilityDescription: 'Whenever a cross-element combo triggers on your field, all your characters gain +1 DEF in addition to the normal bonus. Your synergy runs deeper.',
+    effectKeys: ['cross_combo_def_bonus'],
+    unlockedByAchievement: 'trigger_cross_combo',
+  },
+
   // ─── LEGENDARY ────────────────────────────────────────────────────────────
   {
     id: 'solaris',
@@ -260,9 +301,23 @@ export const CHALLENGERS: Challenger[] = [
     abilityDescription: 'Start with +4 maximum Aether (7 total on turn 1). Draw 1 extra card per turn. Kill gold is doubled (100g per kill). The complete package.',
     effectKeys: ['bonus_aether_4', 'perk_draw_1', 'double_kill_gold'],
   },
+  // ─── MYTHIC (one — extremely hard to unlock) ──────────────────────────────
+  {
+    id: 'aeondris',
+    name: 'Aeondris',
+    title: 'the Void Sovereign',
+    rarity: 'mythic',
+    cost: 0,
+    icon: '👁️',
+    description: 'Fifty victories forged something that was never meant to exist.',
+    abilityName: 'Sovereign of Nothing',
+    abilityDescription: 'You begin every game with +5 maximum Aether, 1 extra card draw per turn, double kill gold, and a random Legendary card in hand. The totality of power.',
+    effectKeys: ['bonus_aether_3', 'bonus_aether_2_stacked', 'perk_draw_1', 'double_kill_gold', 'start_legendary'],
+    unlockedByAchievement: 'mythic_50_wins',
+  },
 ];
 
-export const CHALLENGER_RARITY_ORDER: ChallengerRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+export const CHALLENGER_RARITY_ORDER: ChallengerRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'];
 
 export const RARITY_COLORS: Record<ChallengerRarity, string> = {
   common: 'border-slate-500 text-slate-300',
@@ -270,6 +325,7 @@ export const RARITY_COLORS: Record<ChallengerRarity, string> = {
   rare: 'border-blue-500 text-blue-300',
   epic: 'border-purple-500 text-purple-300',
   legendary: 'border-yellow-500 text-yellow-300',
+  mythic: 'border-rose-400 text-rose-300',
 };
 
 export const RARITY_GLOW: Record<ChallengerRarity, string> = {
@@ -278,6 +334,7 @@ export const RARITY_GLOW: Record<ChallengerRarity, string> = {
   rare: 'shadow-[0_0_12px_rgba(59,130,246,0.4)]',
   epic: 'shadow-[0_0_15px_rgba(168,85,247,0.5)]',
   legendary: 'shadow-[0_0_20px_rgba(234,179,8,0.6)]',
+  mythic: 'shadow-[0_0_28px_rgba(244,63,94,0.8)]',
 };
 
 export const RARITY_BG: Record<ChallengerRarity, string> = {
@@ -286,6 +343,7 @@ export const RARITY_BG: Record<ChallengerRarity, string> = {
   rare: 'bg-blue-950/40',
   epic: 'bg-purple-950/40',
   legendary: 'bg-yellow-950/30',
+  mythic: 'bg-rose-950/50',
 };
 
 export const RARITY_LABEL: Record<ChallengerRarity, string> = {
@@ -294,6 +352,7 @@ export const RARITY_LABEL: Record<ChallengerRarity, string> = {
   rare: 'Rare',
   epic: 'Epic',
   legendary: 'Legendary',
+  mythic: 'MYTHIC',
 };
 
 export function getChallengerById(id: string): Challenger | undefined {
