@@ -9,6 +9,7 @@ import { loadAccount, applyEloChange } from '../store/account';
 import { useChallenger } from './ChallengerContext';
 import { SHARDS_PER_WIN } from '../store/challengers';
 import { useCodex } from './CodexContext';
+import { useMultiplayer } from './MultiplayerContext';
 
 const SHOP_ROTATION_SECONDS = 180;
 const BUY_PHASE_SECONDS = 30;
@@ -78,6 +79,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [shopRotationTimeLeft, setShopRotationTimeLeft] = useState(SHOP_ROTATION_SECONDS);
   const [buyPhaseTimeLeft, setBuyPhaseTimeLeft] = useState<number | null>(null);
   const [mainPhaseTimeLeft, setMainPhaseTimeLeft] = useState<number | null>(null);
+
+  // Multiplayer relay
+  const { sendCombatAnim, setOnCombatAnim } = useMultiplayer();
+
+  // Receive remote combat anims and mirror them locally
+  useEffect(() => {
+    setOnCombatAnim((payload) => {
+      setCombatAnim({ targetId: payload.targetId, damage: payload.damage, attackerId: payload.attackerInstanceId });
+      setTimeout(() => setCombatAnim(null), 700);
+    });
+    return () => setOnCombatAnim(null);
+  }, [setOnCombatAnim]);
 
   // Lobby settings
   const { autoCombat } = useLobby();
@@ -584,7 +597,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     dispatch({ type: 'ATTACK', payload: { attackerPlayerId: player.id, attackerInstanceId, targetPlayerId, targetInstanceId, damageOverride: dmg } });
     setCombatAnim({ targetId: targetInstanceId || targetPlayerId.toString(), damage: dmg, attackerId: attackerInstanceId });
-    setTimeout(() => setCombatAnim(null), 600);
+    setTimeout(() => setCombatAnim(null), 700);
+    sendCombatAnim({ attackerInstanceId, targetId: targetInstanceId || targetPlayerId.toString(), damage: dmg });
 
     if (targetOwner && targetInstanceId) {
       const targetCreature = targetOwner.field.find(c => c.instanceId === targetInstanceId);
@@ -648,7 +662,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const dmg = attacker.currentAtk + attacker.tempAtkBonus + ability.atkDelta;
     dispatch({ type: 'USE_ABILITY', payload: { attackerPlayerId: player.id, attackerInstanceId, abilityIndex, targetPlayerId, targetInstanceId } });
     setCombatAnim({ targetId: targetInstanceId || targetPlayerId.toString(), damage: dmg, attackerId: attackerInstanceId });
-    setTimeout(() => setCombatAnim(null), 600);
+    setTimeout(() => setCombatAnim(null), 700);
+    sendCombatAnim({ attackerInstanceId, targetId: targetInstanceId || targetPlayerId.toString(), damage: dmg });
     sounds.play('attack');
     dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name}'s ${attacker.name} uses ${ability.name} for ${dmg} damage!`, type: 'damage' } });
 

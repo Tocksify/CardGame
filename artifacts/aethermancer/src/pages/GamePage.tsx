@@ -92,9 +92,18 @@ const ArenaCardUI = ({
     <motion.div
       whileHover={{ scale: 1.12, y: -6, zIndex: 60 }}
       animate={isAttacker
-        ? { x: [0, attackOffset.x, -attackOffset.x * 0.35, 0], y: [0, attackOffset.y, -attackOffset.y * 0.35, 0], rotate: [0, -4, 2, 0] }
+        ? {
+            // trot to target → sway back → fast lunge → trot home
+            x: [0, attackOffset.x * 3.5, attackOffset.x * 2.0, attackOffset.x * 4.5, 0],
+            y: [0, attackOffset.y * 3.5, attackOffset.y * 2.0, attackOffset.y * 4.5, 0],
+            rotate: [0, -4, 1, -6, 0],
+          }
         : undefined}
-      transition={isAttacker ? { duration: 0.58, ease: 'easeOut' } : undefined}
+      transition={isAttacker ? {
+        duration: 0.62,
+        times: [0, 0.36, 0.52, 0.63, 1.0],
+        ease: ['easeOut', 'easeIn', 'easeOut', 'easeInOut'],
+      } : undefined}
       onClick={onClick}
       title={card.name}
       className={`relative ${w} ${h} flex flex-col flex-shrink-0 border-2 cursor-pointer transition-colors duration-200 overflow-hidden

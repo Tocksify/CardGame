@@ -24,7 +24,8 @@ type ClientMsg =
   | { type: 'UPDATE_SETTINGS'; gameMode: '8card' | 'draft'; bots: RoomBot[] }
   | { type: 'START_GAME' }
   | { type: 'PLAYER_DRAFT_DONE' }
-  | { type: 'CHAT_MESSAGE'; text: string };
+  | { type: 'CHAT_MESSAGE'; text: string }
+  | { type: 'COMBAT_ANIM'; attackerInstanceId: string; targetId: string; damage: number };
 
 function send(ws: WebSocket, msg: object) {
   if (ws.readyState === WebSocket.OPEN) {
@@ -46,6 +47,15 @@ function broadcast(wss: WebSocketServer, room: Room, msg: object) {
   for (const client of wss.clients) {
     const c = client as WsClient;
     if (room.players.find(p => p.socketId === c.socketId)) {
+      send(c, msg);
+    }
+  }
+}
+
+function broadcastToOthers(wss: WebSocketServer, room: Room, msg: object, excludeSocketId: string) {
+  for (const client of wss.clients) {
+    const c = client as WsClient;
+    if (c.socketId !== excludeSocketId && room.players.find(p => p.socketId === c.socketId)) {
       send(c, msg);
     }
   }
@@ -173,9 +183,9 @@ export function handleWsConnection(wss: WebSocketServer) {
                 deleteRoom(roomCode);
               }
             }, 20_000);
-          } else {
-            deleteRoom(room.code);
           }
+          // For 8card mode: keep room alive so players can relay in-game events (e.g. COMBAT_ANIM).
+          // The room is cleaned up when all players disconnect (onclose → leaveRoom).
           break;
         }
 
@@ -196,6 +206,19 @@ export function handleWsConnection(wss: WebSocketServer) {
           const text = (msg.text ?? '').toString().trim().slice(0, 200);
           if (!text) return;
           broadcast(wss, room, { type: 'CHAT_MESSAGE', fromName: sender.name, text });
+          break;
+        }
+
+        case 'COMBAT_ANIM': {
+          const room = getRoomBySocket(client.socketId);
+          if (!room) return;
+          // Relay to all other players in the room — sender already sees it locally
+          broadcastToOthers(wss, room, {
+            type: 'COMBAT_ANIM',
+            attackerInstanceId: msg.attackerInstanceId,
+            targetId: msg.targetId,
+            damage: msg.damage,
+          }, client.socketId);
           break;
         }
 

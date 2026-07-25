@@ -33,6 +33,12 @@ export interface ChatMessage {
   ts: number;
 }
 
+export interface CombatAnimPayload {
+  attackerInstanceId: string;
+  targetId: string;
+  damage: number;
+}
+
 type Status = 'idle' | 'connecting' | 'connected' | 'error' | 'closed';
 
 // ── Context shape ─────────────────────────────────────────────────────────────
@@ -64,6 +70,11 @@ interface MultiplayerContextType {
   setOnGameStarted: (cb: ((payload: GameStartedPayload) => void) | null) => void;
   /** Register the ALL_DRAFT_DONE callback (PreDraftPage) */
   setOnAllDraftDone: (cb: (() => void) | null) => void;
+
+  /** Relay a combat animation event to all other players in the room */
+  sendCombatAnim: (payload: CombatAnimPayload) => void;
+  /** Register the COMBAT_ANIM callback (GameContext) — called when a remote player attacks */
+  setOnCombatAnim: (cb: ((payload: CombatAnimPayload) => void) | null) => void;
 }
 
 const MultiplayerContext = createContext<MultiplayerContextType | null>(null);
@@ -85,6 +96,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
 
   const onGameStartedRef = useRef<((payload: GameStartedPayload) => void) | null>(null);
   const onAllDraftDoneRef = useRef<(() => void) | null>(null);
+  const onCombatAnimRef = useRef<((payload: CombatAnimPayload) => void) | null>(null);
   const draftCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const clearDraftCountdown = () => {
@@ -144,6 +156,13 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
               ...prev.slice(-49), // keep last 50
               { fromName: msg.fromName as string, text: msg.text as string, ts: Date.now() },
             ]);
+            break;
+          case 'COMBAT_ANIM':
+            onCombatAnimRef.current?.({
+              attackerInstanceId: (msg as any).attackerInstanceId,
+              targetId: (msg as any).targetId,
+              damage: (msg as any).damage,
+            });
             break;
           case 'ERROR':
             setServerError((msg as any).message ?? 'Unknown error');
@@ -221,6 +240,14 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     onAllDraftDoneRef.current = cb;
   }, []);
 
+  const setOnCombatAnim = useCallback((cb: ((payload: CombatAnimPayload) => void) | null) => {
+    onCombatAnimRef.current = cb;
+  }, []);
+
+  const sendCombatAnim = useCallback((payload: CombatAnimPayload) => {
+    send({ type: 'COMBAT_ANIM', ...payload });
+  }, [send]);
+
   return (
     <MultiplayerContext.Provider value={{
       status, roomState, yourSocketId, serverError, draftSecondsLeft, chatMessages,
@@ -228,6 +255,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
       createRoom, joinRoom, leaveRoom, updateSettings, startGame, sendChatMessage,
       signalDraftDone, disconnect,
       setOnGameStarted, setOnAllDraftDone,
+      sendCombatAnim, setOnCombatAnim,
     }}>
       {children}
     </MultiplayerContext.Provider>
