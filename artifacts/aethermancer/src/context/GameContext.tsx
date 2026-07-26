@@ -1081,7 +1081,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
         if (wasPlayerStunned) {
           dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name} is imprisoned — their turn is skipped!`, type: 'other' } });
-          dispatchRef.current({ type: 'SET_PHASE', payload: 'end' });
+          // Only skip to end if the game is still active (status effects above may have triggered gameover)
+          if (stateRef.current.phase !== 'gameover') {
+            dispatchRef.current({ type: 'SET_PHASE', payload: 'end' });
+          }
           return;
         }
 
@@ -1143,6 +1146,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     // ── End phase ──────────────────────────────────────────────────────────
     if (gameState.phase === 'end') {
       gameLoopRef.current = setTimeout(() => {
+        // Guard: a delayed attack/damage may have triggered gameover while we waited
+        if (stateRef.current.phase === 'gameover') return;
         checkEvolutions();
         if (currentPlayer.isHuman) triggerAchievement('survive_10_turns', 1);
         dispatchRef.current({ type: 'END_TURN' });

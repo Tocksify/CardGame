@@ -223,6 +223,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
 
     case 'SET_PHASE':
+      // Never overwrite a gameover state
+      if (state.phase === 'gameover') return state;
       return { ...state, phase: action.payload };
 
     case 'TOGGLE_SHOP':
@@ -290,6 +292,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
 
     case 'END_TURN': {
+      // Never advance past a gameover state
+      if (state.phase === 'gameover') return state;
       const nextIndex = (state.currentPlayerIndex + 1) % state.players.length;
       const isNewTurn = nextIndex === 0;
 
@@ -364,7 +368,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           p.id !== playerId ? p : { ...p, hand: [...p.hand, ...cards] }
         ),
         draftOptions: [],
-        phase: 'buy',
+        // Never overwrite a gameover state (e.g. player killed by poison during draw phase)
+        phase: state.phase === 'gameover' ? 'gameover' : 'buy',
       };
     }
 
