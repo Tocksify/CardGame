@@ -32,8 +32,10 @@ const TYPE_FRAME: Record<string, { bg: string; bar: string; glow: string; icon: 
 };
 
 // ── Rarity border / shadow ────────────────────────────────────────────────
-function rarityBorder(rarity?: string, evolved?: boolean): string {
+function rarityBorder(rarity?: string, evolved?: boolean, artTheme?: string): string {
   if (evolved) return 'border-amber-300 shadow-[0_0_14px_rgba(245,197,24,1)]';
+  if (artTheme === 'chromatic') return 'border-chromatic';
+  if (rarity === 'secret')    return 'border-[#e040fb] shadow-[0_0_14px_rgba(224,64,251,0.9),0_0_4px_rgba(224,64,251,0.5)]';
   if (rarity === 'legendary') return 'border-amber-400 shadow-[0_0_10px_rgba(255,180,0,0.9)]';
   if (rarity === 'rare')      return 'border-purple-400 shadow-[0_0_7px_rgba(160,80,220,0.8)]';
   return 'border-[#4a3000]/80';
@@ -84,7 +86,7 @@ const ArenaCardUI = ({
   const isEvolved = fc.evolved;
   const isHit = combatAnim?.targetId === (card as any).instanceId;
   const isAttacker = combatAnim?.attackerId === (card as any).instanceId;
-  const borderCls = rarityBorder(card.rarity, isEvolved);
+  const borderCls = rarityBorder(card.rarity, isEvolved, card.artTheme);
   const w = size === 'sm' ? 'w-[86px]' : 'w-[106px]';
   const h = size === 'sm' ? 'h-[124px]' : 'h-[154px]';
 
@@ -327,7 +329,7 @@ const HandCardUI = ({
   onClick?: () => void;
 }) => {
   const frame = TYPE_FRAME[card.type] || TYPE_FRAME.character;
-  const borderCls = rarityBorder(card.rarity);
+  const borderCls = rarityBorder(card.rarity, false, card.artTheme);
 
   return (
     <motion.div

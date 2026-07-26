@@ -90,6 +90,7 @@ export interface Player {
   undyingUsed?: boolean;
   heroStunTurns?: number;
   playerStunTurns?: number;
+  creedStacks?: number;
 }
 
 export interface GameState {
@@ -161,7 +162,8 @@ export type GameAction =
   | { type: 'APPLY_SILENCE'; payload: { playerId: number; instanceId: string; turns: number } }
   | { type: 'APPLY_ELEMENTAL_COMBO'; payload: { playerId: number; artTheme: string } }
   | { type: 'APPLY_CROSS_COMBO'; payload: { playerId: number; themeA: string; themeB: string; atk: number; def: number } }
-  | { type: 'RECALL_FIELD_CARD'; payload: { playerId: number; instanceId: string } };
+  | { type: 'RECALL_FIELD_CARD'; payload: { playerId: number; instanceId: string } }
+  | { type: 'BUFF_CARD'; payload: { playerId: number; instanceId?: string; atkDelta: number; defDelta: number; keyword?: string } };
 
 export const initialGameState: GameState = {
   phase: 'countdown',
@@ -303,6 +305,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           // Save damage-based gold bonus for next draw phase, reset counter
           newP.bonusGoldPending = Math.floor((newP.damageDealtThisTurn || 0) * 20);
           newP.damageDealtThisTurn = 0;
+          // Creed artifact: scale ATK with lifetime damage dealt
+          if (newP.artifactSlot?.effect === 'creed_scaling') {
+            const newCreedStacks = Math.floor((newP.damageDealtThisGame || 0) / 20);
+            const prevCreedStacks = newP.creedStacks ?? 0;
+            const creedDelta = newCreedStacks - prevCreedStacks;
+            if (creedDelta > 0) {
+              newP.field = newP.field.map(c => ({ ...c, currentAtk: c.currentAtk + creedDelta }));
+              newP.creedStacks = newCreedStacks;
+            }
+          }
         }
         if (i === nextIndex) {
           newP.field = newP.field.map(c => ({
@@ -528,6 +540,26 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
                 currentAtk: c.currentAtk + atk,
                 currentDef: c.currentDef + def,
               };
+            }),
+          };
+        }),
+      };
+    }
+
+    case 'BUFF_CARD': {
+      const { playerId, instanceId, atkDelta, defDelta, keyword } = action.payload;
+      return {
+        ...state,
+        players: state.players.map(p => {
+          if (p.id !== playerId) return p;
+          return {
+            ...p,
+            field: p.field.map(c => {
+              if (instanceId && c.instanceId !== instanceId) return c;
+              const newKeywords = keyword && !c.keywords?.includes(keyword)
+                ? [...(c.keywords || []), keyword]
+                : c.keywords;
+              return { ...c, currentAtk: c.currentAtk + atkDelta, currentDef: c.currentDef + defDelta, keywords: newKeywords };
             }),
           };
         }),
@@ -800,7 +832,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             inventory: p.inventory.filter(i => i.instanceId !== instanceId),
             artifactSlot: newCard,
             artifactSlotTurns: 0,
-            field: newField,
+            field: applyAuraToField(newField, newCard.effect, 1),
             statBuffs: newStatBuffs,
           };
         }),

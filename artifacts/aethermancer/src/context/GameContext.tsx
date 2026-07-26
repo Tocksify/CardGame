@@ -343,7 +343,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const targetOwner = gameState.players.find(p => p.field.some(c => c.instanceId === targetId));
       if (targetOwner) {
         const creature = targetOwner.field.find(c => c.instanceId === targetId);
-        if (creature && creature.currentDef <= 3) {
+        if (creature && creature.currentDef <= 8) {
           dispatch({ type: 'DAMAGE', payload: { targetPlayerId: targetOwner.id, targetInstanceId: targetId, amount: 999, sourcePlayerId, sourceInstanceId, bypassResist: true, bypassArmor: true } });
           dispatch({ type: 'ADD_GOLD', payload: { playerId: sourcePlayerId, amount: creature.currentAtk * 50 } });
           sounds.play('gold');
@@ -515,11 +515,24 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const applyEnchantment = (_playerId: number, targetId: string, effect: string) => {
     const player = gameState.players[gameState.currentPlayerIndex];
+    const target = player.field.find(c => c.instanceId === targetId);
+    if (!target) return;
+
     if (effect === 'buff_2_2') {
-      const target = player.field.find(c => c.instanceId === targetId);
-      if (target) {
-        dispatch({ type: 'DAMAGE', payload: { targetPlayerId: player.id, targetInstanceId: targetId, amount: -2 } });
-      }
+      dispatch({ type: 'BUFF_CARD', payload: { playerId: player.id, instanceId: targetId, atkDelta: 2, defDelta: 2 } });
+      dispatch({ type: 'ADD_LOG', payload: { msg: `${target.name} gains +2 ATK / +2 DEF from enchantment.`, type: 'card' } });
+    } else if (effect === 'buff_0_4') {
+      dispatch({ type: 'BUFF_CARD', payload: { playerId: player.id, instanceId: targetId, atkDelta: 0, defDelta: 4 } });
+      dispatch({ type: 'ADD_LOG', payload: { msg: `${target.name} gains +4 DEF from enchantment.`, type: 'card' } });
+    } else if (effect === 'buff_3_m1') {
+      dispatch({ type: 'BUFF_CARD', payload: { playerId: player.id, instanceId: targetId, atkDelta: 3, defDelta: -1 } });
+      dispatch({ type: 'ADD_LOG', payload: { msg: `${target.name} gains +3 ATK / -1 DEF from enchantment.`, type: 'card' } });
+    } else if (effect === 'add_poison_keyword') {
+      dispatch({ type: 'BUFF_CARD', payload: { playerId: player.id, instanceId: targetId, atkDelta: 0, defDelta: 0, keyword: 'poison_on_hit' } });
+      dispatch({ type: 'ADD_LOG', payload: { msg: `${target.name} now applies poison on hit.`, type: 'card' } });
+    } else if (effect === 'add_stun_keyword') {
+      dispatch({ type: 'BUFF_CARD', payload: { playerId: player.id, instanceId: targetId, atkDelta: 0, defDelta: 0, keyword: 'stun_on_hit' } });
+      dispatch({ type: 'ADD_LOG', payload: { msg: `${target.name} now stuns on hit.`, type: 'card' } });
     }
   };
 

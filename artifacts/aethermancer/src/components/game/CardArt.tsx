@@ -26,6 +26,7 @@ const THEMES: Record<string, { primary: string; secondary: string; accent?: stri
   huntress:  { primary: 'rgba(74,222,128,0.85)',  secondary: 'rgba(21,128,61,0.5)',  accent: 'rgba(150,255,150,0.3)' },
   unknown:   { primary: 'rgba(255,255,255,0.9)',  secondary: 'rgba(200,200,220,0.5)', accent: 'rgba(180,50,255,0.3)' },
   gold:      { primary: 'rgba(245,197,24,0.85)',  secondary: 'rgba(217,119,6,0.5)',  accent: 'rgba(255,220,60,0.3)' },
+  chromatic: { primary: 'rgba(200,100,255,0.9)',  secondary: 'rgba(100,200,255,0.55)', accent: 'rgba(255,200,100,0.4)' },
 };
 
 function getTheme(templateId: string, artTheme?: string) {
@@ -617,14 +618,32 @@ export function CardArt({ templateId, type, artTheme, animated = true }: CardArt
       )}
 
       {type === 'artifact' && (
-        <div className="w-8 h-8 rotate-45 flex items-center justify-center"
-          style={{
-            backgroundColor: colors.primary,
-            boxShadow: `0 0 12px ${colors.primary}, 0 0 24px ${colors.secondary}`,
-            animation: animated ? 'cardArtPulse 2.5s ease-in-out infinite alternate' : 'none',
-          }}>
-          <div className="w-3 h-3 bg-white/60 rotate-45" />
-        </div>
+        artTheme === 'chromatic' ? (
+          <div className="relative flex items-center justify-center w-full h-full">
+            {[14, 9, 5].map((r, i) => (
+              <div key={i} className="absolute rounded-full" style={{
+                width: r * 2 + 2, height: r * 2 + 2,
+                background: `conic-gradient(from ${i * 120}deg, #ff0040, #ff7700, #ffee00, #00ff88, #0088ff, #cc00ff, #ff0040)`,
+                animation: `cardArtRotate ${2.5 + i * 1.2}s linear infinite ${i % 2 === 1 ? 'reverse' : ''}`,
+                opacity: 0.85,
+              }} />
+            ))}
+            <div className="w-3 h-3 rounded-full z-10" style={{
+              background: 'conic-gradient(#ff0040, #ffee00, #00ff88, #0088ff, #cc00ff, #ff0040)',
+              boxShadow: '0 0 14px rgba(200,100,255,0.95), 0 0 6px rgba(0,200,255,0.8)',
+              animation: animated ? 'cardArtPulse 1.4s ease-in-out infinite' : 'none',
+            }} />
+          </div>
+        ) : (
+          <div className="w-8 h-8 rotate-45 flex items-center justify-center"
+            style={{
+              backgroundColor: colors.primary,
+              boxShadow: `0 0 12px ${colors.primary}, 0 0 24px ${colors.secondary}`,
+              animation: animated ? 'cardArtPulse 2.5s ease-in-out infinite alternate' : 'none',
+            }}>
+            <div className="w-3 h-3 bg-white/60 rotate-45" />
+          </div>
+        )
       )}
 
       {type === 'enchantment' && (
