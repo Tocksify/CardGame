@@ -46,6 +46,7 @@ const KEYWORD_DEFS: Record<string, { label: string; color: string; desc: string 
   heal_on_kill:   { label: 'Heal on Kill',   color: '#f070a0', desc: 'Restores 2 HP to your hero whenever this card destroys an enemy.' },
   silence_on_hit: { label: 'Silence on Hit', color: '#aaaaaa', desc: 'Silences the target on hit for 1 turn. Silenced cards cannot use abilities.' },
   shadow_silence: { label: 'Silence on Hit', color: '#aaaaaa', desc: 'Silences the target on hit for 1 turn. Silenced cards cannot use abilities.' },
+  amalgam:        { label: 'Amalgam',        color: '#e040fb', desc: 'Gains +1 ATK and +1 DEF permanently for each enemy this card personally destroys. Assist kills grant nothing.' },
 };
 
 const STATUS_DEFS: Record<string, { label: string; color: string; bg: string; border: string; desc: (n: number) => string }> = {

@@ -659,6 +659,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           if (player.statBuffs.includes('bloodrite')) {
             dispatch({ type: 'HEAL', payload: { targetPlayerId: player.id, amount: 1 } });
           }
+          // Amalgam: gains +1/+1 permanently on personal kills only
+          if (attacker.keywords?.includes('amalgam')) {
+            dispatch({ type: 'BUFF_CARD', payload: { playerId: player.id, instanceId: attackerInstanceId, atkDelta: 1, defDelta: 1 } });
+            dispatch({ type: 'ADD_LOG', payload: { msg: `${attacker.name} absorbs ${targetCreature.name}'s essence! (+1/+1)`, type: 'card' } });
+          }
         }
       }
     }
@@ -720,6 +725,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
         if (player.statBuffs.includes('bloodrite')) {
           dispatch({ type: 'HEAL', payload: { targetPlayerId: player.id, amount: 1 } });
+        }
+        // Amalgam: gains +1/+1 permanently on personal kills only
+        if (attacker.keywords?.includes('amalgam')) {
+          const tgtCard = targetOwner.field.find(c => c.instanceId === targetInstanceId);
+          dispatch({ type: 'BUFF_CARD', payload: { playerId: player.id, instanceId: attackerInstanceId, atkDelta: 1, defDelta: 1 } });
+          dispatch({ type: 'ADD_LOG', payload: { msg: `${attacker.name} absorbs ${tgtCard?.name ?? 'the fallen'}'s essence! (+1/+1)`, type: 'card' } });
         }
       }
     }
@@ -855,50 +866,82 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     cp: typeof gameState.players[0],
     difficulty: AiDifficulty,
     players: typeof gameState.players,
+    attacker?: FieldCard,
+    amalgamWaiting?: boolean,
   ) {
     const targetHuman = players.find(p => p.isHuman && p.hp > 0);
     if (!targetHuman) return null;
 
     // Defender rule: if the human has any field cards, the AI must target one of them.
-    // The hero is only reachable once all defenders are cleared.
     const defenders = targetHuman.field.filter(c => !c.stunned);
-    const activeField = targetHuman.field; // includes stunned (still blocking)
+    const activeField = targetHuman.field; // includes stunned
 
     if (activeField.length > 0) {
-      // Must target a field card. Strategy varies by difficulty.
+      const atkPow = attacker ? attacker.currentAtk + attacker.tempAtkBonus : 0;
+
       switch (difficulty) {
         case 'Novice':
-        case 'Easy':
-          // Pick a random non-stunned defender, or the first card available
-          return { targetPlayerId: targetHuman.id, targetInstanceId: (defenders[0] ?? activeField[0]).instanceId };
+          // Dumb: random target, ignores taunt
+          return {
+            targetPlayerId: targetHuman.id,
+            targetInstanceId: (defenders.length > 0
+              ? defenders[Math.floor(Math.random() * defenders.length)]
+              : activeField[0]
+            ).instanceId,
+          };
+
+        case 'Easy': {
+          // Respect taunt; otherwise random
+          const tauntEasy = defenders.find(c => c.keywords?.includes('taunt'));
+          if (tauntEasy) return { targetPlayerId: targetHuman.id, targetInstanceId: tauntEasy.instanceId };
+          const pool = defenders.length > 0 ? defenders : activeField;
+          return { targetPlayerId: targetHuman.id, targetInstanceId: pool[Math.floor(Math.random() * pool.length)].instanceId };
+        }
 
         case 'Normal': {
-          // Prefer taunt; otherwise first defender
+          // Taunt → weakest killable by this card → lowest DEF
           const tauntNormal = defenders.find(c => c.keywords?.includes('taunt'));
-          return { targetPlayerId: targetHuman.id, targetInstanceId: (tauntNormal ?? defenders[0] ?? activeField[0]).instanceId };
+          if (tauntNormal) return { targetPlayerId: targetHuman.id, targetInstanceId: tauntNormal.instanceId };
+          // If amalgam is waiting to finish a kill, skip single-hit kills for it
+          const killableNormal = defenders
+            .filter(c => c.currentDef <= atkPow && !(amalgamWaiting && c.currentDef <= (attacker ? atkPow * 0.5 : 0)))
+            .sort((a, b) => a.currentDef - b.currentDef)[0];
+          const lowestDef = [...defenders].sort((a, b) => a.currentDef - b.currentDef)[0];
+          return { targetPlayerId: targetHuman.id, targetInstanceId: (killableNormal ?? lowestDef ?? activeField[0]).instanceId };
         }
 
         case 'Hard': {
-          // Prefer taunt; then try to kill the weakest killable defender
+          // Taunt → highest-threat killable by this card → killable with full remaining atk → biggest threat
           const tauntHard = defenders.find(c => c.keywords?.includes('taunt'));
           if (tauntHard) return { targetPlayerId: targetHuman.id, targetInstanceId: tauntHard.instanceId };
-          const untapped = cp.field.filter(c => !c.tapped && !c.hasAttackedThisTurn && !c.stunned);
-          const totalAtk = untapped.reduce((s, c) => s + c.currentAtk + c.tempAtkBonus, 0);
-          const killable = defenders.filter(c => c.currentDef <= totalAtk).sort((a, b) => b.currentAtk - a.currentAtk)[0];
-          return { targetPlayerId: targetHuman.id, targetInstanceId: (killable ?? defenders[0] ?? activeField[0]).instanceId };
+          // Kill highest-threat card this attacker can finish alone
+          const killableNow = defenders
+            .filter(c => c.currentDef <= atkPow)
+            .sort((a, b) => b.currentAtk - a.currentAtk)[0];
+          if (killableNow) return { targetPlayerId: targetHuman.id, targetInstanceId: killableNow.instanceId };
+          // Otherwise chip at the biggest threat
+          const untappedHard = cp.field.filter(c => !c.tapped && !c.hasAttackedThisTurn && !c.stunned);
+          const totalAtkHard = untappedHard.reduce((s, c) => s + c.currentAtk + c.tempAtkBonus, 0);
+          const killableAll = defenders.filter(c => c.currentDef <= totalAtkHard).sort((a, b) => b.currentAtk - a.currentAtk)[0];
+          const biggestThreat = [...defenders].sort((a, b) => b.currentAtk - a.currentAtk)[0];
+          return { targetPlayerId: targetHuman.id, targetInstanceId: (killableAll ?? biggestThreat ?? activeField[0]).instanceId };
         }
 
         case 'Expert':
         case 'Nightmare': {
-          // Prefer taunt; then kill highest-threat killable; then highest atk
+          // Optimal: taunt → highest-threat killable → target enemy Amalgam before it snowballs → biggest threat
           const tauntEx = defenders.find(c => c.keywords?.includes('taunt'));
           if (tauntEx) return { targetPlayerId: targetHuman.id, targetInstanceId: tauntEx.instanceId };
-          const untappedEx = cp.field.filter(c => !c.tapped && !c.hasAttackedThisTurn && !c.stunned);
-          const singleAtk = untappedEx[0] ? untappedEx[0].currentAtk + untappedEx[0].tempAtkBonus : 0;
-          const killableEx = defenders.filter(c => c.currentDef <= singleAtk).sort((a, b) => b.currentAtk - a.currentAtk)[0];
+          // Kill highest-threat card this attacker can finish
+          const killableEx = defenders
+            .filter(c => c.currentDef <= atkPow)
+            .sort((a, b) => b.currentAtk - a.currentAtk)[0];
           if (killableEx) return { targetPlayerId: targetHuman.id, targetInstanceId: killableEx.instanceId };
-          const biggestThreat = [...defenders].sort((a, b) => b.currentAtk - a.currentAtk)[0];
-          return { targetPlayerId: targetHuman.id, targetInstanceId: (biggestThreat ?? activeField[0]).instanceId };
+          // Prioritise killing enemy Amalgam before it snowballs (even if not killable yet)
+          const enemyAmalgam = defenders.find(c => c.keywords?.includes('amalgam'));
+          if (enemyAmalgam) return { targetPlayerId: targetHuman.id, targetInstanceId: enemyAmalgam.instanceId };
+          const biggestThreatEx = [...defenders].sort((a, b) => b.currentAtk - a.currentAtk)[0];
+          return { targetPlayerId: targetHuman.id, targetInstanceId: (biggestThreatEx ?? activeField[0]).instanceId };
         }
       }
     }
@@ -1125,7 +1168,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
 
         const diff = state.difficulty;
-        const untapped = cp.field.filter(c => !c.tapped && !c.hasAttackedThisTurn && !c.stunned);
+        const untappedRaw = cp.field.filter(c => !c.tapped && !c.hasAttackedThisTurn && !c.stunned);
+        // Amalgam attacks last so other cards can weaken targets for it to finish
+        const untapped = [...untappedRaw].sort((a, b) => {
+          const aAmalgam = a.keywords?.includes('amalgam') ? 1 : 0;
+          const bAmalgam = b.keywords?.includes('amalgam') ? 1 : 0;
+          return aAmalgam - bAmalgam;
+        });
 
         if (untapped.length === 0) {
           dispatchRef.current({ type: 'ADVANCE_PHASE' });
@@ -1139,7 +1188,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
 
         const attacker = untapped[0];
-        const target = chooseAiAttackTarget(cp, diff, state.players);
+        const amalgamWaiting = untapped.slice(1).some(c => c.keywords?.includes('amalgam'));
+        const target = chooseAiAttackTarget(cp, diff, state.players, attacker, amalgamWaiting);
         if (!target) {
           dispatchRef.current({ type: 'ADVANCE_PHASE' });
           return;
@@ -1170,6 +1220,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             if (tgtCreature && tgtCreature.currentDef <= abilityDmg) {
               dispatchRef.current({ type: 'ADD_GOLD', payload: { playerId: cp.id, amount: 50 } });
               dispatchRef.current({ type: 'RECORD_KILL', payload: { playerId: cp.id } });
+              if (attacker.keywords?.includes('amalgam')) {
+                dispatchRef.current({ type: 'BUFF_CARD', payload: { playerId: cp.id, instanceId: attacker.instanceId, atkDelta: 1, defDelta: 1 } });
+                dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${attacker.name} absorbs ${tgtCreature.name}'s essence! (+1/+1)`, type: 'card' } });
+              }
             }
           }
           gameLoopRef.current = setTimeout(runAiCombatLoop, 700);
@@ -1265,6 +1319,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             dispatchRef.current({ type: 'RECORD_KILL', payload: { playerId: cp.id } });
             if (attacker.keywords?.includes('heal_on_kill')) {
               dispatchRef.current({ type: 'HEAL', payload: { targetPlayerId: cp.id, amount: 2 } });
+            }
+            if (attacker.keywords?.includes('amalgam')) {
+              dispatchRef.current({ type: 'BUFF_CARD', payload: { playerId: cp.id, instanceId: attacker.instanceId, atkDelta: 1, defDelta: 1 } });
+              dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${attacker.name} absorbs ${tgtCreature.name}'s essence! (+1/+1)`, type: 'card' } });
             }
           }
         }
@@ -1444,6 +1502,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
                 }
                 if (cp.statBuffs.includes('bloodrite')) {
                   dispatchRef.current({ type: 'HEAL', payload: { targetPlayerId: cp.id, amount: 1 } });
+                }
+                // Amalgam: gains +1/+1 permanently on personal kills only
+                if (attacker.keywords?.includes('amalgam')) {
+                  dispatchRef.current({ type: 'BUFF_CARD', payload: { playerId: cp.id, instanceId: attacker.instanceId, atkDelta: 1, defDelta: 1 } });
+                  dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${attacker.name} absorbs ${tgt.name}'s essence! (+1/+1)`, type: 'card' } });
                 }
               }
             }

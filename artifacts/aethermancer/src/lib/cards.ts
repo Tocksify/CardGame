@@ -844,6 +844,15 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     rarity: 'secret', artTheme: 'unknown',
   },
 
+  // ── Amalgam ───────────────────────────────────────────────────────────────
+  {
+    templateId: 'nh26', name: 'Amalgam', type: 'character', cost: 3,
+    atk: 1, def: 8,
+    description: 'Absorbs the essence of every enemy it personally destroys: gains +1 ATK and +1 DEF permanently. Assist kills grant nothing.',
+    keywords: ['amalgam'],
+    rarity: 'legendary', artTheme: 'chromatic',
+  },
+
   // ── Secret Artifacts ──────────────────────────────────────────────────────
   {
     templateId: 'sec_creed', name: 'Creed', type: 'artifact', cost: 8,
