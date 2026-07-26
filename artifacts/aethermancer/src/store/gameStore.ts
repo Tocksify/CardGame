@@ -1036,6 +1036,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const abilities = getCardAbilities(attacker);
       const ability = abilities[abilityIndex];
       if (!ability || (attacker.abilityCooldowns[abilityIndex] ?? 0) > 0) return state;
+      // Silenced cards cannot use abilities
+      if (attacker.silenced) return state;
 
       const dmg = Math.max(1, attacker.currentAtk + attacker.tempAtkBonus + ability.atkDelta);
 

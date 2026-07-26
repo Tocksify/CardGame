@@ -508,7 +508,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       dispatchRef.current({ type: 'APPLY_BURN', payload: { playerId: targetPlayer.id, instanceId: targetInstanceId, stacks: 1 } });
     }
     // Shadow silence: shadow cards with silence keyword silence the target
-    if (!isSilenced && attacker.keywords?.includes('shadow_silence')) {
+    if (!isSilenced && (attacker.keywords?.includes('silence_on_hit') || attacker.keywords?.includes('shadow_silence'))) {
       dispatchRef.current({ type: 'APPLY_SILENCE', payload: { playerId: targetPlayer.id, instanceId: targetInstanceId, turns: 1 } });
     }
   };
@@ -1150,7 +1150,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         const readyAbilities = aiAbilities
           .map((ab, i) => ({ ab, i }))
           .filter(({ i }) => (attacker.abilityCooldowns?.[i] ?? 0) === 0);
-        const shouldUseAbility = readyAbilities.length > 0 &&
+        // Silenced cards cannot use abilities
+        const shouldUseAbility = !attacker.silenced && readyAbilities.length > 0 &&
           (diff === 'Hard' || diff === 'Expert' || diff === 'Nightmare' ? true : Math.random() < 0.5);
 
         if (shouldUseAbility) {
@@ -1344,7 +1345,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
         const cEffects = equippedEffectsRef.current;
 
-        if (readyAbilities.length > 0) {
+        // Silenced cards cannot use abilities
+        if (!attacker.silenced && readyAbilities.length > 0) {
           const best = readyAbilities.reduce((a, b) =>
             (attacker.currentAtk + attacker.tempAtkBonus + a.ab.atkDelta) >=
             (attacker.currentAtk + attacker.tempAtkBonus + b.ab.atkDelta) ? a : b,

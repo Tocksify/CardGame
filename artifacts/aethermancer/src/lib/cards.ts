@@ -342,8 +342,8 @@ export const CARD_TEMPLATES: CardTemplate[] = [
   {
     templateId: 'c8', name: 'Shadow Rogue', type: 'character', cost: 3,
     atk: 4, def: 3,
-    description: 'Can attack the enemy hero directly.',
-    keywords: ['stealth'], rarity: 'rare', artTheme: 'shadow',
+    description: 'Can attack the enemy hero directly. Silences targets on hit.',
+    keywords: ['stealth', 'silence_on_hit'], rarity: 'rare', artTheme: 'shadow',
   },
   {
     templateId: 'c9', name: 'Storm Drake', type: 'character', cost: 4,
@@ -374,8 +374,8 @@ export const CARD_TEMPLATES: CardTemplate[] = [
   {
     templateId: 'h11', name: 'Void Phantom', type: 'character', cost: 3,
     atk: 5, def: 5,
-    description: 'A shadow that strikes from nowhere. Stealth.',
-    keywords: ['stealth'], rarity: 'rare', artTheme: 'void',
+    description: 'A shadow that strikes from nowhere. Stealth. Silences targets on hit.',
+    keywords: ['stealth', 'silence_on_hit'], rarity: 'rare', artTheme: 'void',
   },
   {
     templateId: 'h12', name: 'Radiant Paladin', type: 'character', cost: 4,

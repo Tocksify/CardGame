@@ -13,6 +13,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { SHOP_ITEMS, ShopItemTemplate, CARD_TEMPLATES, getCardAbilities } from '../lib/cards';
 import { CardArt } from '../components/game/CardArt';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '../components/ui/tooltip';
 
 // ── Tab → type mapping ────────────────────────────────────────────────────
 // Perks tab shows both 'stat' (passive field buffs) and 'perk' (permanent player upgrades)
@@ -29,6 +30,109 @@ const TYPE_FRAME: Record<string, { bg: string; bar: string; glow: string; icon: 
   spell:       { bg: '#2a0a0a', bar: '#6e1a1a', glow: 'rgba(200,60,60,0.6)',   icon: <Zap size={7} /> },
   artifact:    { bg: '#241600', bar: '#6e4e1a', glow: 'rgba(200,140,60,0.6)',  icon: <Package size={7} /> },
   enchantment: { bg: '#072210', bar: '#1a5a2e', glow: 'rgba(60,180,100,0.6)', icon: <Sparkles size={7} /> },
+};
+
+// ── Keyword & status-effect definitions ──────────────────────────────────
+const KEYWORD_DEFS: Record<string, { label: string; color: string; desc: string }> = {
+  taunt:          { label: 'Taunt',          color: '#e8a030', desc: 'Enemies must attack this card before others on the field.' },
+  stealth:        { label: 'Stealth',        color: '#b070ff', desc: 'Cannot be targeted by spells or abilities. Bypasses Taunt to strike the enemy hero directly.' },
+  haste:          { label: 'Haste',          color: '#60c860', desc: 'Can attack the turn it is played — does not need to wait.' },
+  poison_on_hit:  { label: 'Poison on Hit',  color: '#6aff4a', desc: 'Applies 2 Poison stacks when it hits. Poison deals stacked damage each turn and loses 1 stack.' },
+  stun_on_hit:    { label: 'Stun on Hit',    color: '#80b8ff', desc: 'Stuns the target for 1 turn on hit. Stunned cards cannot attack.' },
+  flame_aura:     { label: 'Flame Aura',     color: '#ff7040', desc: 'Applies 1 Burn stack when it hits. Burn deals 1 damage per turn and fades.' },
+  heavy_armor:    { label: 'Heavy Armor',    color: '#60aaff', desc: 'Reduces all incoming damage by 3.' },
+  electric_aura:  { label: 'Electric Aura',  color: '#ffe060', desc: 'Empowers electric allies on the field with bonus attack.' },
+  electric:       { label: 'Electric',       color: '#ffe060', desc: 'Synergizes with Electric Aura. Gains bonus attack when an Electric Aura ally is present.' },
+  heal_on_kill:   { label: 'Heal on Kill',   color: '#f070a0', desc: 'Restores 2 HP to your hero whenever this card destroys an enemy.' },
+  silence_on_hit: { label: 'Silence on Hit', color: '#aaaaaa', desc: 'Silences the target on hit for 1 turn. Silenced cards cannot use abilities.' },
+  shadow_silence: { label: 'Silence on Hit', color: '#aaaaaa', desc: 'Silences the target on hit for 1 turn. Silenced cards cannot use abilities.' },
+};
+
+const STATUS_DEFS: Record<string, { label: string; color: string; bg: string; border: string; desc: (n: number) => string }> = {
+  poison: { label: '☠️ Poison', color: '#6aff4a', bg: 'rgba(30,90,10,0.92)', border: 'rgba(60,140,20,0.8)', desc: (n) => `Deals ${n} damage this turn and loses 1 stack each turn.` },
+  burn:   { label: '🔥 Burn',   color: '#ff7040', bg: 'rgba(120,30,0,0.92)', border: 'rgba(180,50,0,0.8)', desc: (n) => `Deals 1 damage per turn for ${n} more turn${n !== 1 ? 's' : ''}.` },
+  stun:   { label: '⚡ Stun',   color: '#80b8ff', bg: 'rgba(40,60,130,0.92)', border: 'rgba(60,90,200,0.8)', desc: (n) => `Cannot attack for ${n} more turn${n !== 1 ? 's' : ''}.` },
+  silence:{ label: '🔇 Silence',color: '#cccccc', bg: 'rgba(50,50,50,0.92)', border: 'rgba(110,110,110,0.7)', desc: (n) => `Cannot use abilities for ${n} more turn${n !== 1 ? 's' : ''}.` },
+  armor:  { label: '🛡️ Armor',  color: '#60aaff', bg: 'rgba(10,50,90,0.92)', border: 'rgba(30,70,150,0.8)', desc: (n) => `Reduces all incoming damage by 3 for ${n} more turn${n !== 1 ? 's' : ''}.` },
+};
+
+const TOOLTIP_CONTENT_STYLE: React.CSSProperties = {
+  background: 'linear-gradient(180deg, #1c1508, #120e06)',
+  border: '1px solid #4a3000',
+  color: '#cbb888',
+  borderRadius: 4,
+  maxWidth: 180,
+  padding: '6px 8px',
+  zIndex: 9999,
+};
+
+/** Long-press hook for mobile tooltip reveal. */
+function useLongPress(onOpen: () => void, onClose: () => void, ms = 420) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancel = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } };
+  const onTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    cancel();
+    timer.current = setTimeout(() => { onOpen(); closeTimer.current = setTimeout(onClose, 2000); }, ms);
+  };
+  const onTouchEnd = () => { cancel(); };
+  return { onTouchStart, onTouchEnd, onTouchCancel: onTouchEnd, onTouchMove: onTouchEnd };
+}
+
+/** A single keyword pill with hover (PC) and long-press (mobile) tooltip. */
+const KeywordBadge = ({ kw, size = 'sm' }: { kw: string; size?: 'sm' | 'md' }) => {
+  const def = KEYWORD_DEFS[kw];
+  if (!def) return null;
+  const [open, setOpen] = useState(false);
+  const lp = useLongPress(() => setOpen(true), () => setOpen(false));
+  const textSize = size === 'md' ? '9px' : '6px';
+  const px = size === 'md' ? 'px-1' : 'px-0.5';
+  return (
+    <TooltipProvider>
+      <Tooltip open={open} onOpenChange={setOpen} delayDuration={120}>
+        <TooltipTrigger asChild>
+          <span
+            className={`inline-block ${px} font-bold leading-tight cursor-default select-none`}
+            style={{ fontSize: textSize, background: 'rgba(20,12,0,0.85)', color: def.color, border: `1px solid ${def.color}55`, borderRadius: 2 }}
+            {...lp}
+          >
+            {def.label}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent style={TOOLTIP_CONTENT_STYLE} side="top">
+          <div className="font-bold" style={{ fontSize: 10, color: def.color, marginBottom: 2 }}>{def.label}</div>
+          <div style={{ fontSize: 9, lineHeight: 1.35 }}>{def.desc}</div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
+
+/** A status-effect badge with hover (PC) and long-press (mobile) tooltip. */
+const StatusBadge = ({ type, value }: { type: keyof typeof STATUS_DEFS; value: number }) => {
+  const def = STATUS_DEFS[type];
+  const [open, setOpen] = useState(false);
+  const lp = useLongPress(() => setOpen(true), () => setOpen(false));
+  return (
+    <TooltipProvider>
+      <Tooltip open={open} onOpenChange={setOpen} delayDuration={120}>
+        <TooltipTrigger asChild>
+          <span
+            className="text-[6px] px-0.5 font-bold leading-tight cursor-default select-none"
+            style={{ background: def.bg, color: def.color, border: `1px solid ${def.border}`, borderRadius: 2 }}
+            {...lp}
+          >
+            {def.label.split(' ')[0]}{value}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent style={TOOLTIP_CONTENT_STYLE} side="top">
+          <div className="font-bold" style={{ fontSize: 10, color: def.color, marginBottom: 2 }}>{def.label}</div>
+          <div style={{ fontSize: 9, lineHeight: 1.35 }}>{def.desc(value)}</div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 };
 
 // ── Rarity border / shadow ────────────────────────────────────────────────
@@ -117,16 +221,22 @@ const ArenaCardUI = ({
     >
       {/* Ability bar — character field cards only */}
       {card.type === 'character' && (fc.abilityCooldowns !== undefined) && (
-        <div className="flex flex-shrink-0 border-b" style={{ height: 18, background: '#060403', borderColor: 'rgba(40,25,0,0.7)' }}>
+        <div className="flex flex-shrink-0 border-b relative" style={{ height: 18, background: fc.silenced ? 'rgba(40,40,40,0.95)' : '#060403', borderColor: 'rgba(40,25,0,0.7)' }}>
+          {fc.silenced && (
+            <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none"
+                 style={{ background: 'rgba(20,20,20,0.7)' }}>
+              <span style={{ fontSize: 7, fontWeight: 700, color: '#aaa', letterSpacing: '0.05em' }}>🔇 SILENCED</span>
+            </div>
+          )}
           {getCardAbilities(card).map((ability, i) => {
             const cd = fc.abilityCooldowns?.[i] ?? 0;
-            const ready = cd === 0;
+            const ready = cd === 0 && !fc.silenced;
             const dmg = (fc.currentAtk ?? card.atk ?? 0) + ability.atkDelta;
             const clickable = ready && !!onAbilityClick;
             return (
               <button
                 key={i}
-                title={ready ? `${ability.name}: ${dmg} dmg (READY)` : `${ability.name}: ${cd} turns until ready`}
+                title={fc.silenced ? `${ability.name}: SILENCED` : ready ? `${ability.name}: ${dmg} dmg (READY)` : `${ability.name}: ${cd} turns until ready`}
                 className="flex-1 flex items-center justify-center"
                 style={{
                   borderRight: i < 2 ? '1px solid rgba(40,25,0,0.6)' : 'none',
@@ -135,8 +245,8 @@ const ArenaCardUI = ({
                 }}
                 onClick={(e) => { e.stopPropagation(); if (clickable) onAbilityClick!(i); }}
               >
-                <span style={{ fontSize: 7, fontWeight: 700, lineHeight: 1, color: ready ? '#e8a030' : '#4a3010' }}>
-                  {ready ? dmg : `${cd}t`}
+                <span style={{ fontSize: 7, fontWeight: 700, lineHeight: 1, color: fc.silenced ? '#555' : ready ? '#e8a030' : '#4a3010' }}>
+                  {fc.silenced ? '—' : ready ? dmg : `${cd}t`}
                 </span>
               </button>
             );
@@ -164,34 +274,20 @@ const ArenaCardUI = ({
         }
         <EvoProgress card={fc} />
       </div>
+      {/* Keyword pills */}
+      {card.keywords && card.keywords.length > 0 && (
+        <div className="flex flex-wrap gap-0.5 px-0.5 py-0.5 flex-shrink-0" style={{ background: '#060403', borderTop: '1px solid rgba(60,40,0,0.25)' }}>
+          {card.keywords.map(kw => <KeywordBadge key={kw} kw={kw} size="sm" />)}
+        </div>
+      )}
       {/* Status effect badges */}
       {(fc.poisonStacks > 0 || fc.burnStacks > 0 || fc.stunned || fc.silenced || (fc.tempArmorTurns ?? 0) > 0) && (
         <div className="flex flex-wrap gap-0.5 px-0.5 py-0.5 flex-shrink-0" style={{ background: '#080604', borderTop: '1px solid rgba(60,40,0,0.4)' }}>
-          {fc.poisonStacks > 0 && (
-            <span className="text-[6px] px-0.5 font-bold leading-tight" style={{ background: 'rgba(30,90,10,0.8)', color: '#6aff4a', border: '1px solid rgba(60,140,20,0.6)', borderRadius: 2 }}>
-              ☠️{fc.poisonStacks}
-            </span>
-          )}
-          {fc.burnStacks > 0 && (
-            <span className="text-[6px] px-0.5 font-bold leading-tight" style={{ background: 'rgba(120,30,0,0.8)', color: '#ff7040', border: '1px solid rgba(180,50,0,0.6)', borderRadius: 2 }}>
-              🔥{fc.burnStacks}
-            </span>
-          )}
-          {fc.stunned && (
-            <span className="text-[6px] px-0.5 font-bold leading-tight" style={{ background: 'rgba(40,60,130,0.8)', color: '#80b8ff', border: '1px solid rgba(60,90,200,0.6)', borderRadius: 2 }}>
-              ⚡{fc.stunTurnsLeft}
-            </span>
-          )}
-          {fc.silenced && (
-            <span className="text-[6px] px-0.5 font-bold leading-tight" style={{ background: 'rgba(50,50,50,0.8)', color: '#aaa', border: '1px solid rgba(100,100,100,0.5)', borderRadius: 2 }}>
-              🔇{fc.silenceTurnsLeft}
-            </span>
-          )}
-          {(fc.tempArmorTurns ?? 0) > 0 && (
-            <span className="text-[6px] px-0.5 font-bold leading-tight" style={{ background: 'rgba(10,50,90,0.8)', color: '#60aaff', border: '1px solid rgba(30,70,150,0.6)', borderRadius: 2 }}>
-              🛡️{fc.tempArmorTurns}
-            </span>
-          )}
+          {fc.poisonStacks > 0 && <StatusBadge type="poison" value={fc.poisonStacks} />}
+          {fc.burnStacks > 0 && <StatusBadge type="burn" value={fc.burnStacks} />}
+          {fc.stunned && <StatusBadge type="stun" value={fc.stunTurnsLeft} />}
+          {fc.silenced && <StatusBadge type="silence" value={fc.silenceTurnsLeft} />}
+          {(fc.tempArmorTurns ?? 0) > 0 && <StatusBadge type="armor" value={fc.tempArmorTurns!} />}
         </div>
       )}
       <div className="h-[14%] flex-shrink-0 flex items-center justify-between px-1"
@@ -370,6 +466,11 @@ const HandCardUI = ({
           <div className="inline-block mt-1 px-1 font-bold text-[9px] leading-tight rounded-sm" style={{ background: 'rgba(40,120,40,0.25)', color: '#7ac95a', border: '1px solid rgba(80,160,40,0.5)' }}>evoR</div>
         )}
       </div>
+      {card.keywords && card.keywords.length > 0 && (
+        <div className="flex flex-wrap gap-1 px-1.5 py-1 flex-shrink-0" style={{ background: '#0a0804', borderTop: '1px solid rgba(74,48,0,0.3)' }}>
+          {card.keywords.map(kw => <KeywordBadge key={kw} kw={kw} size="md" />)}
+        </div>
+      )}
       <div className="h-[12%] flex-shrink-0 flex items-center justify-between px-1.5"
            style={{ background: 'linear-gradient(180deg, #0e0a05, #070503)', borderTop: '1px solid rgba(74,48,0,0.5)' }}>
         {card.type === 'character' ? (
@@ -1190,6 +1291,7 @@ export default function GamePage() {
               onAbilityClick={player.isHuman && !autoCombat ? (cardInstanceId, abilityIndex) => {
                 const card = me.field.find(c => c.instanceId === cardInstanceId);
                 if (!card || card.tapped || card.stunned || !isMyTurn || gameState.phase !== 'combat') return;
+                if (card.silenced) { flashReason('🔇 Silenced — abilities are blocked this turn.'); return; }
                 if ((card.abilityCooldowns?.[abilityIndex] ?? 0) > 0) return;
                 dispatch({ type: 'SET_TARGETING', payload: { mode: 'ability', sourceId: cardInstanceId, pendingAction: null, abilityIndex } });
               } : undefined}
