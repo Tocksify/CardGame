@@ -141,17 +141,29 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(tick);
   }, [gameState.phase]);
 
+  // Buy phase timer — resets per phase/player change as normal
   useEffect(() => {
     if (gameState.phase === 'buy') {
       setBuyPhaseTimeLeft(BUY_PHASE_SECONDS);
     } else {
       setBuyPhaseTimeLeft(null);
     }
+  }, [gameState.phase, gameState.currentPlayerIndex]);
+
+  // Turn timer — starts when main phase begins and keeps running through combat/end.
+  // Only resets when a new player's turn starts (draw/buy) or the game ends.
+  useEffect(() => {
     if (gameState.phase === 'main') {
       setMainPhaseTimeLeft(MAIN_PHASE_SECONDS);
-    } else {
+    } else if (
+      gameState.phase === 'draw' ||
+      gameState.phase === 'buy' ||
+      gameState.phase === 'gameover' ||
+      gameState.phase === 'countdown'
+    ) {
       setMainPhaseTimeLeft(null);
     }
+    // combat / end: leave the timer running — it spans the whole post-buy turn
   }, [gameState.phase, gameState.currentPlayerIndex]);
 
   const dispatchRef = useRef(dispatch);
@@ -172,8 +184,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (mainPhaseTimeLeft === null) return;
     if (mainPhaseTimeLeft <= 0) {
-      // Timer expired — skip straight to end phase so evolutions still trigger, then END_TURN fires
-      dispatchRef.current({ type: 'SET_PHASE', payload: 'end' });
+      // Only act if we're still in an active post-buy phase; ignore stale fires
+      const phase = stateRef.current?.phase;
+      if (phase === 'main' || phase === 'combat') {
+        dispatchRef.current({ type: 'SET_PHASE', payload: 'end' });
+      }
       setMainPhaseTimeLeft(null);
       return;
     }
