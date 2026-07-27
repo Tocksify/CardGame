@@ -79,6 +79,11 @@ interface MultiplayerContextType {
   sendCombatAnim: (payload: CombatAnimPayload) => void;
   /** Register the COMBAT_ANIM callback (GameContext) — called when a remote player attacks */
   setOnCombatAnim: (cb: ((payload: CombatAnimPayload) => void) | null) => void;
+
+  /** Signal the server that this player has ended their turn */
+  sendTurnEndSignal: () => void;
+  /** Register a callback fired when an opponent signals they have ended their turn */
+  setOnOpponentTurnEnded: (cb: (() => void) | null) => void;
 }
 
 const MultiplayerContext = createContext<MultiplayerContextType | null>(null);
@@ -101,6 +106,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
   const onGameStartedRef = useRef<((payload: GameStartedPayload) => void) | null>(null);
   const onAllDraftDoneRef = useRef<(() => void) | null>(null);
   const onCombatAnimRef = useRef<((payload: CombatAnimPayload) => void) | null>(null);
+  const onOpponentTurnEndedRef = useRef<(() => void) | null>(null);
   const draftCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const clearDraftCountdown = () => {
@@ -167,6 +173,9 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
               targetId: (msg as any).targetId,
               damage: (msg as any).damage,
             });
+            break;
+          case 'OPPONENT_TURN_ENDED':
+            onOpponentTurnEndedRef.current?.();
             break;
           case 'ERROR':
             setServerError((msg as any).message ?? 'Unknown error');
@@ -252,6 +261,14 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     send({ type: 'COMBAT_ANIM', ...payload });
   }, [send]);
 
+  const sendTurnEndSignal = useCallback(() => {
+    send({ type: 'TURN_END_SIGNAL' });
+  }, [send]);
+
+  const setOnOpponentTurnEnded = useCallback((cb: (() => void) | null) => {
+    onOpponentTurnEndedRef.current = cb;
+  }, []);
+
   return (
     <MultiplayerContext.Provider value={{
       status, roomState, yourSocketId, serverError, draftSecondsLeft, chatMessages,
@@ -260,6 +277,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
       signalDraftDone, disconnect,
       setOnGameStarted, setOnAllDraftDone,
       sendCombatAnim, setOnCombatAnim,
+      sendTurnEndSignal, setOnOpponentTurnEnded,
     }}>
       {children}
     </MultiplayerContext.Provider>

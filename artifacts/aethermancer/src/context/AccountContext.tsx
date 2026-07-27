@@ -9,6 +9,7 @@ export interface Account {
   arcaneShards: number;
   rarityBoost: number;
   unlockedAchievementIds: string[];
+  purchasedChallengerIds: string[];
 }
 
 interface AccountContextType {
@@ -70,6 +71,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       arcaneShards: raw.arcaneShards as number,
       rarityBoost: raw.rarityBoost as number,
       unlockedAchievementIds: parseAchievementIds(raw.unlockedAchievementIds),
+      purchasedChallengerIds: Array.isArray(raw.purchasedChallengerIds)
+        ? (raw.purchasedChallengerIds as string[])
+        : [],
     };
     setAccount(acc);
     setRarityBoost(acc.rarityBoost);

@@ -14,12 +14,12 @@ router.use((req, res, next) => {
   next();
 });
 
-// GET /account — shards + last 20 matches
+// GET /account — shards + purchased challengers + last 20 matches
 router.get("/", async (req, res) => {
   const userId = req.session.userId!;
   const [userRows, matches] = await Promise.all([
     db
-      .select({ arcaneShards: usersTable.arcaneShards })
+      .select({ arcaneShards: usersTable.arcaneShards, purchasedChallengerIds: usersTable.purchasedChallengerIds })
       .from(usersTable)
       .where(eq(usersTable.id, userId))
       .limit(1),
@@ -34,7 +34,10 @@ router.get("/", async (req, res) => {
     res.status(404).json({ error: "User not found" });
     return;
   }
-  res.json({ arcaneShards: userRows[0].arcaneShards, matches });
+  const row = userRows[0];
+  let purchasedChallengerIds: string[] = [];
+  try { purchasedChallengerIds = JSON.parse(row.purchasedChallengerIds); } catch { /* ignore */ }
+  res.json({ arcaneShards: row.arcaneShards, purchasedChallengerIds, matches });
 });
 
 // PATCH /account/shards — add (or subtract) shards
@@ -58,6 +61,30 @@ router.patch("/shards", async (req, res) => {
     return;
   }
   res.json(rows[0]);
+});
+
+// PATCH /account/challengers — save the full list of purchased challenger IDs
+router.patch("/challengers", async (req, res) => {
+  const userId = req.session.userId!;
+  const { purchasedChallengerIds } = req.body as { purchasedChallengerIds?: unknown };
+  if (
+    !Array.isArray(purchasedChallengerIds) ||
+    purchasedChallengerIds.some((id) => typeof id !== "string")
+  ) {
+    res.status(400).json({ error: "purchasedChallengerIds must be an array of strings" });
+    return;
+  }
+  const ids = [...new Set(purchasedChallengerIds)].slice(0, 200) as string[];
+  const rows = await db
+    .update(usersTable)
+    .set({ purchasedChallengerIds: JSON.stringify(ids) })
+    .where(eq(usersTable.id, userId))
+    .returning({ purchasedChallengerIds: usersTable.purchasedChallengerIds });
+  if (rows.length === 0) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  res.json({ purchasedChallengerIds: ids });
 });
 
 // PATCH /account/achievements — unlock one or more achievements for the current account

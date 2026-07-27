@@ -9,7 +9,7 @@ import {
   unlockChallengerFree,
   SHARDS_PER_WIN,
 } from '../store/challengers';
-import { getChallengerById, Challenger } from '../lib/challengers';
+import { getChallengerById, Challenger, CHALLENGERS } from '../lib/challengers';
 import { useAccount } from './AccountContext';
 
 const API = '/api';
@@ -37,23 +37,33 @@ export function ChallengerProvider({ children }: { children: React.ReactNode }) 
     setSave(synced);
   }, []);
 
-  // The server account is authoritative for signed-in balances. Keep the local
-  // roster cache only for ownership/equipment and offline play.
+  // The server account is authoritative for signed-in users.
+  // Restore both shard balance AND purchased challenger IDs from the server.
   useEffect(() => {
+    if (!account) return;
     const synced = loadChallengerSave();
-    const updated = account
-      ? { ...synced, arcaneShards: account.arcaneShards }
-      : synced;
+
+    // Merge server-purchased IDs into the local owned list (don't strip free starters or achievement ones)
+    const serverPurchased: string[] = account.purchasedChallengerIds ?? [];
+    const merged = [...new Set([...synced.ownedIds, ...serverPurchased])];
+
+    const updated = { ...synced, arcaneShards: account.arcaneShards, ownedIds: merged };
     saveChallengerSave(updated);
     setSave(updated);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account?.id]); // run once when account first loads (login)
+
+  // Keep shards in sync whenever the server balance changes (e.g. after a win)
+  useEffect(() => {
+    if (!account) return;
+    setSave(prev => ({ ...prev, arcaneShards: account.arcaneShards }));
   }, [account?.arcaneShards]);
 
-  // Reconcile both achievement unlocks and achievement removals.
+  // Reconcile achievement unlocks/removals when the server list changes.
   useEffect(() => {
+    if (!account) return;
     const synced = loadChallengerSave();
-    const updated = account
-      ? { ...synced, arcaneShards: account.arcaneShards }
-      : synced;
+    const updated = { ...synced, arcaneShards: account.arcaneShards };
     setSave(updated);
   }, [account?.unlockedAchievementIds]);
 
@@ -90,19 +100,34 @@ export function ChallengerProvider({ children }: { children: React.ReactNode }) 
     if (account) {
       const delta = result.arcaneShards - base.arcaneShards;
       try {
-        const res = await fetch(`${API}/account/shards`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ delta }),
+        // Deduct shards on the server
+        const shardsRes = await fetch(`${API}/account/shards`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ delta }),
         });
-        if (!res.ok) {
+        if (!shardsRes.ok) {
           saveChallengerSave(base);
           return false;
         }
-        const data = await res.json();
-        updateLocalShards(data.arcaneShards);
-        const updated = { ...result, arcaneShards: data.arcaneShards };
+        const shardsData = await shardsRes.json();
+        updateLocalShards(shardsData.arcaneShards);
+
+        // Persist the updated purchased-challenger list on the server
+        // (exclude free starters and achievement-unlocked challengers — only paid purchases)
+        const purchased = result.ownedIds.filter(ownedId => {
+          const ch = CHALLENGERS.find(c => c.id === ownedId);
+          return ch && !ch.isFreeStarter && !ch.unlockedByAchievement;
+        });
+        void fetch(`${API}/account/challengers`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ purchasedChallengerIds: purchased }),
+        });
+
+        const updated = { ...result, arcaneShards: shardsData.arcaneShards };
         saveChallengerSave(updated);
         setSave(updated);
         return true;
@@ -113,7 +138,7 @@ export function ChallengerProvider({ children }: { children: React.ReactNode }) 
     }
     setSave(result);
     return true;
-  }, [account, save.arcaneShards, updateLocalShards]);
+  }, [account, save, updateLocalShards]);
 
   const equipChallenger = useCallback((id: string) => {
     const result = storeEquipChallenger(id);

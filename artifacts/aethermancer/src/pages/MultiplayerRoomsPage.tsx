@@ -175,10 +175,14 @@ export default function MultiplayerRoomsPage() {
       }
     }
 
-    // Build players in canonical order; human is at their assigned index, all others are AI.
+    // Build players in canonical order; human is at their assigned index.
+    // Bot slots → AI. Other human player slots → isRemoteHuman so the game loop
+    // waits for a WS signal instead of auto-playing AI for them.
     const players = playerOrder.map((id, idx) => {
       if (id === yourSocketId) return { ...humanPlayer, id: idx + 1, name: humanNames[idx] };
-      return makeAiPlayer(idx, humanNames[idx]);
+      const isBot = payload.bots.some(b => b.id === id);
+      if (isBot) return makeAiPlayer(idx, humanNames[idx]);
+      return { ...makeAiPlayer(idx, humanNames[idx]), isRemoteHuman: true };
     });
 
     setGameMode(payload.gameMode);

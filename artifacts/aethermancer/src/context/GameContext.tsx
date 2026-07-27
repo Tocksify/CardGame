@@ -83,7 +83,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [mainPhaseTimeLeft, setMainPhaseTimeLeft] = useState<number | null>(null);
 
   // Multiplayer relay
-  const { sendCombatAnim, setOnCombatAnim } = useMultiplayer();
+  const { sendCombatAnim, setOnCombatAnim, sendTurnEndSignal, setOnOpponentTurnEnded } = useMultiplayer();
+  const sendTurnEndSignalRef = useRef(sendTurnEndSignal);
+  sendTurnEndSignalRef.current = sendTurnEndSignal;
 
   // Receive remote combat anims and mirror them locally
   useEffect(() => {
@@ -93,6 +95,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
     return () => setOnCombatAnim(null);
   }, [setOnCombatAnim]);
+
+  // When an opponent signals their turn ended, advance our local game state
+  const dispatchRef2 = useRef(dispatch);
+  dispatchRef2.current = dispatch;
+  useEffect(() => {
+    setOnOpponentTurnEnded(() => {
+      if (dispatchRef2.current) dispatchRef2.current({ type: 'END_TURN' });
+    });
+    return () => setOnOpponentTurnEnded(null);
+  }, [setOnOpponentTurnEnded]);
 
   // Lobby settings
   const { autoCombat } = useLobby();
@@ -1249,11 +1261,20 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     // ── End phase ──────────────────────────────────────────────────────────
     if (gameState.phase === 'end') {
+      // Remote human slot: don't auto-advance — wait for OPPONENT_TURN_ENDED over WS
+      if (currentPlayer.isRemoteHuman) return;
+
       gameLoopRef.current = setTimeout(() => {
         // Guard: a delayed attack/damage may have triggered gameover while we waited
         if (stateRef.current.phase === 'gameover') return;
         checkEvolutions();
-        if (currentPlayer.isHuman) triggerAchievement('survive_10_turns', 1);
+        if (currentPlayer.isHuman) {
+          triggerAchievement('survive_10_turns', 1);
+          // Notify other human players in multiplayer that this turn is done
+          if (gameState.matchType === 'multiplayer') {
+            sendTurnEndSignalRef.current();
+          }
+        }
         dispatchRef.current({ type: 'END_TURN' });
       }, 500);
       return;
@@ -1632,7 +1653,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         gameLoopRef.current = setTimeout(runPlayerAutoCombatLoop, 700);
       }
 
-      if (!currentPlayer.isHuman) {
+      if (!currentPlayer.isHuman && !currentPlayer.isRemoteHuman) {
         gameLoopRef.current = setTimeout(runAiCombatLoop, 900);
       } else if (autoCombatRef.current) {
         gameLoopRef.current = setTimeout(runPlayerAutoCombatLoop, 900);
@@ -1641,7 +1662,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
 
     // ── AI main / buy phases ───────────────────────────────────────────────
-    if (!currentPlayer.isHuman) {
+    // Remote human slots wait for OPPONENT_TURN_ENDED signal — no AI logic
+    if (!currentPlayer.isHuman && !currentPlayer.isRemoteHuman) {
       if (gameState.phase === 'buy') {
         gameLoopRef.current = setTimeout(() => {
           dispatchRef.current({ type: 'ADVANCE_PHASE' });

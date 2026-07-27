@@ -9,6 +9,8 @@ export const usersTable = pgTable("users", {
   rarityBoost: integer("rarity_boost").notNull().default(0),
   // JSON array of achievement IDs that have been unlocked server-side, e.g. '["first_win","win_10_games"]'
   unlockedAchievementIds: text("unlocked_achievement_ids").notNull().default("[]"),
+  // JSON array of challenger IDs purchased with Arcane Shards, e.g. '["ch_02","ch_07"]'
+  purchasedChallengerIds: text("purchased_challenger_ids").notNull().default("[]"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

@@ -25,7 +25,8 @@ type ClientMsg =
   | { type: 'START_GAME' }
   | { type: 'PLAYER_DRAFT_DONE' }
   | { type: 'CHAT_MESSAGE'; text: string }
-  | { type: 'COMBAT_ANIM'; attackerInstanceId: string; targetId: string; damage: number };
+  | { type: 'COMBAT_ANIM'; attackerInstanceId: string; targetId: string; damage: number }
+  | { type: 'TURN_END_SIGNAL' };
 
 function send(ws: WebSocket, msg: object) {
   if (ws.readyState === WebSocket.OPEN) {
@@ -233,6 +234,14 @@ export function handleWsConnection(wss: WebSocketServer) {
             targetId: msg.targetId,
             damage: msg.damage,
           }, client.socketId);
+          break;
+        }
+
+        case 'TURN_END_SIGNAL': {
+          const room = getRoomBySocket(client.socketId);
+          if (!room) return;
+          // Tell all other players that this player has ended their turn
+          broadcastToOthers(wss, room, { type: 'OPPONENT_TURN_ENDED' }, client.socketId);
           break;
         }
 

@@ -53,6 +53,9 @@ export interface CardGameStats {
 }
 
 export interface Player {
+  /** True when this slot belongs to a real human playing from another client (multiplayer only).
+   *  The game loop skips AI logic for this slot and waits for a TURN_END_SIGNAL over WS instead. */
+  isRemoteHuman?: boolean;
   id: number;
   name: string;
   isHuman: boolean;
