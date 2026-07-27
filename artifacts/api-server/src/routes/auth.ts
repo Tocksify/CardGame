@@ -13,6 +13,8 @@ const USER_FIELDS = {
   arcaneShards: usersTable.arcaneShards,
   rarityBoost: usersTable.rarityBoost,
   unlockedAchievementIds: usersTable.unlockedAchievementIds,
+  purchasedChallengerIds: usersTable.purchasedChallengerIds,
+  achievementProgress: usersTable.achievementProgress,
 };
 
 // GET /auth/me
@@ -110,6 +112,8 @@ router.post("/login", async (req, res) => {
     arcaneShards: user.arcaneShards,
     rarityBoost: user.rarityBoost,
     unlockedAchievementIds: user.unlockedAchievementIds,
+    purchasedChallengerIds: user.purchasedChallengerIds,
+    achievementProgress: user.achievementProgress,
   });
 });
 

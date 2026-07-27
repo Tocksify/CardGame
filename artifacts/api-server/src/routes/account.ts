@@ -87,6 +87,32 @@ router.patch("/challengers", async (req, res) => {
   res.json({ purchasedChallengerIds: ids });
 });
 
+// PATCH /account/achievement-progress — save incremental progress for achievements
+router.patch("/achievement-progress", async (req, res) => {
+  const userId = req.session.userId!;
+  const { progress } = req.body as { progress?: unknown };
+  if (!progress || typeof progress !== "object" || Array.isArray(progress)) {
+    res.status(400).json({ error: "progress must be a key-value object" });
+    return;
+  }
+  const clean: Record<string, number> = {};
+  for (const [k, v] of Object.entries(progress)) {
+    if (typeof k === "string" && typeof v === "number" && Number.isFinite(v)) {
+      clean[k] = Math.trunc(v);
+    }
+  }
+  const rows = await db
+    .update(usersTable)
+    .set({ achievementProgress: JSON.stringify(clean) })
+    .where(eq(usersTable.id, userId))
+    .returning({ achievementProgress: usersTable.achievementProgress });
+  if (rows.length === 0) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  res.json({ achievementProgress: clean });
+});
+
 // PATCH /account/achievements — unlock one or more achievements for the current account
 router.patch("/achievements", async (req, res) => {
   const userId = req.session.userId!;

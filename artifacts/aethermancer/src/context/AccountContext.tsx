@@ -10,6 +10,8 @@ export interface Account {
   rarityBoost: number;
   unlockedAchievementIds: string[];
   purchasedChallengerIds: string[];
+  /** Map of achievement ID → progress value for in-progress achievements */
+  achievementProgress: Record<string, number>;
 }
 
 interface AccountContextType {
@@ -21,6 +23,7 @@ interface AccountContextType {
   refreshAccount: () => Promise<void>;
   updateLocalShards: (newValue: number) => void;
   unlockAchievement: (achievementId: string) => Promise<void>;
+  saveAchievementProgress: (progress: Record<string, number>) => Promise<void>;
   recordMatch: (result: 'win' | 'loss', opponentName: string, gameMode: string, shardsEarned: number) => Promise<void>;
 }
 
@@ -37,17 +40,30 @@ function parseAchievementIds(raw: unknown): string[] {
   return [];
 }
 
-/** Mirrors the signed-in account's achievement state into localStorage. */
-function syncAchievementsToLocalStorage(ids: string[]) {
+/** Parses the achievementProgress field which comes back as a JSON string from the DB */
+function parseAchievementProgress(raw: unknown): Record<string, number> {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw as Record<string, number>;
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw); } catch { return {}; }
+  }
+  return {};
+}
+
+/** Mirrors the signed-in account's achievement state into localStorage.
+ *  Server is authoritative for unlock status AND progress values. */
+function syncAchievementsToLocalStorage(ids: string[], progress: Record<string, number> = {}) {
   try {
     const stored = localStorage.getItem('aethermancer_achievements');
     const base = stored ? JSON.parse(stored) : [];
     const merged = DEFAULT_ACHIEVEMENTS.map(def => {
       const found = base.find((p: { id: string }) => p.id === def.id);
+      // Server progress wins if present, otherwise keep localStorage value
+      const serverProg = progress[def.id];
+      const localProg = found?.progress ?? def.progress;
       return {
         ...def,
         unlocked: ids.includes(def.id),
-        progress: found?.progress ?? def.progress,
+        progress: serverProg !== undefined ? serverProg : localProg,
       };
     });
     localStorage.setItem('aethermancer_achievements', JSON.stringify(merged));
@@ -74,10 +90,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       purchasedChallengerIds: Array.isArray(raw.purchasedChallengerIds)
         ? (raw.purchasedChallengerIds as string[])
         : [],
+      achievementProgress: parseAchievementProgress(raw.achievementProgress),
     };
     setAccount(acc);
     setRarityBoost(acc.rarityBoost);
-    syncAchievementsToLocalStorage(acc.unlockedAchievementIds);
+    syncAchievementsToLocalStorage(acc.unlockedAchievementIds, acc.achievementProgress);
   }, []);
 
   const fetchMe = useCallback(async () => {
@@ -162,7 +179,21 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       const data = await res.json();
       const nextIds = parseAchievementIds(data.unlockedAchievementIds);
       setAccount(prev => prev ? { ...prev, unlockedAchievementIds: nextIds } : prev);
-      syncAchievementsToLocalStorage(nextIds);
+      syncAchievementsToLocalStorage(nextIds, account?.achievementProgress ?? {});
+    } catch { /* ignore */ }
+  }, [account]);
+
+  const saveAchievementProgress = useCallback(async (progress: Record<string, number>) => {
+    if (!account) return;
+    try {
+      const res = await fetch(`${API}/account/achievement-progress`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ progress }),
+      });
+      if (!res.ok) return;
+      setAccount(prev => prev ? { ...prev, achievementProgress: progress } : prev);
     } catch { /* ignore */ }
   }, [account]);
 
@@ -194,7 +225,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     <AccountContext.Provider value={{
       account, loading,
       login, register, logout, refreshAccount,
-      updateLocalShards, unlockAchievement, recordMatch,
+      updateLocalShards, unlockAchievement, saveAchievementProgress, recordMatch,
     }}>
       {children}
     </AccountContext.Provider>

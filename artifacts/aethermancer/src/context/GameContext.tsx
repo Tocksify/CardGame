@@ -113,7 +113,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   // Challenger system
   const { equippedChallenger, addShards } = useChallenger();
-  const { account, unlockAchievement } = useAccount();
+  const { account, unlockAchievement, saveAchievementProgress } = useAccount();
+  const saveAchievementProgressRef = useRef(saveAchievementProgress);
+  saveAchievementProgressRef.current = saveAchievementProgress;
   const equippedEffectsRef = useRef<string[]>([]);
   equippedEffectsRef.current = equippedChallenger?.effectKeys ?? [];
   const challengerReviveUsedRef = useRef(false);
@@ -211,23 +213,38 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const triggerAchievement = (id: string, progressInc = 0) => {
     setAchievements(prev => {
       let changed = false;
+      let newlyUnlockedId: string | null = null;
       const next = prev.map(a => {
         if (a.id === id && !a.unlocked) {
           if (a.target && progressInc > 0) {
             const newProg = (a.progress || 0) + progressInc;
             changed = true;
-            if (newProg >= a.target) { showToast(a.name); return { ...a, progress: newProg, unlocked: true }; }
+            if (newProg >= a.target) {
+              showToast(a.name);
+              newlyUnlockedId = a.id;
+              return { ...a, progress: newProg, unlocked: true };
+            }
             return { ...a, progress: newProg };
           } else if (!a.target) {
-            changed = true; showToast(a.name); return { ...a, unlocked: true };
+            changed = true;
+            showToast(a.name);
+            newlyUnlockedId = a.id;
+            return { ...a, unlocked: true };
           }
         }
         return a;
       });
       if (changed) {
         saveAchievements(next);
-        const newlyUnlocked = next.find(a => a.id === id && a.unlocked && !prev.find(p => p.id === id)?.unlocked);
-        if (newlyUnlocked) unlockAchievement(newlyUnlocked.id);
+        if (newlyUnlockedId) unlockAchievement(newlyUnlockedId);
+        // Persist in-progress values to the server so progress survives a localStorage clear
+        const progressMap: Record<string, number> = {};
+        next.forEach(a => {
+          if (!a.unlocked && a.target && (a.progress || 0) > 0) {
+            progressMap[a.id] = a.progress!;
+          }
+        });
+        saveAchievementProgressRef.current(progressMap);
       }
       return next;
     });

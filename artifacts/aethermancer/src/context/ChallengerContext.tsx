@@ -56,7 +56,11 @@ export function ChallengerProvider({ children }: { children: React.ReactNode }) 
   // Keep shards in sync whenever the server balance changes (e.g. after a win)
   useEffect(() => {
     if (!account) return;
-    setSave(prev => ({ ...prev, arcaneShards: account.arcaneShards }));
+    setSave(prev => {
+      const updated = { ...prev, arcaneShards: account.arcaneShards };
+      saveChallengerSave(updated); // keep localStorage current
+      return updated;
+    });
   }, [account?.arcaneShards]);
 
   // Reconcile achievement unlocks/removals when the server list changes.
