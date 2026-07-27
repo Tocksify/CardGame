@@ -10,7 +10,7 @@ export default function AchievementsPage() {
 
   const handleBack = () => {
     sounds.play('uiClick');
-    setLocation('/options');
+    setLocation('/');
   };
 
   return (
