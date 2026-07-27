@@ -8,6 +8,7 @@ import { DIFFICULTY_CFG, useLobby } from './LobbyContext';
 import { loadAccount, applyEloChange } from '../store/account';
 import { useChallenger } from './ChallengerContext';
 import { SHARDS_PER_WIN } from '../store/challengers';
+import { useAccount } from './AccountContext';
 import { useCodex } from './CodexContext';
 import { useMultiplayer } from './MultiplayerContext';
 
@@ -100,6 +101,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   // Challenger system
   const { equippedChallenger, addShards } = useChallenger();
+  const { account, unlockAchievement } = useAccount();
   const equippedEffectsRef = useRef<string[]>([]);
   equippedEffectsRef.current = equippedChallenger?.effectKeys ?? [];
   const challengerReviveUsedRef = useRef(false);
@@ -118,7 +120,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (ids.length > 0) discoverCardsRef.current(ids);
   }, [gameState.players]);
 
-  useEffect(() => { setAchievements(loadAchievements()); }, []);
+  useEffect(() => {
+    const local = loadAchievements();
+    if (!account) {
+      setAchievements(local);
+      return;
+    }
+    const ids = new Set(account.unlockedAchievementIds);
+    setAchievements(local.map(a => ({ ...a, unlocked: ids.has(a.id) })));
+  }, [account?.id, account?.unlockedAchievementIds.join('|')]);
 
   useEffect(() => {
     if (gameState.phase === 'gameover' || gameState.phase === 'countdown') return;
@@ -187,7 +197,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
         return a;
       });
-      if (changed) saveAchievements(next);
+      if (changed) {
+        saveAchievements(next);
+        const newlyUnlocked = next.find(a => a.id === id && a.unlocked && !prev.find(p => p.id === id)?.unlocked);
+        if (newlyUnlocked) unlockAchievement(newlyUnlocked.id);
+      }
       return next;
     });
   };
@@ -1113,8 +1127,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         triggerAchievement('win_10_games', 1);
         triggerAchievement('mythic_50_wins', 1);
         if (!winner.damageTakenThisGame) triggerAchievement('win_no_damage');
-        // Award Arcane Shards for winning
-        addShards(SHARDS_PER_WIN);
+        // Logged-in wins are persisted by GamePage's match record. Keep the
+        // local reward for offline play without awarding the account twice.
+        if (!account) addShards(SHARDS_PER_WIN);
       } else {
         sounds.play('defeat');
       }

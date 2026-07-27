@@ -72,7 +72,7 @@ export default function AdminPanelPage() {
     setUsers(prev => prev.map(u => u.id === userId ? updated : u));
     // If we just changed our own account, refresh AccountContext so UI stays in sync
     if (account && userId === account.id) {
-      refreshAccount();
+      await refreshAccount();
     }
     return updated;
   };

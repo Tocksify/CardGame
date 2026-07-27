@@ -23,9 +23,7 @@ export default function MainMenuPage() {
             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-card/80 border border-border text-sm">
               <User size={14} className="text-primary" />
               <span className="text-foreground font-semibold">{account.username}</span>
-              {account.arcaneShards > 0 && (
-                <span className="text-amber-400 text-xs ml-1">✦ {account.arcaneShards.toLocaleString()}</span>
-              )}
+              <span className="text-amber-400 text-xs ml-1">✦ {account.arcaneShards.toLocaleString()}</span>
             </div>
             <button
               onClick={handleLogout}

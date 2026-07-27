@@ -19,6 +19,7 @@ interface AccountContextType {
   logout: () => Promise<void>;
   refreshAccount: () => Promise<void>;
   updateLocalShards: (newValue: number) => void;
+  unlockAchievement: (achievementId: string) => Promise<void>;
   recordMatch: (result: 'win' | 'loss', opponentName: string, gameMode: string, shardsEarned: number) => Promise<void>;
 }
 
@@ -35,18 +36,16 @@ function parseAchievementIds(raw: unknown): string[] {
   return [];
 }
 
-/** Merges server-side unlocked achievement IDs into localStorage so challengers auto-unlock */
+/** Mirrors the signed-in account's achievement state into localStorage. */
 function syncAchievementsToLocalStorage(ids: string[]) {
-  if (!ids.length) return;
   try {
     const stored = localStorage.getItem('aethermancer_achievements');
     const base = stored ? JSON.parse(stored) : [];
     const merged = DEFAULT_ACHIEVEMENTS.map(def => {
       const found = base.find((p: { id: string }) => p.id === def.id);
-      const serverUnlocked = ids.includes(def.id);
       return {
         ...def,
-        unlocked: serverUnlocked || (found?.unlocked ?? false),
+        unlocked: ids.includes(def.id),
         progress: found?.progress ?? def.progress,
       };
     });
@@ -143,6 +142,26 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setAccount(prev => prev ? { ...prev, arcaneShards: newValue } : prev);
   }, []);
 
+  const unlockAchievement = useCallback(async (achievementId: string) => {
+    if (!account || !achievementId) return;
+    const ids = account.unlockedAchievementIds.includes(achievementId)
+      ? account.unlockedAchievementIds
+      : [...account.unlockedAchievementIds, achievementId];
+    try {
+      const res = await fetch(`${API}/account/achievements`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ achievementIds: ids }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const nextIds = parseAchievementIds(data.unlockedAchievementIds);
+      setAccount(prev => prev ? { ...prev, unlockedAchievementIds: nextIds } : prev);
+      syncAchievementsToLocalStorage(nextIds);
+    } catch { /* ignore */ }
+  }, [account]);
+
   const recordMatch = useCallback(async (
     result: 'win' | 'loss',
     opponentName: string,
@@ -171,7 +190,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     <AccountContext.Provider value={{
       account, loading,
       login, register, logout, refreshAccount,
-      updateLocalShards, recordMatch,
+      updateLocalShards, unlockAchievement, recordMatch,
     }}>
       {children}
     </AccountContext.Provider>

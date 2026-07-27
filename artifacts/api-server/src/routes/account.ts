@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { usersTable, matchHistoryTable } from "@workspace/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 
 const router = Router();
 
@@ -41,25 +41,47 @@ router.get("/", async (req, res) => {
 router.patch("/shards", async (req, res) => {
   const userId = req.session.userId!;
   const { delta } = req.body as { delta?: number };
-  if (typeof delta !== "number" || isNaN(delta)) {
+  if (typeof delta !== "number" || !Number.isFinite(delta)) {
     res.status(400).json({ error: "delta must be a number" });
     return;
   }
+  const amount = Math.trunc(delta);
   const rows = await db
-    .select({ arcaneShards: usersTable.arcaneShards })
-    .from(usersTable)
+    .update(usersTable)
+    .set({
+      arcaneShards: sql`GREATEST(0, ${usersTable.arcaneShards} + ${amount})`,
+    })
     .where(eq(usersTable.id, userId))
-    .limit(1);
+    .returning({ arcaneShards: usersTable.arcaneShards });
   if (rows.length === 0) {
     res.status(404).json({ error: "User not found" });
     return;
   }
-  const newVal = Math.max(0, rows[0].arcaneShards + delta);
-  await db
+  res.json(rows[0]);
+});
+
+// PATCH /account/achievements — unlock one or more achievements for the current account
+router.patch("/achievements", async (req, res) => {
+  const userId = req.session.userId!;
+  const { achievementIds } = req.body as { achievementIds?: unknown };
+  if (
+    !Array.isArray(achievementIds) ||
+    achievementIds.some((id) => typeof id !== "string")
+  ) {
+    res.status(400).json({ error: "achievementIds must be an array of strings" });
+    return;
+  }
+  const ids = [...new Set(achievementIds)].slice(0, 200) as string[];
+  const rows = await db
     .update(usersTable)
-    .set({ arcaneShards: newVal })
-    .where(eq(usersTable.id, userId));
-  res.json({ arcaneShards: newVal });
+    .set({ unlockedAchievementIds: JSON.stringify(ids) })
+    .where(eq(usersTable.id, userId))
+    .returning({ unlockedAchievementIds: usersTable.unlockedAchievementIds });
+  if (rows.length === 0) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  res.json({ unlockedAchievementIds: ids });
 });
 
 // POST /account/match — record a completed match
@@ -87,17 +109,12 @@ router.post("/match", async (req, res) => {
     .returning();
   // If shards earned, update balance
   if (typeof shardsEarned === "number" && shardsEarned > 0) {
-    const [user] = await db
-      .select({ arcaneShards: usersTable.arcaneShards })
-      .from(usersTable)
-      .where(eq(usersTable.id, userId))
-      .limit(1);
-    if (user) {
-      await db
-        .update(usersTable)
-        .set({ arcaneShards: user.arcaneShards + shardsEarned })
-        .where(eq(usersTable.id, userId));
-    }
+    await db
+      .update(usersTable)
+      .set({
+        arcaneShards: sql`${usersTable.arcaneShards} + ${Math.trunc(shardsEarned)}`,
+      })
+      .where(eq(usersTable.id, userId));
   }
   res.json(matchRow);
 });

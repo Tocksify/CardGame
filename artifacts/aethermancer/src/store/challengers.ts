@@ -29,12 +29,19 @@ export function loadChallengerSave(): ChallengerSave {
       save = { arcaneShards: 0, ownedIds: [...FREE_STARTER_IDS], equippedId: FREE_STARTER_IDS[0] ?? null };
       saveChallengerSave(save);
     }
-    // Auto-unlock achievement challengers
+    // Reconcile achievement challengers in both directions. This matters when
+    // an admin clears an achievement after previously granting it.
     const achIds = getAchievementUnlockedIds();
     let changed = false;
-    for (const id of achIds) {
-      if (!save.ownedIds.includes(id)) {
-        save.ownedIds = [...save.ownedIds, id];
+    for (const challenger of CHALLENGERS.filter(c => c.unlockedByAchievement)) {
+      const shouldOwn = achIds.includes(challenger.unlockedByAchievement!);
+      const owns = save.ownedIds.includes(challenger.id);
+      if (shouldOwn && !owns) {
+        save.ownedIds = [...save.ownedIds, challenger.id];
+        changed = true;
+      } else if (!shouldOwn && owns) {
+        save.ownedIds = save.ownedIds.filter(id => id !== challenger.id);
+        if (save.equippedId === challenger.id) save.equippedId = null;
         changed = true;
       }
     }

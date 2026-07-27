@@ -171,8 +171,8 @@ export default function ChallengersPage() {
     setTimeout(() => setToast(null), 2500);
   };
 
-  const handleBuy = (challenger: Challenger) => {
-    if (buyChallenger(challenger.id)) {
+  const handleBuy = async (challenger: Challenger) => {
+    if (await buyChallenger(challenger.id)) {
       showToast(`${challenger.name} unlocked!`);
       // Auto-equip on purchase
       equipChallenger(challenger.id);

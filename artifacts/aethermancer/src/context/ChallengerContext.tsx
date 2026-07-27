@@ -19,9 +19,9 @@ interface ChallengerContextType {
   equippedChallenger: Challenger | null;
   isOwned: (id: string) => boolean;
   isEquipped: (id: string) => boolean;
-  buyChallenger: (id: string) => boolean;
+  buyChallenger: (id: string) => Promise<boolean>;
   equipChallenger: (id: string) => void;
-  addShards: (amount: number) => void;
+  addShards: (amount: number) => Promise<void>;
   unlockFree: (id: string) => void;
 }
 
@@ -37,22 +37,24 @@ export function ChallengerProvider({ children }: { children: React.ReactNode }) 
     setSave(synced);
   }, []);
 
-  // When the account's shard balance changes (login, win, admin set), sync to challenger save
+  // The server account is authoritative for signed-in balances. Keep the local
+  // roster cache only for ownership/equipment and offline play.
   useEffect(() => {
-    if (account == null) return;
-    setSave(prev => {
-      if (prev.arcaneShards === account.arcaneShards) return prev;
-      const updated = { ...prev, arcaneShards: account.arcaneShards };
-      saveChallengerSave(updated);
-      return updated;
-    });
+    const synced = loadChallengerSave();
+    const updated = account
+      ? { ...synced, arcaneShards: account.arcaneShards }
+      : synced;
+    saveChallengerSave(updated);
+    setSave(updated);
   }, [account?.arcaneShards]);
 
-  // When account achievement IDs change (login / admin unlock), re-sync localStorage to pick up unlocks
+  // Reconcile both achievement unlocks and achievement removals.
   useEffect(() => {
-    if (!account?.unlockedAchievementIds?.length) return;
     const synced = loadChallengerSave();
-    setSave(synced);
+    const updated = account
+      ? { ...synced, arcaneShards: account.arcaneShards }
+      : synced;
+    setSave(updated);
   }, [account?.unlockedAchievementIds]);
 
   const isOwned = useCallback((id: string) => save.ownedIds.includes(id), [save]);
@@ -60,37 +62,56 @@ export function ChallengerProvider({ children }: { children: React.ReactNode }) 
 
   const equippedChallenger = save.equippedId ? (getChallengerById(save.equippedId) ?? null) : null;
 
-  const addShards = useCallback((amount: number) => {
-    const result = storeAddShards(amount);
-    setSave(result);
-    // Keep AccountContext in sync (don't await, fire-and-forget)
+  const addShards = useCallback(async (amount: number) => {
     if (account) {
-      const newTotal = result.arcaneShards;
-      updateLocalShards(newTotal);
-      fetch(`${API}/account/shards`, {
+      try {
+        const res = await fetch(`${API}/account/shards`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ delta: amount }),
-      }).catch(() => {/* ignore */});
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        updateLocalShards(data.arcaneShards);
+        setSave(prev => ({ ...prev, arcaneShards: data.arcaneShards }));
+      } catch { /* ignore */ }
+      return;
     }
+    const result = storeAddShards(amount);
+    setSave(result);
   }, [account, updateLocalShards]);
 
-  const buyChallenger = useCallback((id: string): boolean => {
+  const buyChallenger = useCallback(async (id: string): Promise<boolean> => {
+    const base = account ? { ...save, arcaneShards: account.arcaneShards } : save;
+    saveChallengerSave(base);
     const result = storeBuyChallenger(id);
     if (!result) return false;
-    setSave(result);
-    // Keep AccountContext in sync
     if (account) {
-      const delta = result.arcaneShards - save.arcaneShards; // negative (cost deducted)
-      updateLocalShards(result.arcaneShards);
-      fetch(`${API}/account/shards`, {
+      const delta = result.arcaneShards - base.arcaneShards;
+      try {
+        const res = await fetch(`${API}/account/shards`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ delta }),
-      }).catch(() => {/* ignore */});
+        });
+        if (!res.ok) {
+          saveChallengerSave(base);
+          return false;
+        }
+        const data = await res.json();
+        updateLocalShards(data.arcaneShards);
+        const updated = { ...result, arcaneShards: data.arcaneShards };
+        saveChallengerSave(updated);
+        setSave(updated);
+        return true;
+      } catch {
+        saveChallengerSave(base);
+        return false;
+      }
     }
+    setSave(result);
     return true;
   }, [account, save.arcaneShards, updateLocalShards]);
 
