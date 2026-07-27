@@ -92,6 +92,7 @@ const TYPE_LABELS: Record<CardType, string> = {
   spell:       '🌟 SPELL',
   artifact:    '🏺 ARTIFACT',
   enchantment: '🔵 ENCHANTMENT',
+  curse:       '☠️ CURSE',
 };
 
 const KEYWORD_LABELS: Record<string, string> = {
@@ -326,7 +327,7 @@ export default function CodexPage() {
   }, [filterRarity, filterType]);
 
   const RARITY_FILTERS: Array<CardRarity | 'all'> = ['all', 'common', 'rare', 'legendary', 'secret'];
-  const TYPE_FILTERS: Array<CardType | 'all'> = ['all', 'character', 'spell', 'artifact', 'enchantment'];
+  const TYPE_FILTERS: Array<CardType | 'all'> = ['all', 'character', 'spell', 'artifact', 'enchantment', 'curse'];
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground flex flex-col">

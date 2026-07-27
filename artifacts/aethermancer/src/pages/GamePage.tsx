@@ -9,7 +9,7 @@ import { CardInstance, FieldCard, Player } from '../store/gameStore';
 import { sounds } from '../lib/sounds';
 import {
   ShoppingCart, Package, Info, ShieldAlert, Swords, Heart,
-  Activity, User, ScrollText, Zap, Clock, RefreshCw, Sparkles, Coins,
+  Activity, User, ScrollText, Zap, Clock, RefreshCw, Sparkles, Coins, Skull,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SHOP_ITEMS, ShopItemTemplate, CARD_TEMPLATES, getCardAbilities } from '../lib/cards';
@@ -31,6 +31,7 @@ const TYPE_FRAME: Record<string, { bg: string; bar: string; glow: string; icon: 
   spell:       { bg: '#2a0a0a', bar: '#6e1a1a', glow: 'rgba(200,60,60,0.6)',   icon: <Zap size={7} /> },
   artifact:    { bg: '#241600', bar: '#6e4e1a', glow: 'rgba(200,140,60,0.6)',  icon: <Package size={7} /> },
   enchantment: { bg: '#072210', bar: '#1a5a2e', glow: 'rgba(60,180,100,0.6)', icon: <Sparkles size={7} /> },
+  curse:       { bg: '#150003', bar: '#5a000e', glow: 'rgba(180,0,25,0.85)',   icon: <Skull size={7} /> },
 };
 
 // ── Keyword & status-effect definitions ──────────────────────────────────
@@ -138,7 +139,8 @@ const StatusBadge = ({ type, value }: { type: keyof typeof STATUS_DEFS; value: n
 };
 
 // ── Rarity border / shadow ────────────────────────────────────────────────
-function rarityBorder(rarity?: string, evolved?: boolean, artTheme?: string): string {
+function rarityBorder(rarity?: string, evolved?: boolean, artTheme?: string, type?: string): string {
+  if (type === 'curse') return 'border-[#8b0000] shadow-[0_0_20px_rgba(180,0,30,0.9),0_0_8px_rgba(220,0,40,0.65)]';
   if (evolved) return 'border-amber-300 shadow-[0_0_14px_rgba(245,197,24,1)]';
   if (artTheme === 'chromatic') return 'border-chromatic';
   if (rarity === 'secret')    return 'border-[#e040fb] shadow-[0_0_14px_rgba(224,64,251,0.9),0_0_4px_rgba(224,64,251,0.5)]';
@@ -174,12 +176,13 @@ const EvoProgress = ({ card }: { card: FieldCard }) => {
 
 // ── Field / Arena card ────────────────────────────────────────────────────
 const ArenaCardUI = ({
-  card, onClick, tapped = false, targetable = false, combatAnim = null, attackOffset = { x: 18, y: 0 }, size = 'md', onAbilityClick, compact = false,
+  card, onClick, tapped = false, targetable = false, curseTargetable = false, combatAnim = null, attackOffset = { x: 18, y: 0 }, size = 'md', onAbilityClick, compact = false,
 }: {
   card: CardInstance | FieldCard;
   onClick?: () => void;
   tapped?: boolean;
   targetable?: boolean;
+  curseTargetable?: boolean;
   combatAnim?: { targetId: string; damage: number; attackerId?: string } | null;
   attackOffset?: { x: number; y: number };
   size?: 'sm' | 'md';
@@ -193,7 +196,7 @@ const ArenaCardUI = ({
   const isEvolved = fc.evolved;
   const isHit = combatAnim?.targetId === (card as any).instanceId;
   const isAttacker = combatAnim?.attackerId === (card as any).instanceId;
-  const borderCls = rarityBorder(card.rarity, isEvolved, card.artTheme);
+  const borderCls = rarityBorder(card.rarity, isEvolved, card.artTheme, card.type);
   // compact = mobile landscape: ~60% of 'sm'
   const w = compact ? 'w-[58px]' : size === 'sm' ? 'w-[86px]' : 'w-[106px]';
   const h = compact ? 'h-[84px]'  : size === 'sm' ? 'h-[124px]' : 'h-[154px]';
@@ -216,7 +219,7 @@ const ArenaCardUI = ({
       onClick={onClick}
       title={card.name}
       className={`relative ${w} ${h} flex flex-col flex-shrink-0 border-2 cursor-pointer transition-colors duration-200 overflow-hidden
-        ${targetable ? 'border-amber-400 shadow-[0_0_12px_rgba(201,162,39,0.8)] animate-pulse' : borderCls}
+        ${curseTargetable ? 'border-red-700 shadow-[0_0_18px_rgba(180,0,30,0.95),0_0_6px_rgba(220,0,40,0.6)] animate-pulse' : targetable ? 'border-amber-400 shadow-[0_0_12px_rgba(201,162,39,0.8)] animate-pulse' : borderCls}
         ${tapped ? 'opacity-55 rotate-[8deg]' : ''}
         ${isHit ? 'animate-[flash-red_0.3s_ease]' : ''}
       `}
@@ -430,7 +433,7 @@ const HandCardUI = ({
   compact?: boolean;
 }) => {
   const frame = TYPE_FRAME[card.type] || TYPE_FRAME.character;
-  const borderCls = rarityBorder(card.rarity, false, card.artTheme);
+  const borderCls = rarityBorder(card.rarity, false, card.artTheme, card.type);
 
   // compact = mobile landscape: smaller card so more arena is visible
   const dims   = compact ? 'w-[76px] h-[112px]' : 'w-36 h-56';
@@ -673,7 +676,8 @@ const PlayerZone = ({
         {player.field.length > 0 && (
           <div className={`flex ${cfg.cardArea} overflow-hidden`} style={{ maxWidth: cfg.horizontal ? undefined : (compact ? 80 : 120), maxHeight: cfg.horizontal ? undefined : (compact ? 140 : 200) }}>
             {player.field.map(card => {
-              const isTargetable = targetingMode !== 'none' && !isMe;
+              const isTargetable = targetingMode !== 'none' && targetingMode !== 'curse' && !isMe;
+              const isCurseTargetable = targetingMode === 'curse' && !isMe;
               const canSellThis = isMe && isMyTurn && phase === 'main' && onSellCreature;
               const canRecall = isMe && isMyTurn && phase === 'main' && !!onRecallDragStart;
               return (
@@ -694,6 +698,7 @@ const PlayerZone = ({
                     compact={compact}
                     tapped={card.tapped}
                     targetable={isTargetable}
+                    curseTargetable={isCurseTargetable}
                     onClick={() => onCardClick(card)}
                     combatAnim={combatAnim}
                     attackOffset={ATTACK_DIRECTION[posId]}
@@ -1062,6 +1067,8 @@ export default function GamePage() {
       }
     } else if (card.type === 'enchantment') {
       dispatch({ type: 'SET_TARGETING', payload: { mode: 'enchantment', sourceId: card.instanceId, pendingAction: null } });
+    } else if (card.type === 'curse') {
+      dispatch({ type: 'SET_TARGETING', payload: { mode: 'curse', sourceId: card.instanceId, pendingAction: null } });
     } else if (card.type === 'artifact') {
       if (me.artifactSlot && me.artifactSlotTurns < 2) {
         flashReason(`Artifact locked — ${2 - me.artifactSlotTurns} more turn${2 - me.artifactSlotTurns > 1 ? 's' : ''} before you can swap`);
@@ -1091,6 +1098,12 @@ export default function GamePage() {
     }
 
     if (gameState.targetingMode === 'enchantment' && player.id === me.id) {
+      playCard(gameState.sourceId!, fieldCard.instanceId);
+      dispatch({ type: 'CLEAR_TARGETING' });
+      return;
+    }
+
+    if (gameState.targetingMode === 'curse' && player.id !== me.id) {
       playCard(gameState.sourceId!, fieldCard.instanceId);
       dispatch({ type: 'CLEAR_TARGETING' });
       return;
@@ -1152,6 +1165,7 @@ export default function GamePage() {
     enchantment: 'Select your character to enchant',
     item:        'Select a target for this item',
     ability:     'Select a target for your ability',
+    curse:       '☠ Select an enemy character to curse',
   };
 
   return (

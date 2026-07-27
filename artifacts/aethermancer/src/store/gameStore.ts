@@ -102,7 +102,7 @@ export interface GameState {
   winner: number | null;
   shopOpen: boolean;
   inventoryOpen: boolean;
-  targetingMode: 'none' | 'spell' | 'attack' | 'item' | 'enchantment' | 'ability';
+  targetingMode: 'none' | 'spell' | 'attack' | 'item' | 'enchantment' | 'ability' | 'curse';
   sourceId: string | null;
   pendingAction: any | null;
   /** Index of the ability being targeted (0 | 1 | 2), set when targetingMode === 'ability'. */
@@ -712,14 +712,48 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case 'PLAY_CARD': {
       const { playerId, cardInstanceId, targetId } = action.payload;
-      const newPlayers = state.players.map(p => {
-        if (p.id !== playerId) return p;
-        const cardToPlay = p.hand.find(c => c.instanceId === cardInstanceId);
-        if (!cardToPlay) return p;
-        if (p.aether < cardToPlay.cost) return p;
-        if (cardToPlay.type === 'spell') return p;
-        if (p.cardsPlayedByType[cardToPlay.type]) return p;
 
+      // Pre-validate outside the map so cross-player (curse) effects can be applied
+      const actingPlayer = state.players.find(p => p.id === playerId);
+      if (!actingPlayer) return state;
+      const cardToPlay = actingPlayer.hand.find(c => c.instanceId === cardInstanceId);
+      if (!cardToPlay) return state;
+      if (actingPlayer.aether < cardToPlay.cost) return state;
+      if (cardToPlay.type === 'spell') return state;
+      if (actingPlayer.cardsPlayedByType[cardToPlay.type]) return state;
+      if (cardToPlay.type === 'curse' && !targetId) return state;
+
+      // Apply an enchantment buff to a friendly field card
+      const applyEnchantEffect = (c: FieldCard, effect?: string): FieldCard => {
+        if (!effect) return c;
+        if (effect === 'buff_2_2')           return { ...c, currentAtk: c.currentAtk + 2, currentDef: c.currentDef + 2 };
+        if (effect === 'buff_0_4')           return { ...c, currentDef: c.currentDef + 4 };
+        if (effect === 'buff_3_m1')          return { ...c, currentAtk: c.currentAtk + 3, currentDef: Math.max(1, c.currentDef - 1) };
+        if (effect === 'add_poison_keyword') return { ...c, keywords: [...(c.keywords ?? []), 'poison_on_hit'].filter((v, i, a) => a.indexOf(v) === i) };
+        if (effect === 'add_stun_keyword')   return { ...c, keywords: [...(c.keywords ?? []), 'stun_on_hit'].filter((v, i, a) => a.indexOf(v) === i) };
+        return c;
+      };
+
+      // Apply a curse debuff to an enemy field card
+      const applyCurseEffect = (c: FieldCard, effect?: string): FieldCard => {
+        if (!effect) return c;
+        if (effect === 'curse_atk_m3')      return { ...c, currentAtk: Math.max(0, c.currentAtk - 3) };
+        if (effect === 'curse_def_m5')      return { ...c, currentDef: Math.max(1, c.currentDef - 5) };
+        if (effect === 'curse_stats_m2_m3') return { ...c, currentAtk: Math.max(0, c.currentAtk - 2), currentDef: Math.max(1, c.currentDef - 3) };
+        if (effect === 'curse_stun_2')      return { ...c, stunned: true, stunTurnsLeft: Math.max(c.stunTurnsLeft, 2) };
+        if (effect === 'curse_poison_5')    return { ...c, poisonStacks: c.poisonStacks + 5 };
+        if (effect === 'curse_doom')        return { ...c, currentAtk: Math.max(0, c.currentAtk - 3), currentDef: Math.max(1, c.currentDef - 3), poisonStacks: c.poisonStacks + 4 };
+        return c;
+      };
+
+      const newPlayers = state.players.map(p => {
+        // Enemy player: receive curse debuff on the targeted field card
+        if (cardToPlay.type === 'curse' && p.id !== playerId && targetId) {
+          if (!p.field.some(c => c.instanceId === targetId)) return p;
+          return { ...p, field: p.field.map(c => c.instanceId === targetId ? applyCurseEffect(c, cardToPlay.effect) : c) };
+        }
+
+        if (p.id !== playerId) return p;
         const newHand = p.hand.filter(c => c.instanceId !== cardInstanceId);
         const newAether = p.aether - cardToPlay.cost;
         const cardStats = { ...(p.cardStats || {}) };
@@ -759,7 +793,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           if (p.artifactSlot) newField = applyAuraToField(newField, p.artifactSlot.effect, -1);
           newArtifactSlot = cardToPlay;
           newArtifactSlotTurns = 0;
+        } else if (cardToPlay.type === 'enchantment' && targetId) {
+          // Apply buff to the targeted friendly field card
+          newField = p.field.map(c => c.instanceId === targetId ? applyEnchantEffect(c, cardToPlay.effect) : c);
         }
+        // curse: card consumed, debuff applied to enemy in the enemy branch above
 
         return {
           ...p, hand: newHand, aether: newAether, field: newField,

@@ -1,4 +1,4 @@
-export type CardType = 'character' | 'spell' | 'artifact' | 'enchantment';
+export type CardType = 'character' | 'spell' | 'artifact' | 'enchantment' | 'curse';
 export type CardRarity = 'common' | 'rare' | 'legendary' | 'secret';
 
 export interface CardTemplate {
@@ -952,6 +952,38 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     effect: 'add_stun_keyword', rarity: 'rare',
   },
 
+  // ── Curse Cards ───────────────────────────────────────────────────────────
+  {
+    templateId: 'curse1', name: 'Curse of Frailty', type: 'curse', cost: 3,
+    description: 'Hexes an enemy character, draining 3 ATK from them permanently.',
+    effect: 'curse_atk_m3', rarity: 'rare',
+  },
+  {
+    templateId: 'curse2', name: 'Curse of Rot', type: 'curse', cost: 3,
+    description: 'Infects an enemy character with dark energy — they gain 5 poison stacks.',
+    effect: 'curse_poison_5', rarity: 'rare',
+  },
+  {
+    templateId: 'curse3', name: 'Curse of Weakness', type: 'curse', cost: 4,
+    description: 'Saps the will to fight. Target enemy character loses 2 ATK and 3 DEF permanently.',
+    effect: 'curse_stats_m2_m3', rarity: 'rare',
+  },
+  {
+    templateId: 'curse4', name: 'Curse of Petrification', type: 'curse', cost: 4,
+    description: 'Turns an enemy to stone. They are stunned and cannot attack for 2 turns.',
+    effect: 'curse_stun_2', rarity: 'rare',
+  },
+  {
+    templateId: 'curse5', name: 'Curse of Withering', type: 'curse', cost: 5,
+    description: 'Crumbles defenses to dust. Target enemy character loses 5 DEF permanently.',
+    effect: 'curse_def_m5', rarity: 'rare',
+  },
+  {
+    templateId: 'curse6', name: 'Doom Mark', type: 'curse', cost: 6,
+    description: 'The final seal. Target enemy character loses 3 ATK and 3 DEF, and gains 4 poison stacks.',
+    effect: 'curse_doom', rarity: 'rare',
+  },
+
   // ── Evolutions ────────────────────────────────────────────────────────────
   {
     templateId: 'ev_c1', name: 'Aether Titan', type: 'character', cost: 0,
@@ -1160,6 +1192,14 @@ export const SHOP_ITEMS: ShopItemTemplate[] = [
   { id: 'sH2_shop',  name: 'Soul Cage',        type: 'card', cost: 1000, description: 'Spell: Imprison the enemy player — their entire next turn is skipped.', cardTemplateId: 'sH2', stackable: true },
   { id: 'l1_shop',   name: 'Arcane Colossus',  type: 'card', cost: 1100, description: '6/7 Legendary — Haste, Taunt.', cardTemplateId: 'l1', stackable: true },
   { id: 'l2_shop',   name: 'Death Knight',     type: 'card', cost: 1000, description: '7/4 Legendary — Stealth, Poison, Heal on Kill.', cardTemplateId: 'l2', stackable: true },
+
+  // ── Curse Cards (rare / expensive) ───────────────────────────────────────
+  { id: 'curse1_shop', name: 'Curse of Frailty',       type: 'card', cost: 900,  description: 'Curse: Enemy character loses 3 ATK permanently.', cardTemplateId: 'curse1', stackable: true },
+  { id: 'curse2_shop', name: 'Curse of Rot',           type: 'card', cost: 850,  description: 'Curse: Apply 5 poison stacks to an enemy character.', cardTemplateId: 'curse2', stackable: true },
+  { id: 'curse3_shop', name: 'Curse of Weakness',      type: 'card', cost: 1050, description: 'Curse: Enemy character loses 2 ATK and 3 DEF permanently.', cardTemplateId: 'curse3', stackable: true },
+  { id: 'curse4_shop', name: 'Curse of Petrification', type: 'card', cost: 1000, description: 'Curse: Stun an enemy character for 2 turns.', cardTemplateId: 'curse4', stackable: true },
+  { id: 'curse5_shop', name: 'Curse of Withering',     type: 'card', cost: 1050, description: 'Curse: Enemy character loses 5 DEF permanently.', cardTemplateId: 'curse5', stackable: true },
+  { id: 'curse6_shop', name: 'Doom Mark',              type: 'card', cost: 1400, description: 'Curse: Enemy character −3 ATK/−3 DEF and 4 poison stacks.', cardTemplateId: 'curse6', stackable: true },
 ];
 
 export function getCardTemplate(id: string): CardTemplate | undefined {
@@ -1175,13 +1215,15 @@ export function generateShopRotation(): string[] {
   const itemIds     = SHOP_ITEMS.filter(i => i.type === 'item').map(i => i.id);
   const statIds     = SHOP_ITEMS.filter(i => i.type === 'stat').map(i => i.id);
   const perkIds     = SHOP_ITEMS.filter(i => i.type === 'perk').map(i => i.id);
-  const cardIds     = SHOP_ITEMS.filter(i => i.type === 'card').map(i => i.id);
+  const cardIds     = SHOP_ITEMS.filter(i => i.type === 'card' && !i.id.startsWith('curse')).map(i => i.id);
+  const curseIds    = SHOP_ITEMS.filter(i => i.type === 'card' && i.id.startsWith('curse')).map(i => i.id);
   const artifactIds = SHOP_ITEMS.filter(i => i.type === 'artifact').map(i => i.id);
   return [
     ...pick(itemIds, 5),
     ...pick(statIds, 4),
     ...pick(perkIds, 3),
     ...pick(cardIds, 4),
+    ...pick(curseIds, 1),
     ...pick(artifactIds, 4),
   ];
 }
