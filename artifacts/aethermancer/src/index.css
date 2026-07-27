@@ -239,3 +239,50 @@
   border-color: hsl(0 65% 48%);
   box-shadow: 0 2px 0 rgba(0,0,0,0.6), 0 0 16px rgba(200,60,60,0.4), inset 0 1px 0 rgba(255,120,120,0.1);
 }
+
+/* ── Landscape-mode enforcement for mobile ───────────────────────────────── */
+/* Show a "rotate your device" overlay whenever a narrow screen is portrait  */
+#rotate-overlay {
+  display: none;
+}
+
+@media screen and (max-width: 767px) and (orientation: portrait) {
+  #rotate-overlay {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    background: radial-gradient(ellipse at center, #1a1208 0%, #0a0804 100%);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    color: hsl(43 78% 70%);
+    text-align: center;
+    padding: 32px;
+  }
+  #rotate-overlay .rotate-icon {
+    font-size: 64px;
+    animation: rotate-hint 1.8s ease-in-out infinite;
+  }
+  #rotate-overlay .rotate-title {
+    font-family: 'Cinzel', serif;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: hsl(43 78% 80%);
+  }
+  #rotate-overlay .rotate-sub {
+    font-size: 14px;
+    color: hsl(43 40% 55%);
+    max-width: 240px;
+    line-height: 1.5;
+  }
+}
+
+@keyframes rotate-hint {
+  0%   { transform: rotate(0deg); }
+  30%  { transform: rotate(-90deg); }
+  60%  { transform: rotate(-90deg); }
+  100% { transform: rotate(0deg); }
+}

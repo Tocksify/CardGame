@@ -883,16 +883,26 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       chosenOpponent = opponents[0];
     } else {
       const human = opponents.find(p => p.isHuman);
+      const nonHuman = opponents.filter(p => !p.isHuman);
       switch (difficulty) {
-        case 'Novice':
-        case 'Easy':
-          // Fully random — AI might attack any opponent equally
-          chosenOpponent = opponents[Math.floor(Math.random() * opponents.length)];
+        case 'Novice': {
+          // Bots mostly fight each other — only 15% chance to target the human
+          chosenOpponent = (human && nonHuman.length > 0 && Math.random() < 0.85)
+            ? nonHuman[Math.floor(Math.random() * nonHuman.length)]
+            : opponents[Math.floor(Math.random() * opponents.length)];
           break;
+        }
+        case 'Easy': {
+          // Bots prefer other bots — 30% chance to target the human
+          chosenOpponent = (human && nonHuman.length > 0 && Math.random() < 0.70)
+            ? nonHuman[Math.floor(Math.random() * nonHuman.length)]
+            : opponents[Math.floor(Math.random() * opponents.length)];
+          break;
+        }
         case 'Normal': {
-          // 50% chance human, 50% weakest opponent
+          // 45% chance human, 55% weakest opponent
           const weakest = [...opponents].sort((a, b) => a.hp - b.hp)[0];
-          chosenOpponent = (human && Math.random() < 0.5) ? human : weakest;
+          chosenOpponent = (human && Math.random() < 0.45) ? human : weakest;
           break;
         }
         case 'Hard': {
@@ -1030,12 +1040,25 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const opponents = players.filter(p => p.id !== cpId && p.hp > 0);
     if (opponents.length === 0) return undefined;
 
-    // Pick which opponent to aim the spell at
+    // Pick which opponent to aim the spell at — mirrors chooseAiAttackTarget logic
     const human = opponents.find(p => p.isHuman);
-    let chosen = human ?? opponents[0];
-    if (opponents.length > 1 && (difficulty === 'Novice' || difficulty === 'Easy')) {
-      // Easier AIs aim randomly among all opponents
-      chosen = opponents[Math.floor(Math.random() * opponents.length)];
+    const nonHuman = opponents.filter(p => !p.isHuman);
+    let chosen: typeof opponents[0];
+    if (opponents.length === 1) {
+      chosen = opponents[0];
+    } else if (difficulty === 'Novice') {
+      // Mostly fight other bots — 15% chance to target human
+      chosen = (human && nonHuman.length > 0 && Math.random() < 0.85)
+        ? nonHuman[Math.floor(Math.random() * nonHuman.length)]
+        : opponents[Math.floor(Math.random() * opponents.length)];
+    } else if (difficulty === 'Easy') {
+      // 30% chance to target human
+      chosen = (human && nonHuman.length > 0 && Math.random() < 0.70)
+        ? nonHuman[Math.floor(Math.random() * nonHuman.length)]
+        : opponents[Math.floor(Math.random() * opponents.length)];
+    } else {
+      // Normal+ defaults to human as primary target
+      chosen = human ?? opponents[0];
     }
 
     if (effect.includes('target')) {

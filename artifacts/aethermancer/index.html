@@ -2,7 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
     <title>Aethermancer</title>
     <meta name="description" content="Aethermancer — built on Replit. Update this description to reflect the app." />
     <meta name="robots" content="index, follow" />
@@ -18,6 +20,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   </head>
   <body>
+    <div id="rotate-overlay">
+      <div class="rotate-icon">📱</div>
+      <div class="rotate-title">Rotate Your Device</div>
+      <div class="rotate-sub">Aethermancer is best experienced in landscape mode. Please rotate your phone to continue.</div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
