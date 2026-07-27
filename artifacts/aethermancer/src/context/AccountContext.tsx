@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { setRarityBoost } from '../lib/cards';
+import { DEFAULT_ACHIEVEMENTS } from '../store/achievements';
 
 export interface Account {
   id: number;
@@ -7,6 +8,7 @@ export interface Account {
   isAdmin: boolean;
   arcaneShards: number;
   rarityBoost: number;
+  unlockedAchievementIds: string[];
 }
 
 interface AccountContextType {
@@ -24,28 +26,69 @@ const AccountContext = createContext<AccountContextType | null>(null);
 
 const API = '/api';
 
+/** Parses the unlockedAchievementIds field which comes back as a JSON string from the DB */
+function parseAchievementIds(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw as string[];
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw); } catch { return []; }
+  }
+  return [];
+}
+
+/** Merges server-side unlocked achievement IDs into localStorage so challengers auto-unlock */
+function syncAchievementsToLocalStorage(ids: string[]) {
+  if (!ids.length) return;
+  try {
+    const stored = localStorage.getItem('aethermancer_achievements');
+    const base = stored ? JSON.parse(stored) : [];
+    const merged = DEFAULT_ACHIEVEMENTS.map(def => {
+      const found = base.find((p: { id: string }) => p.id === def.id);
+      const serverUnlocked = ids.includes(def.id);
+      return {
+        ...def,
+        unlocked: serverUnlocked || (found?.unlocked ?? false),
+        progress: found?.progress ?? def.progress,
+      };
+    });
+    localStorage.setItem('aethermancer_achievements', JSON.stringify(merged));
+  } catch { /* ignore */ }
+}
+
 export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [account, setAccount] = useState<Account | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const applyAccount = (acc: Account | null) => {
+  const applyAccount = useCallback((raw: Record<string, unknown> | null) => {
+    if (!raw) {
+      setAccount(null);
+      setRarityBoost(0);
+      return;
+    }
+    const acc: Account = {
+      id: raw.id as number,
+      username: raw.username as string,
+      isAdmin: raw.isAdmin as boolean,
+      arcaneShards: raw.arcaneShards as number,
+      rarityBoost: raw.rarityBoost as number,
+      unlockedAchievementIds: parseAchievementIds(raw.unlockedAchievementIds),
+    };
     setAccount(acc);
-    setRarityBoost(acc?.rarityBoost ?? 0);
-  };
+    setRarityBoost(acc.rarityBoost);
+    syncAchievementsToLocalStorage(acc.unlockedAchievementIds);
+  }, []);
 
   const fetchMe = useCallback(async () => {
     try {
       const res = await fetch(`${API}/auth/me`, { credentials: 'include' });
       if (res.ok) {
-        const data = await res.json();
-        applyAccount(data);
+        applyAccount(await res.json());
       } else {
         applyAccount(null);
       }
     } catch {
       applyAccount(null);
     }
-  }, []);
+  }, [applyAccount]);
 
   useEffect(() => {
     fetchMe().finally(() => setLoading(false));
@@ -66,7 +109,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     } catch {
       return 'Network error';
     }
-  }, []);
+  }, [applyAccount]);
 
   const register = useCallback(async (username: string, password: string): Promise<string | null> => {
     try {
@@ -83,14 +126,14 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     } catch {
       return 'Network error';
     }
-  }, []);
+  }, [applyAccount]);
 
   const logout = useCallback(async () => {
     try {
       await fetch(`${API}/auth/logout`, { method: 'POST', credentials: 'include' });
     } catch { /* ignore */ }
     applyAccount(null);
-  }, []);
+  }, [applyAccount]);
 
   const refreshAccount = useCallback(async () => {
     await fetchMe();
@@ -115,7 +158,6 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ result, opponentName, gameMode, shardsEarned }),
       });
       if (res.ok) {
-        // Refresh shards from server
         const accRes = await fetch(`${API}/account`, { credentials: 'include' });
         if (accRes.ok) {
           const accData = await accRes.json();

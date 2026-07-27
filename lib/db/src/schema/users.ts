@@ -7,6 +7,8 @@ export const usersTable = pgTable("users", {
   isAdmin: boolean("is_admin").notNull().default(false),
   arcaneShards: integer("arcane_shards").notNull().default(0),
   rarityBoost: integer("rarity_boost").notNull().default(0),
+  // JSON array of achievement IDs that have been unlocked server-side, e.g. '["first_win","win_10_games"]'
+  unlockedAchievementIds: text("unlocked_achievement_ids").notNull().default("[]"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

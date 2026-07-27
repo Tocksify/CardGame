@@ -6,6 +6,15 @@ import { eq } from "drizzle-orm";
 
 const router = Router();
 
+const USER_FIELDS = {
+  id: usersTable.id,
+  username: usersTable.username,
+  isAdmin: usersTable.isAdmin,
+  arcaneShards: usersTable.arcaneShards,
+  rarityBoost: usersTable.rarityBoost,
+  unlockedAchievementIds: usersTable.unlockedAchievementIds,
+};
+
 // GET /auth/me
 router.get("/me", async (req, res) => {
   const userId = req.session?.userId;
@@ -14,13 +23,7 @@ router.get("/me", async (req, res) => {
     return;
   }
   const rows = await db
-    .select({
-      id: usersTable.id,
-      username: usersTable.username,
-      isAdmin: usersTable.isAdmin,
-      arcaneShards: usersTable.arcaneShards,
-      rarityBoost: usersTable.rarityBoost,
-    })
+    .select(USER_FIELDS)
     .from(usersTable)
     .where(eq(usersTable.id, userId))
     .limit(1);
@@ -44,15 +47,11 @@ router.post("/register", async (req, res) => {
   }
   const clean = username.trim().toLowerCase();
   if (clean.length < 2 || clean.length > 20) {
-    res
-      .status(400)
-      .json({ error: "Username must be 2–20 characters" });
+    res.status(400).json({ error: "Username must be 2–20 characters" });
     return;
   }
   if (!/^[a-z0-9_]+$/.test(clean)) {
-    res
-      .status(400)
-      .json({ error: "Username may only contain letters, numbers, and _" });
+    res.status(400).json({ error: "Username may only contain letters, numbers, and _" });
     return;
   }
   if (password.length < 4) {
@@ -72,13 +71,7 @@ router.post("/register", async (req, res) => {
   const rows = await db
     .insert(usersTable)
     .values({ username: clean, passwordHash: hash })
-    .returning({
-      id: usersTable.id,
-      username: usersTable.username,
-      isAdmin: usersTable.isAdmin,
-      arcaneShards: usersTable.arcaneShards,
-      rarityBoost: usersTable.rarityBoost,
-    });
+    .returning(USER_FIELDS);
   const user = rows[0];
   req.session.userId = user.id;
   res.json(user);
@@ -116,6 +109,7 @@ router.post("/login", async (req, res) => {
     isAdmin: user.isAdmin,
     arcaneShards: user.arcaneShards,
     rarityBoost: user.rarityBoost,
+    unlockedAchievementIds: user.unlockedAchievementIds,
   });
 });
 

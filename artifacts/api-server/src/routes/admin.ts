@@ -24,34 +24,38 @@ router.use(async (req, res, next) => {
   next();
 });
 
+const ADMIN_USER_FIELDS = {
+  id: usersTable.id,
+  username: usersTable.username,
+  isAdmin: usersTable.isAdmin,
+  arcaneShards: usersTable.arcaneShards,
+  rarityBoost: usersTable.rarityBoost,
+  unlockedAchievementIds: usersTable.unlockedAchievementIds,
+  createdAt: usersTable.createdAt,
+};
+
 // GET /admin/users?q=username — search users
 router.get("/users", async (req, res) => {
   const q = String(req.query.q ?? "").trim();
   const rows = await db
-    .select({
-      id: usersTable.id,
-      username: usersTable.username,
-      isAdmin: usersTable.isAdmin,
-      arcaneShards: usersTable.arcaneShards,
-      rarityBoost: usersTable.rarityBoost,
-      createdAt: usersTable.createdAt,
-    })
+    .select(ADMIN_USER_FIELDS)
     .from(usersTable)
     .where(q ? ilike(usersTable.username, `%${q}%`) : undefined)
     .limit(30);
   res.json(rows);
 });
 
-// PATCH /admin/users/:id — update arcaneShards and/or rarityBoost
+// PATCH /admin/users/:id — update arcaneShards, rarityBoost, and/or unlockedAchievementIds
 router.patch("/users/:id", async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid user id" });
     return;
   }
-  const { arcaneShards, rarityBoost } = req.body as {
+  const { arcaneShards, rarityBoost, unlockedAchievementIds } = req.body as {
     arcaneShards?: number;
     rarityBoost?: number;
+    unlockedAchievementIds?: string[];
   };
   const update: Record<string, unknown> = {};
   if (typeof arcaneShards === "number" && !isNaN(arcaneShards)) {
@@ -59,6 +63,11 @@ router.patch("/users/:id", async (req, res) => {
   }
   if (typeof rarityBoost === "number" && !isNaN(rarityBoost)) {
     update.rarityBoost = Math.max(0, Math.min(2, rarityBoost));
+  }
+  if (Array.isArray(unlockedAchievementIds)) {
+    update.unlockedAchievementIds = JSON.stringify(
+      unlockedAchievementIds.filter((id) => typeof id === "string")
+    );
   }
   if (Object.keys(update).length === 0) {
     res.status(400).json({ error: "Nothing to update" });
@@ -68,13 +77,7 @@ router.patch("/users/:id", async (req, res) => {
     .update(usersTable)
     .set(update)
     .where(eq(usersTable.id, id))
-    .returning({
-      id: usersTable.id,
-      username: usersTable.username,
-      isAdmin: usersTable.isAdmin,
-      arcaneShards: usersTable.arcaneShards,
-      rarityBoost: usersTable.rarityBoost,
-    });
+    .returning(ADMIN_USER_FIELDS);
   if (rows.length === 0) {
     res.status(404).json({ error: "User not found" });
     return;
