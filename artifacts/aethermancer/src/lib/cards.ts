@@ -80,13 +80,30 @@ export interface ShopItemTemplate {
 }
 
 // ── Rarity draw weights ────────────────────────────────────────────────────
-// Total = 100. Secret is rare — ~1% per draw. Legendary ~6%.
+// Base rates: secrets and legendaries are meaningfully common.
+// Boost levels override these for privileged accounts.
 export const RARITY_WEIGHTS: Record<CardRarity, number> = {
-  common: 35,
-  rare: 35,
-  legendary: 25,
-  secret: 5,
+  common: 25,
+  rare: 30,
+  legendary: 30,
+  secret: 15,
 };
+
+// Module-level rarity boost — set by AccountContext when user logs in/out.
+// 0 = normal, 1 = buffed (extra secret chance), 2 = admin-tier
+let _rarityBoost = 0;
+export function setRarityBoost(boost: number): void {
+  _rarityBoost = Math.max(0, Math.min(2, boost));
+}
+export function getRarityBoost(): number { return _rarityBoost; }
+
+/** Returns draw weights for the given boost level (defaults to active boost). */
+export function getRarityWeights(boost?: number): Record<CardRarity, number> {
+  const b = boost ?? _rarityBoost;
+  if (b >= 2) return { common: 5,  rare: 10, legendary: 25, secret: 60 };
+  if (b >= 1) return { common: 10, rare: 20, legendary: 30, secret: 40 };
+  return { ...RARITY_WEIGHTS };
+}
 
 export const CARD_TEMPLATES: CardTemplate[] = [
   // ── Common Characters ─────────────────────────────────────────────────────
@@ -1071,15 +1088,18 @@ export const DRAWABLE_POOL = CARD_TEMPLATES.filter(
   c => !c.templateId.startsWith('ev_') && c.cost > 0
 );
 
-/** Draw `amount` cards from the pool weighted by rarity. */
+/** Draw `amount` cards from the pool weighted by rarity.
+ *  Uses the active rarity boost from the logged-in account automatically.
+ */
 export function drawFromPool(amount: number): CardTemplate[] {
-  const totalWeight = Object.values(RARITY_WEIGHTS).reduce((a, b) => a + b, 0);
+  const weights = getRarityWeights();
+  const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
   const drawn: CardTemplate[] = [];
 
   for (let i = 0; i < amount; i++) {
     let roll = Math.random() * totalWeight;
     let targetRarity: CardRarity = 'common';
-    for (const [rarity, weight] of Object.entries(RARITY_WEIGHTS)) {
+    for (const [rarity, weight] of Object.entries(weights)) {
       roll -= weight;
       if (roll <= 0) { targetRarity = rarity as CardRarity; break; }
     }
@@ -1206,8 +1226,11 @@ export function getCardTemplate(id: string): CardTemplate | undefined {
   return CARD_TEMPLATES.find(c => c.templateId === id);
 }
 
-/** Pick a random subset of shop items for one rotation. */
+/** Pick a random subset of shop items for one rotation.
+ *  When the active rarity boost >= 1, adds extra secret/legendary card slots.
+ */
 export function generateShopRotation(): string[] {
+  const boost = _rarityBoost;
   const pick = (ids: string[], n: number) => {
     const shuffled = [...ids].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, n);
@@ -1218,13 +1241,19 @@ export function generateShopRotation(): string[] {
   const cardIds     = SHOP_ITEMS.filter(i => i.type === 'card' && !i.id.startsWith('curse')).map(i => i.id);
   const curseIds    = SHOP_ITEMS.filter(i => i.type === 'card' && i.id.startsWith('curse')).map(i => i.id);
   const artifactIds = SHOP_ITEMS.filter(i => i.type === 'artifact').map(i => i.id);
+
+  // For boosted accounts, guarantee more curse (secret) slots and card slots
+  const curseSlots    = boost >= 2 ? 3 : boost >= 1 ? 2 : 1;
+  const cardSlots     = boost >= 2 ? 6 : boost >= 1 ? 5 : 4;
+  const artifactSlots = boost >= 1 ? 5 : 4;
+
   return [
     ...pick(itemIds, 5),
     ...pick(statIds, 4),
     ...pick(perkIds, 3),
-    ...pick(cardIds, 4),
-    ...pick(curseIds, 1),
-    ...pick(artifactIds, 4),
+    ...pick(cardIds, cardSlots),
+    ...pick(curseIds, curseSlots),
+    ...pick(artifactIds, artifactSlots),
   ];
 }
 

@@ -4,6 +4,7 @@ import { useLocation } from 'wouter';
 import { useGame } from '../context/GameContext';
 import { useLobby } from '../context/LobbyContext';
 import { useChallenger } from '../context/ChallengerContext';
+import { useAccount } from '../context/AccountContext';
 import { RARITY_COLORS, RARITY_GLOW } from '../lib/challengers';
 import { CardInstance, FieldCard, Player } from '../store/gameStore';
 import { sounds } from '../lib/sounds';
@@ -1009,6 +1010,7 @@ export default function GamePage() {
   } = useGame();
   const { animatedBattlefield, autoCombat } = useLobby();
   const { equippedChallenger } = useChallenger();
+  const { account, recordMatch } = useAccount();
   const mobileLandscape = useIsMobileLandscape();
   const isMobilePortrait = useIsMobile() && !mobileLandscape;
 
@@ -1022,6 +1024,26 @@ export default function GamePage() {
   const [recallingField, setRecallingField] = useState(false);
   const [cantPlayReason, setCantPlayReason] = useState<string | null>(null);
   const cantPlayTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const matchRecordedRef = useRef(false);
+
+  // Record match result once when game ends (only if logged in)
+  useEffect(() => {
+    if (gameState.phase !== 'gameover' || matchRecordedRef.current || !account) return;
+    matchRecordedRef.current = true;
+    const players = gameState.players;
+    const me = players.find(p => p.isHuman) ?? players[0];
+    if (!me) return;
+    const isWin = gameState.winner === me.id;
+    const opponents = players.filter(p => p.id !== me.id);
+    const opponentName = opponents.map(p => p.name).join(', ') || 'Unknown';
+    const shardsEarned = isWin ? 150 : 0;
+    recordMatch(isWin ? 'win' : 'loss', opponentName, gameState.gameMode ?? 'unknown', shardsEarned);
+  }, [gameState.phase, gameState.winner, gameState.players, gameState.gameMode, account, recordMatch]);
+
+  useEffect(() => {
+    // Reset the match-recorded flag when a new game starts
+    if (gameState.phase === 'countdown') matchRecordedRef.current = false;
+  }, [gameState.phase]);
 
   useEffect(() => {
     if (gameState.phase === 'countdown') {

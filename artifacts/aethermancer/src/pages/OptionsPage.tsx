@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'wouter';
 import { ArrowLeft } from 'lucide-react';
 import { sounds } from '../lib/sounds';
 import { getSettings, saveSettings, Settings } from '../store/settings';
+import { useAccount } from '../context/AccountContext';
 
 export default function OptionsPage() {
   const [, setLocation] = useLocation();
   const [settings, setSettings] = useState<Settings>(getSettings());
+  const { account } = useAccount();
 
   useEffect(() => {
     saveSettings(settings);
@@ -28,6 +30,49 @@ export default function OptionsPage() {
 
   const onSliderUp = () => {
     sounds.play('uiClick');
+  };
+
+  // ── Admin secret code: press Q three times on desktop ──────────────────────
+  const qPressCount = useRef(0);
+  const qResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key.toLowerCase() !== 'q') return;
+    qPressCount.current += 1;
+    if (qResetTimer.current) clearTimeout(qResetTimer.current);
+    qResetTimer.current = setTimeout(() => { qPressCount.current = 0; }, 1500);
+    if (qPressCount.current >= 3) {
+      qPressCount.current = 0;
+      if (account?.isAdmin) {
+        sounds.play('uiClick');
+        setLocation('/admin');
+      }
+    }
+  }, [account, setLocation]);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (qResetTimer.current) clearTimeout(qResetTimer.current);
+    };
+  }, [handleKeyDown]);
+
+  // ── Admin secret: tap music slider 3× quickly on mobile ───────────────────
+  const sliderTapCount = useRef(0);
+  const sliderTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSliderTap = () => {
+    sliderTapCount.current += 1;
+    if (sliderTapTimer.current) clearTimeout(sliderTapTimer.current);
+    sliderTapTimer.current = setTimeout(() => { sliderTapCount.current = 0; }, 1200);
+    if (sliderTapCount.current >= 3) {
+      sliderTapCount.current = 0;
+      if (account?.isAdmin) {
+        sounds.play('uiClick');
+        setLocation('/admin');
+      }
+    }
   };
 
   return (
@@ -110,6 +155,7 @@ export default function OptionsPage() {
               <h3 className="text-lg font-semibold">Master Volume</h3>
               <span className="text-primary font-bold">{settings.masterVolume}%</span>
             </div>
+            {/* onMouseDown + onTouchStart for slider triple-tap admin code */}
             <input 
               type="range" 
               min="0" max="100" 
@@ -117,6 +163,8 @@ export default function OptionsPage() {
               onChange={handleSlider}
               onMouseUp={onSliderUp}
               onTouchEnd={onSliderUp}
+              onMouseDown={handleSliderTap}
+              onTouchStart={handleSliderTap}
               className="w-full h-2 bg-secondary appearance-none outline-none border border-border"
             />
           </div>
@@ -125,6 +173,9 @@ export default function OptionsPage() {
         
         <p className="text-center text-muted-foreground text-sm mt-8">
           Music coming soon. UI and card sounds are active.
+          {account?.isAdmin && (
+            <span className="block text-purple-400/50 text-xs mt-1">Admin mode active</span>
+          )}
         </p>
       </div>
     </div>

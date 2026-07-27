@@ -6,6 +6,7 @@ import { useLobby } from '../context/LobbyContext';
 import { useGame } from '../context/GameContext';
 import { useChallenger } from '../context/ChallengerContext';
 import { useMultiplayer, GameStartedPayload, RoomBot } from '../context/MultiplayerContext';
+import { useAccount } from '../context/AccountContext';
 import { drawFromPool, generateDeck, getCardTemplate } from '../lib/cards';
 import { generateId } from '../store/gameStore';
 import { ArrowLeft, Plus, Minus, Bot, User, Copy, LogIn, Swords, CheckCheck, Pencil, Wifi, WifiOff, Loader2, Send, MessageSquare, Zap } from 'lucide-react';
@@ -41,6 +42,7 @@ export default function MultiplayerRoomsPage() {
   const { setGameMode, setMatchType, setAutoCombat } = useLobby();
   const { dispatch } = useGame();
   const { equippedChallenger } = useChallenger();
+  const { account } = useAccount();
   const {
     status, roomState, yourSocketId, serverError,
     setServerError, setRoomState,
@@ -52,11 +54,12 @@ export default function MultiplayerRoomsPage() {
   const [chatInput, setChatInput] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // If logged in, use account username and skip the name-pick screen
   const [view, setView] = useState<View>(() =>
-    localStorage.getItem(USERNAME_KEY) ? 'lobby' : 'username'
+    account ? 'lobby' : (localStorage.getItem(USERNAME_KEY) ? 'lobby' : 'username')
   );
   const [username, setUsername] = useState<string>(
-    () => localStorage.getItem(USERNAME_KEY) ?? ''
+    () => account?.username ?? localStorage.getItem(USERNAME_KEY) ?? ''
   );
   const [usernameInput, setUsernameInput] = useState(username);
   const [usernameError, setUsernameError] = useState('');
@@ -64,6 +67,14 @@ export default function MultiplayerRoomsPage() {
   const [joinError, setJoinError] = useState('');
   const [copied, setCopied] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
+
+  // Keep username in sync with account changes
+  useEffect(() => {
+    if (account) {
+      setUsername(account.username);
+      setView(v => v === 'username' ? 'lobby' : v);
+    }
+  }, [account?.username]);
 
   useEffect(() => { setUsernameInput(username); }, [username]);
 

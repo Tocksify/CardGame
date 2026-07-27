@@ -4,6 +4,7 @@ import app from './app';
 import { logger } from './lib/logger';
 import { handleWsConnection } from './ws-handler';
 import { cleanStaleRooms } from './rooms';
+import { seedAdminUser } from './lib/seed';
 
 const rawPort = process.env['PORT'];
 
@@ -22,7 +23,6 @@ const wss = new WebSocketServer({ noServer: true });
 
 // Handle WebSocket upgrade requests
 httpServer.on('upgrade', (req, socket, head) => {
-  // Strip any base-path prefix — the Replit proxy may strip /api already
   const url = req.url ?? '';
   if (url === '/ws' || url === '/api/ws') {
     wss.handleUpgrade(req, socket, head, (ws) => {
@@ -38,10 +38,11 @@ wss.on('connection', handleWsConnection(wss));
 // Clean up stale rooms every 30 minutes
 setInterval(cleanStaleRooms, 30 * 60 * 1000);
 
-httpServer.listen(port, (err?: Error) => {
+httpServer.listen(port, async (err?: Error) => {
   if (err) {
     logger.error({ err }, 'Error listening on port');
     process.exit(1);
   }
   logger.info({ port }, 'Server listening');
+  await seedAdminUser();
 });

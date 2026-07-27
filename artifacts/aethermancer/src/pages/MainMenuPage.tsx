@@ -1,12 +1,50 @@
 import { useLocation } from 'wouter';
 import { sounds } from '../lib/sounds';
+import { useAccount } from '../context/AccountContext';
+import { LogIn, LogOut, User } from 'lucide-react';
 
 export default function MainMenuPage() {
   const [, setLocation] = useLocation();
+  const { account, logout } = useAccount();
+
+  const handleLogout = async () => {
+    sounds.play('uiClick');
+    await logout();
+  };
 
   return (
     <div className="min-h-[100dvh] w-full flex items-center justify-center bg-kodi-gradient overflow-hidden relative">
       <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiMwMDAiIGZpbGwtb3BhY2l0eT0iMC4yIi8+PC9zdmc+')] pointer-events-none opacity-40" />
+
+      {/* Account bar */}
+      <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+        {account ? (
+          <>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-card/80 border border-border text-sm">
+              <User size={14} className="text-primary" />
+              <span className="text-foreground font-semibold">{account.username}</span>
+              {account.arcaneShards > 0 && (
+                <span className="text-amber-400 text-xs ml-1">✦ {account.arcaneShards.toLocaleString()}</span>
+              )}
+            </div>
+            <button
+              onClick={handleLogout}
+              title="Sign out"
+              className="p-2 bg-card/80 border border-border text-muted-foreground hover:text-foreground hover:border-destructive/50 transition-colors"
+            >
+              <LogOut size={14} />
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={() => { sounds.play('uiClick'); setLocation('/login'); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-card/80 border border-border text-sm text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors"
+          >
+            <LogIn size={14} />
+            <span>Sign In</span>
+          </button>
+        )}
+      </div>
 
       <div className="z-10 flex flex-col items-center max-w-sm w-full px-6">
         <h1 className="text-6xl sm:text-7xl font-bold text-transparent bg-clip-text bg-gradient-to-b from-white to-primary drop-shadow-[0_0_15px_rgba(30,144,255,0.8)] mb-2 text-center tracking-wider">
