@@ -956,32 +956,32 @@ export const CARD_TEMPLATES: CardTemplate[] = [
   {
     templateId: 'curse1', name: 'Curse of Frailty', type: 'curse', cost: 3,
     description: 'Hexes an enemy character, draining 3 ATK from them permanently.',
-    effect: 'curse_atk_m3', rarity: 'rare',
+    effect: 'curse_atk_m3', rarity: 'secret',
   },
   {
     templateId: 'curse2', name: 'Curse of Rot', type: 'curse', cost: 3,
     description: 'Infects an enemy character with dark energy — they gain 5 poison stacks.',
-    effect: 'curse_poison_5', rarity: 'rare',
+    effect: 'curse_poison_5', rarity: 'secret',
   },
   {
     templateId: 'curse3', name: 'Curse of Weakness', type: 'curse', cost: 4,
     description: 'Saps the will to fight. Target enemy character loses 2 ATK and 3 DEF permanently.',
-    effect: 'curse_stats_m2_m3', rarity: 'rare',
+    effect: 'curse_stats_m2_m3', rarity: 'secret',
   },
   {
     templateId: 'curse4', name: 'Curse of Petrification', type: 'curse', cost: 4,
     description: 'Turns an enemy to stone. They are stunned and cannot attack for 2 turns.',
-    effect: 'curse_stun_2', rarity: 'rare',
+    effect: 'curse_stun_2', rarity: 'secret',
   },
   {
     templateId: 'curse5', name: 'Curse of Withering', type: 'curse', cost: 5,
     description: 'Crumbles defenses to dust. Target enemy character loses 5 DEF permanently.',
-    effect: 'curse_def_m5', rarity: 'rare',
+    effect: 'curse_def_m5', rarity: 'secret',
   },
   {
     templateId: 'curse6', name: 'Doom Mark', type: 'curse', cost: 6,
     description: 'The final seal. Target enemy character loses 3 ATK and 3 DEF, and gains 4 poison stacks.',
-    effect: 'curse_doom', rarity: 'rare',
+    effect: 'curse_doom', rarity: 'secret',
   },
 
   // ── Evolutions ────────────────────────────────────────────────────────────
