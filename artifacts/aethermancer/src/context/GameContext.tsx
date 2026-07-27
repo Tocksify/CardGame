@@ -1056,9 +1056,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       chosen = (human && nonHuman.length > 0 && Math.random() < 0.70)
         ? nonHuman[Math.floor(Math.random() * nonHuman.length)]
         : opponents[Math.floor(Math.random() * opponents.length)];
+    } else if (difficulty === 'Normal') {
+      // 45% chance human, 55% weakest — mirrors attack targeting
+      const weakest = [...opponents].sort((a, b) => a.hp - b.hp)[0];
+      chosen = (human && Math.random() < 0.45) ? human : weakest;
+    } else if (difficulty === 'Hard') {
+      // 60% human, 40% weakest
+      const weakestH = [...opponents].sort((a, b) => a.hp - b.hp)[0];
+      chosen = (human && Math.random() < 0.6) ? human : weakestH;
     } else {
-      // Normal+ defaults to human as primary target
-      chosen = human ?? opponents[0];
+      // Expert/Nightmare: 70% human, 30% weakest
+      const weakestE = [...opponents].sort((a, b) => a.hp - b.hp)[0];
+      chosen = (human && Math.random() < 0.7) ? human : weakestE;
     }
 
     if (effect.includes('target')) {

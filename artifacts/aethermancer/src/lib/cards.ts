@@ -82,10 +82,10 @@ export interface ShopItemTemplate {
 // ── Rarity draw weights ────────────────────────────────────────────────────
 // Total = 100. Secret is rare — ~1% per draw. Legendary ~6%.
 export const RARITY_WEIGHTS: Record<CardRarity, number> = {
-  common: 65,
-  rare: 28,
-  legendary: 6,
-  secret: 1,
+  common: 35,
+  rare: 35,
+  legendary: 25,
+  secret: 5,
 };
 
 export const CARD_TEMPLATES: CardTemplate[] = [
