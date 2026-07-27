@@ -15,6 +15,7 @@ export interface RoomBot {
 export interface RoomState {
   code: string;
   gameMode: '8card' | 'draft';
+  autoCombat: boolean;
   hostId: string;
   players: RoomPlayer[];
   bots: RoomBot[];
@@ -22,9 +23,12 @@ export interface RoomState {
 
 export interface GameStartedPayload {
   gameMode: '8card' | 'draft';
+  autoCombat: boolean;
   players: { socketId: string; name: string }[];
   bots: RoomBot[];
   seed: number;
+  /** Canonical turn order: socket IDs for human players, then bot IDs, rotated so index 0 goes first. */
+  playerOrder: string[];
 }
 
 export interface ChatMessage {
@@ -58,7 +62,7 @@ interface MultiplayerContextType {
   createRoom: (code: string, name: string) => Promise<void>;
   joinRoom: (code: string, name: string) => Promise<void>;
   leaveRoom: () => void;
-  updateSettings: (gameMode: '8card' | 'draft', bots: RoomBot[]) => void;
+  updateSettings: (gameMode: '8card' | 'draft', bots: RoomBot[], autoCombat: boolean) => void;
   startGame: () => void;
   sendChatMessage: (text: string) => void;
   /** Sent by each real player when they finish the 3-card draft pick */
@@ -200,8 +204,8 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     setStatus('idle');
   }, []);
 
-  const updateSettings = useCallback((gameMode: '8card' | 'draft', bots: RoomBot[]) => {
-    send({ type: 'UPDATE_SETTINGS', gameMode, bots });
+  const updateSettings = useCallback((gameMode: '8card' | 'draft', bots: RoomBot[], autoCombat: boolean) => {
+    send({ type: 'UPDATE_SETTINGS', gameMode, bots, autoCombat });
   }, [send]);
 
   const startGame = useCallback(() => {

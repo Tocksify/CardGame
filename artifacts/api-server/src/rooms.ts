@@ -14,6 +14,7 @@ export interface Room {
   players: RoomPlayer[];
   bots: RoomBot[];
   gameMode: '8card' | 'draft';
+  autoCombat: boolean;
   hostId: string;
   createdAt: number;
   /** Players who have finished the 3-card draft pick (draft mode only) */
@@ -24,7 +25,7 @@ export interface Room {
 
 const rooms = new Map<string, Room>();
 
-const DEFAULT_BOTS: RoomBot[] = [{ id: 'bot_1', name: 'Void Herald' }];
+const DEFAULT_BOTS: RoomBot[] = [];
 
 export function createRoom(code: string, hostSocketId: string, hostName: string): Room {
   const room: Room = {
@@ -32,6 +33,7 @@ export function createRoom(code: string, hostSocketId: string, hostName: string)
     players: [{ socketId: hostSocketId, name: hostName, isHost: true }],
     bots: [...DEFAULT_BOTS],
     gameMode: '8card',
+    autoCombat: false,
     hostId: hostSocketId,
     createdAt: Date.now(),
     draftReadyPlayers: new Set(),
@@ -86,11 +88,13 @@ export function updateRoomSettings(
   hostSocketId: string,
   gameMode: '8card' | 'draft',
   bots: RoomBot[],
+  autoCombat: boolean,
 ): Room | null {
   const room = rooms.get(code);
   if (!room || room.hostId !== hostSocketId) return null;
   room.gameMode = gameMode;
   room.bots = bots;
+  room.autoCombat = autoCombat;
   return room;
 }
 

@@ -21,7 +21,7 @@ type ClientMsg =
   | { type: 'CREATE_ROOM'; code: string; name: string }
   | { type: 'JOIN_ROOM'; code: string; name: string }
   | { type: 'LEAVE_ROOM' }
-  | { type: 'UPDATE_SETTINGS'; gameMode: '8card' | 'draft'; bots: RoomBot[] }
+  | { type: 'UPDATE_SETTINGS'; gameMode: '8card' | 'draft'; bots: RoomBot[]; autoCombat: boolean }
   | { type: 'START_GAME' }
   | { type: 'PLAYER_DRAFT_DONE' }
   | { type: 'CHAT_MESSAGE'; text: string }
@@ -37,6 +37,7 @@ function roomToMsg(room: Room) {
   return {
     code: room.code,
     gameMode: room.gameMode,
+    autoCombat: room.autoCombat,
     hostId: room.hostId,
     players: room.players.map(p => ({ socketId: p.socketId, name: p.name, isHost: p.isHost })),
     bots: room.bots,
@@ -147,7 +148,7 @@ export function handleWsConnection(wss: WebSocketServer) {
         case 'UPDATE_SETTINGS': {
           const room = getRoomBySocket(client.socketId);
           if (!room || room.hostId !== client.socketId) return;
-          const updated = updateRoomSettings(room.code, client.socketId, msg.gameMode, msg.bots);
+          const updated = updateRoomSettings(room.code, client.socketId, msg.gameMode, msg.bots, msg.autoCombat);
           if (updated) {
             broadcast(wss, updated, { type: 'ROOM_STATE', room: roomToMsg(updated) });
           }
@@ -162,12 +163,25 @@ export function handleWsConnection(wss: WebSocketServer) {
           }
           logger.info({ code: room.code }, 'Game started');
           const seed = Math.floor(Math.random() * 1_000_000);
+          // Build a canonical player order (socket IDs then bot IDs), rotated by seed
+          // so each client's human ends up at a different position in the turn queue.
+          const allIds = [
+            ...room.players.map(p => p.socketId),
+            ...room.bots.map(b => b.id),
+          ];
+          const startingOffset = allIds.length > 0 ? seed % allIds.length : 0;
+          const playerOrder = [
+            ...allIds.slice(startingOffset),
+            ...allIds.slice(0, startingOffset),
+          ];
           const startMsg = {
             type: 'GAME_STARTED',
             gameMode: room.gameMode,
+            autoCombat: room.autoCombat,
             players: room.players.map(p => ({ socketId: p.socketId, name: p.name })),
             bots: room.bots,
             seed,
+            playerOrder,
           };
           broadcast(wss, room, startMsg);
 

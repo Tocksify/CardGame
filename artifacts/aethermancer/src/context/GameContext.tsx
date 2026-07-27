@@ -860,6 +860,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   // ── AI helpers ────────────────────────────────────────────────────────────
   /**
    * Choose an attack target based on difficulty.
+   * When multiple opponents exist (e.g. human + other AIs in single-player),
+   * AIs distribute attacks instead of all piling on the human.
    * Returns { targetPlayerId, targetInstanceId? }
    */
   function chooseAiAttackTarget(
@@ -869,12 +871,50 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     attacker?: FieldCard,
     amalgamWaiting?: boolean,
   ) {
-    const targetHuman = players.find(p => p.isHuman && p.hp > 0);
-    if (!targetHuman) return null;
+    // All living opponents (not self)
+    const opponents = players.filter(p => p.id !== cp.id && p.hp > 0);
+    if (opponents.length === 0) return null;
 
-    // Defender rule: if the human has any field cards, the AI must target one of them.
-    const defenders = targetHuman.field.filter(c => !c.stunned);
-    const activeField = targetHuman.field; // includes stunned
+    // Pick which opponent to attack based on difficulty.
+    // With a single opponent there's no choice; with multiple, distribute.
+    let chosenOpponent: typeof players[0];
+
+    if (opponents.length === 1) {
+      chosenOpponent = opponents[0];
+    } else {
+      const human = opponents.find(p => p.isHuman);
+      switch (difficulty) {
+        case 'Novice':
+        case 'Easy':
+          // Fully random — AI might attack any opponent equally
+          chosenOpponent = opponents[Math.floor(Math.random() * opponents.length)];
+          break;
+        case 'Normal': {
+          // 50% chance human, 50% weakest opponent
+          const weakest = [...opponents].sort((a, b) => a.hp - b.hp)[0];
+          chosenOpponent = (human && Math.random() < 0.5) ? human : weakest;
+          break;
+        }
+        case 'Hard': {
+          // 60% human, 40% weakest (most killable)
+          const weakestH = [...opponents].sort((a, b) => a.hp - b.hp)[0];
+          chosenOpponent = (human && Math.random() < 0.6) ? human : weakestH;
+          break;
+        }
+        case 'Expert':
+        case 'Nightmare':
+        default: {
+          // 70% human, 30% weakest — smart but not perfectly predictable
+          const weakestE = [...opponents].sort((a, b) => a.hp - b.hp)[0];
+          chosenOpponent = (human && Math.random() < 0.7) ? human : weakestE;
+          break;
+        }
+      }
+    }
+
+    // Apply the defender rule and card-targeting logic for the chosen opponent
+    const defenders = chosenOpponent.field.filter(c => !c.stunned);
+    const activeField = chosenOpponent.field; // includes stunned
 
     if (activeField.length > 0) {
       const atkPow = attacker ? attacker.currentAtk + attacker.tempAtkBonus : 0;
@@ -883,7 +923,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         case 'Novice':
           // Dumb: random target, ignores taunt
           return {
-            targetPlayerId: targetHuman.id,
+            targetPlayerId: chosenOpponent.id,
             targetInstanceId: (defenders.length > 0
               ? defenders[Math.floor(Math.random() * defenders.length)]
               : activeField[0]
@@ -893,61 +933,56 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         case 'Easy': {
           // Respect taunt; otherwise random
           const tauntEasy = defenders.find(c => c.keywords?.includes('taunt'));
-          if (tauntEasy) return { targetPlayerId: targetHuman.id, targetInstanceId: tauntEasy.instanceId };
+          if (tauntEasy) return { targetPlayerId: chosenOpponent.id, targetInstanceId: tauntEasy.instanceId };
           const pool = defenders.length > 0 ? defenders : activeField;
-          return { targetPlayerId: targetHuman.id, targetInstanceId: pool[Math.floor(Math.random() * pool.length)].instanceId };
+          return { targetPlayerId: chosenOpponent.id, targetInstanceId: pool[Math.floor(Math.random() * pool.length)].instanceId };
         }
 
         case 'Normal': {
           // Taunt → weakest killable by this card → lowest DEF
           const tauntNormal = defenders.find(c => c.keywords?.includes('taunt'));
-          if (tauntNormal) return { targetPlayerId: targetHuman.id, targetInstanceId: tauntNormal.instanceId };
-          // If amalgam is waiting to finish a kill, skip single-hit kills for it
+          if (tauntNormal) return { targetPlayerId: chosenOpponent.id, targetInstanceId: tauntNormal.instanceId };
           const killableNormal = defenders
             .filter(c => c.currentDef <= atkPow && !(amalgamWaiting && c.currentDef <= (attacker ? atkPow * 0.5 : 0)))
             .sort((a, b) => a.currentDef - b.currentDef)[0];
           const lowestDef = [...defenders].sort((a, b) => a.currentDef - b.currentDef)[0];
-          return { targetPlayerId: targetHuman.id, targetInstanceId: (killableNormal ?? lowestDef ?? activeField[0]).instanceId };
+          return { targetPlayerId: chosenOpponent.id, targetInstanceId: (killableNormal ?? lowestDef ?? activeField[0]).instanceId };
         }
 
         case 'Hard': {
-          // Taunt → highest-threat killable by this card → killable with full remaining atk → biggest threat
+          // Taunt → highest-threat killable → biggest threat
           const tauntHard = defenders.find(c => c.keywords?.includes('taunt'));
-          if (tauntHard) return { targetPlayerId: targetHuman.id, targetInstanceId: tauntHard.instanceId };
-          // Kill highest-threat card this attacker can finish alone
+          if (tauntHard) return { targetPlayerId: chosenOpponent.id, targetInstanceId: tauntHard.instanceId };
           const killableNow = defenders
             .filter(c => c.currentDef <= atkPow)
             .sort((a, b) => b.currentAtk - a.currentAtk)[0];
-          if (killableNow) return { targetPlayerId: targetHuman.id, targetInstanceId: killableNow.instanceId };
-          // Otherwise chip at the biggest threat
+          if (killableNow) return { targetPlayerId: chosenOpponent.id, targetInstanceId: killableNow.instanceId };
           const untappedHard = cp.field.filter(c => !c.tapped && !c.hasAttackedThisTurn && !c.stunned);
           const totalAtkHard = untappedHard.reduce((s, c) => s + c.currentAtk + c.tempAtkBonus, 0);
           const killableAll = defenders.filter(c => c.currentDef <= totalAtkHard).sort((a, b) => b.currentAtk - a.currentAtk)[0];
           const biggestThreat = [...defenders].sort((a, b) => b.currentAtk - a.currentAtk)[0];
-          return { targetPlayerId: targetHuman.id, targetInstanceId: (killableAll ?? biggestThreat ?? activeField[0]).instanceId };
+          return { targetPlayerId: chosenOpponent.id, targetInstanceId: (killableAll ?? biggestThreat ?? activeField[0]).instanceId };
         }
 
         case 'Expert':
         case 'Nightmare': {
-          // Optimal: taunt → highest-threat killable → target enemy Amalgam before it snowballs → biggest threat
+          // Optimal: taunt → highest-threat killable → target Amalgam → biggest threat
           const tauntEx = defenders.find(c => c.keywords?.includes('taunt'));
-          if (tauntEx) return { targetPlayerId: targetHuman.id, targetInstanceId: tauntEx.instanceId };
-          // Kill highest-threat card this attacker can finish
+          if (tauntEx) return { targetPlayerId: chosenOpponent.id, targetInstanceId: tauntEx.instanceId };
           const killableEx = defenders
             .filter(c => c.currentDef <= atkPow)
             .sort((a, b) => b.currentAtk - a.currentAtk)[0];
-          if (killableEx) return { targetPlayerId: targetHuman.id, targetInstanceId: killableEx.instanceId };
-          // Prioritise killing enemy Amalgam before it snowballs (even if not killable yet)
+          if (killableEx) return { targetPlayerId: chosenOpponent.id, targetInstanceId: killableEx.instanceId };
           const enemyAmalgam = defenders.find(c => c.keywords?.includes('amalgam'));
-          if (enemyAmalgam) return { targetPlayerId: targetHuman.id, targetInstanceId: enemyAmalgam.instanceId };
+          if (enemyAmalgam) return { targetPlayerId: chosenOpponent.id, targetInstanceId: enemyAmalgam.instanceId };
           const biggestThreatEx = [...defenders].sort((a, b) => b.currentAtk - a.currentAtk)[0];
-          return { targetPlayerId: targetHuman.id, targetInstanceId: (biggestThreatEx ?? activeField[0]).instanceId };
+          return { targetPlayerId: chosenOpponent.id, targetInstanceId: (biggestThreatEx ?? activeField[0]).instanceId };
         }
       }
     }
 
     // No defenders — hero is vulnerable
-    return { targetPlayerId: targetHuman.id, targetInstanceId: undefined };
+    return { targetPlayerId: chosenOpponent.id, targetInstanceId: undefined };
   }
 
   /** Choose which card the AI plays based on difficulty */
@@ -985,35 +1020,39 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  /** Choose spell target based on difficulty */
+  /** Choose spell target based on difficulty — targets any living opponent, not just the human */
   function chooseAiSpellTarget(
     effect: string,
     difficulty: AiDifficulty,
     players: typeof gameState.players,
     cpId: number,
   ): string | undefined {
-    const human = players.find(p => p.isHuman);
-    if (!human) return undefined;
+    const opponents = players.filter(p => p.id !== cpId && p.hp > 0);
+    if (opponents.length === 0) return undefined;
+
+    // Pick which opponent to aim the spell at
+    const human = opponents.find(p => p.isHuman);
+    let chosen = human ?? opponents[0];
+    if (opponents.length > 1 && (difficulty === 'Novice' || difficulty === 'Easy')) {
+      // Easier AIs aim randomly among all opponents
+      chosen = opponents[Math.floor(Math.random() * opponents.length)];
+    }
 
     if (effect.includes('target')) {
       const isDamageEffect = effect.startsWith('dmg_') || effect.includes('destroy') || effect.includes('poison') || effect.includes('burn');
-      // Defender rule: damage spells must target field cards if any exist
-      if (isDamageEffect && human.field.length > 0) {
+      // Defender rule: damage spells must target field cards if the chosen opponent has any
+      if (isDamageEffect && chosen.field.length > 0) {
         if (difficulty === 'Hard' || difficulty === 'Expert' || difficulty === 'Nightmare') {
-          // Target highest-ATK field card
-          const best = [...human.field].sort((a, b) => b.currentAtk - a.currentAtk)[0];
+          const best = [...chosen.field].sort((a, b) => b.currentAtk - a.currentAtk)[0];
           return best.instanceId;
         }
-        // Easier difficulties: target any field card
-        return human.field[0].instanceId;
+        return chosen.field[0].instanceId;
       }
       if (difficulty === 'Hard' || difficulty === 'Expert' || difficulty === 'Nightmare') {
-        // Non-damage or no defenders: target highest-ATK field card if present, else hero
-        const best = [...human.field].sort((a, b) => b.currentAtk - a.currentAtk)[0];
-        return best ? best.instanceId : human.id.toString();
+        const best = [...chosen.field].sort((a, b) => b.currentAtk - a.currentAtk)[0];
+        return best ? best.instanceId : chosen.id.toString();
       }
-      // Only target the hero with non-damage effects (stun, silence) when field is empty
-      return human.field.length === 0 ? human.id.toString() : human.field[0].instanceId;
+      return chosen.field.length === 0 ? chosen.id.toString() : chosen.field[0].instanceId;
     }
     return undefined;
   }
@@ -1186,8 +1225,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        const targetHuman = state.players.find(p => p.isHuman && p.hp > 0);
-        if (!targetHuman) {
+        // Check that at least one living opponent exists (chooseAiAttackTarget will handle the rest)
+        const hasLivingOpponent = state.players.some(p => p.id !== cp.id && p.hp > 0);
+        if (!hasLivingOpponent) {
           dispatchRef.current({ type: 'ADVANCE_PHASE' });
           return;
         }
@@ -1199,6 +1239,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           dispatchRef.current({ type: 'ADVANCE_PHASE' });
           return;
         }
+
+        // Resolve the actual target player for downstream logic
+        const targetPlayer = state.players.find(p => p.id === target.targetPlayerId);
 
         // AI: use a ready ability if one is available (Hard+ always, others 50% chance)
         const aiAbilities = getCardAbilities(attacker);
@@ -1220,8 +1263,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           setTimeout(() => setCombatAnim(null), 650);
           dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name}'s ${attacker.name} uses ${best.ab.name} for ${abilityDmg} damage!`, type: 'damage' } });
           sounds.play('attack');
-          if (target.targetInstanceId) {
-            const tgtCreature = targetHuman.field.find(c => c.instanceId === target.targetInstanceId);
+          if (target.targetInstanceId && targetPlayer) {
+            const tgtCreature = targetPlayer.field.find(c => c.instanceId === target.targetInstanceId);
             if (tgtCreature && tgtCreature.currentDef <= abilityDmg) {
               dispatchRef.current({ type: 'ADD_GOLD', payload: { playerId: cp.id, amount: 50 } });
               dispatchRef.current({ type: 'RECORD_KILL', payload: { playerId: cp.id } });
@@ -1237,22 +1280,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
         const dmg = attacker.currentAtk + attacker.tempAtkBonus;
 
-        // Kill-steal: if this attack would kill the human hero, take 40% of their gold first
-        if (!target.targetInstanceId) {
-          const resist = targetHuman.perks.includes('perk_resist_1') ? 1 : 0;
+        // Kill-steal: if this attack would kill the target hero, take 40% of their gold first
+        if (!target.targetInstanceId && targetPlayer) {
+          const resist = targetPlayer.perks.includes('perk_resist_1') ? 1 : 0;
           const effectiveDmg = Math.max(0, dmg - resist);
-          const wouldKill = targetHuman.hp - effectiveDmg <= 0 &&
-            !(targetHuman.perks.includes('perk_undying') && !targetHuman.undyingUsed);
-          if (wouldKill && targetHuman.gold > 0) {
-            const stolen = Math.floor(targetHuman.gold * 0.4);
+          const wouldKill = targetPlayer.hp - effectiveDmg <= 0 &&
+            !(targetPlayer.perks.includes('perk_undying') && !targetPlayer.undyingUsed);
+          if (wouldKill && targetPlayer.gold > 0) {
+            const stolen = Math.floor(targetPlayer.gold * 0.4);
             if (stolen > 0) {
-              dispatchRef.current({ type: 'STEAL_GOLD', payload: { fromPlayerId: targetHuman.id, toPlayerId: cp.id, amount: stolen } });
-              dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name} plundered ${stolen}g from ${targetHuman.name}!`, type: 'gold' } });
+              dispatchRef.current({ type: 'STEAL_GOLD', payload: { fromPlayerId: targetPlayer.id, toPlayerId: cp.id, amount: stolen } });
+              dispatchRef.current({ type: 'ADD_LOG', payload: { msg: `${cp.name} plundered ${stolen}g from ${targetPlayer.name}!`, type: 'gold' } });
             }
           }
         }
 
-        // Capture human field before attack for revive check
+        // Capture human field before attack for challenger revive check
         const humanBeforeAttack = state.players.find(p => p.isHuman);
         const humanFieldBefore: FieldCard[] = humanBeforeAttack ? [...humanBeforeAttack.field] : [];
 
@@ -1305,20 +1348,20 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           }, 200);
         }
 
-        // AI status on hit
-        if (target.targetInstanceId) {
+        // AI status on hit — apply to the actual target player (not hardcoded human)
+        if (target.targetInstanceId && targetPlayer) {
           if (attacker.keywords?.includes('poison_on_hit') || cp.statBuffs.includes('plague_standard')) {
-            if (!targetHuman.perks.includes('perk_poison_immune')) {
-              dispatchRef.current({ type: 'APPLY_POISON', payload: { playerId: targetHuman.id, instanceId: target.targetInstanceId, stacks: 2 } });
+            if (!targetPlayer.perks.includes('perk_poison_immune')) {
+              dispatchRef.current({ type: 'APPLY_POISON', payload: { playerId: targetPlayer.id, instanceId: target.targetInstanceId, stacks: 2 } });
             }
           }
           if (attacker.keywords?.includes('stun_on_hit') || cp.statBuffs.includes('frost_mantle')) {
-            if (!targetHuman.perks.includes('perk_stun_immune')) {
-              dispatchRef.current({ type: 'APPLY_STUN', payload: { playerId: targetHuman.id, instanceId: target.targetInstanceId, turns: 1 } });
+            if (!targetPlayer.perks.includes('perk_stun_immune')) {
+              dispatchRef.current({ type: 'APPLY_STUN', payload: { playerId: targetPlayer.id, instanceId: target.targetInstanceId, turns: 1 } });
             }
           }
           // AI kill bonus
-          const tgtCreature = targetHuman.field.find(c => c.instanceId === target.targetInstanceId);
+          const tgtCreature = targetPlayer.field.find(c => c.instanceId === target.targetInstanceId);
           if (tgtCreature && tgtCreature.currentDef <= dmg) {
             dispatchRef.current({ type: 'ADD_GOLD', payload: { playerId: cp.id, amount: 50 } });
             dispatchRef.current({ type: 'RECORD_KILL', payload: { playerId: cp.id } });

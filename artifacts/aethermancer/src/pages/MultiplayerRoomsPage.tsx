@@ -8,7 +8,7 @@ import { useChallenger } from '../context/ChallengerContext';
 import { useMultiplayer, GameStartedPayload, RoomBot } from '../context/MultiplayerContext';
 import { drawFromPool, generateDeck, getCardTemplate } from '../lib/cards';
 import { generateId } from '../store/gameStore';
-import { ArrowLeft, Plus, Minus, Bot, User, Copy, LogIn, Swords, CheckCheck, Pencil, Wifi, WifiOff, Loader2, Send, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, Bot, User, Copy, LogIn, Swords, CheckCheck, Pencil, Wifi, WifiOff, Loader2, Send, MessageSquare, Zap } from 'lucide-react';
 
 const BOT_NAMES = [
   'Void Herald', 'Storm Arcane', 'Dusk Weaver', 'Iron Sage',
@@ -38,7 +38,7 @@ type View = 'username' | 'lobby' | 'room';
 
 export default function MultiplayerRoomsPage() {
   const [, setLocation] = useLocation();
-  const { setGameMode, setMatchType } = useLobby();
+  const { setGameMode, setMatchType, setAutoCombat } = useLobby();
   const { dispatch } = useGame();
   const { equippedChallenger } = useChallenger();
   const {
@@ -89,21 +89,43 @@ export default function MultiplayerRoomsPage() {
     const makeHand = () => payload.gameMode === '8card' ? drawFromPool(6).map(makeCardInstance) : [];
     const makeDeck = () => generateDeck().map(makeCardInstance);
 
-    // Randomize who goes first using the shared seed
-    const totalPlayerCount = payload.players.length + payload.bots.length;
-    const startingPlayerIndex = payload.seed % totalPlayerCount;
+    // Use canonical playerOrder from server (already rotated so index 0 goes first).
+    // This ensures each client's local human sits at a DIFFERENT index in the turn queue,
+    // preventing all clients from having their human go first simultaneously.
+    const playerOrder: string[] = payload.playerOrder?.length
+      ? payload.playerOrder
+      : [
+          yourSocketId,
+          ...payload.players.filter(p => p.socketId !== yourSocketId).map(p => p.socketId),
+          ...payload.bots.map(b => b.id),
+        ];
 
-    const humanNames = deduplicateNames([
-      username,
-      ...payload.players
-        .filter(p => p.socketId !== yourSocketId)
-        .map(p => p.name),
-      ...payload.bots.map(b => b.name),
-    ]);
+    // Build an ID→name map for deduplication
+    const idToName: Record<string, string> = { [yourSocketId]: username };
+    payload.players.forEach(p => { idToName[p.socketId] = p.name; });
+    payload.bots.forEach(b => { idToName[b.id] = b.name; });
+
+    const orderedRawNames = playerOrder.map(id => idToName[id] ?? 'Unknown');
+    const humanNames = deduplicateNames(orderedRawNames);
+
+    // Base stats template for non-human players
+    const makeAiPlayer = (idx: number, name: string) => ({
+      id: idx + 1, name, isHuman: false,
+      hp: 30, maxHp: 30, aether: 3, maxAether: 3,
+      deck: makeDeck(), hand: makeHand(),
+      field: [], artifactSlot: null, artifactSlotTurns: 0,
+      pendingSpells: [], cardsPlayedByType: {}, discardPile: [],
+      gold: 10, inventory: [], goldPerTurn: 0,
+      aetherBonus: 0, perks: [], statBuffs: [],
+      damageDealtThisTurn: 0, bonusGoldPending: 0,
+    });
+
+    // Find where the local player sits in the canonical order
+    const myOrderIndex = playerOrder.findIndex(id => id === yourSocketId);
 
     // Build the local human player, then apply any equipped challenger effects
     let humanPlayer: any = {
-      id: 1, name: humanNames[0], isHuman: true,
+      id: myOrderIndex + 1, name: humanNames[myOrderIndex] ?? username, isHuman: true,
       hp: 30, maxHp: 30, aether: 3, maxAether: 3,
       deck: makeDeck(), hand: makeHand(),
       field: [], artifactSlot: null, artifactSlotTurns: 0,
@@ -142,25 +164,15 @@ export default function MultiplayerRoomsPage() {
       }
     }
 
-    const players = [
-      humanPlayer,
-      ...[
-        ...payload.players.filter(p => p.socketId !== yourSocketId).map(p => p.name),
-        ...payload.bots.map(b => b.name),
-      ].map((name, i) => ({
-        id: i + 2, name: humanNames[i + 1], isHuman: false,
-        hp: 30, maxHp: 30, aether: 3, maxAether: 3,
-        deck: makeDeck(), hand: makeHand(),
-        field: [], artifactSlot: null, artifactSlotTurns: 0,
-        pendingSpells: [], cardsPlayedByType: {}, discardPile: [],
-        gold: 10, inventory: [], goldPerTurn: 0,
-        aetherBonus: 0, perks: [], statBuffs: [],
-        damageDealtThisTurn: 0, bonusGoldPending: 0,
-      })),
-    ];
+    // Build players in canonical order; human is at their assigned index, all others are AI.
+    const players = playerOrder.map((id, idx) => {
+      if (id === yourSocketId) return { ...humanPlayer, id: idx + 1, name: humanNames[idx] };
+      return makeAiPlayer(idx, humanNames[idx]);
+    });
 
     setGameMode(payload.gameMode);
     setMatchType('multiplayer');
+    setAutoCombat(payload.autoCombat ?? false);
 
     dispatch({
       type: 'START_GAME',
@@ -170,12 +182,12 @@ export default function MultiplayerRoomsPage() {
         matchType: 'multiplayer',
         ranked: false,
         difficulty: 'Normal' as const,
-        startingPlayerIndex,
+        startingPlayerIndex: 0, // playerOrder is already rotated — index 0 goes first
       },
     });
 
     setLocation(payload.gameMode === 'draft' ? '/pre-draft' : '/game');
-  }, [username, yourSocketId, equippedChallenger, setGameMode, setMatchType, dispatch, setLocation]);
+  }, [username, yourSocketId, equippedChallenger, setGameMode, setMatchType, setAutoCombat, dispatch, setLocation]);
 
   // Register the GAME_STARTED callback with the persistent context
   useEffect(() => {
@@ -187,19 +199,26 @@ export default function MultiplayerRoomsPage() {
 
   const bots = roomState?.bots ?? [];
   const gameMode = roomState?.gameMode ?? '8card';
+  const autoCombat = roomState?.autoCombat ?? false;
   const totalPlayers = (roomState?.players.length ?? 0) + bots.length;
 
   // Host-only: optimistic update then sync to server
   const setBots = (newBots: RoomBot[]) => {
     if (!isHost || !roomState) return;
     setRoomState({ ...roomState, bots: newBots });
-    updateSettings(gameMode, newBots);
+    updateSettings(gameMode, newBots, autoCombat);
   };
 
   const setLocalGameMode = (mode: '8card' | 'draft') => {
     if (!isHost || !roomState) return;
     setRoomState({ ...roomState, gameMode: mode });
-    updateSettings(mode, bots);
+    updateSettings(mode, bots, autoCombat);
+  };
+
+  const setLocalAutoCombat = (val: boolean) => {
+    if (!isHost || !roomState) return;
+    setRoomState({ ...roomState, autoCombat: val });
+    updateSettings(gameMode, bots, val);
   };
 
   const addBot = () => {
@@ -211,7 +230,7 @@ export default function MultiplayerRoomsPage() {
   };
 
   const removeBot = (id: string) => {
-    if (!isHost || bots.length <= 1) return;
+    if (!isHost) return;
     sounds.play('uiClick');
     setBots(bots.filter(b => b.id !== id));
   };
@@ -556,8 +575,7 @@ export default function MultiplayerRoomsPage() {
                 {isHost && (
                   <button
                     onClick={() => removeBot(bot.id)}
-                    disabled={bots.length <= 1}
-                    className="ml-auto w-8 h-8 flex items-center justify-center border border-border hover:border-red-500/60 text-muted-foreground hover:text-red-400 disabled:opacity-30 transition-colors"
+                    className="ml-auto w-8 h-8 flex items-center justify-center border border-border hover:border-red-500/60 text-muted-foreground hover:text-red-400 transition-colors"
                     title="Remove bot"
                   >
                     <Minus size={13} />
@@ -611,6 +629,27 @@ export default function MultiplayerRoomsPage() {
                 <div className="text-xs opacity-70 leading-snug">{m.desc}</div>
               </button>
             ))}
+          </div>
+          {/* Auto-combat toggle */}
+          <div className="px-4 pb-4">
+            <button
+              onClick={() => isHost && setLocalAutoCombat(!autoCombat)}
+              disabled={!isHost}
+              className={`w-full flex items-center gap-3 p-3 border transition-colors ${
+                autoCombat
+                  ? 'bg-amber-950/20 border-amber-500/50 text-amber-400'
+                  : 'bg-secondary/20 border-border text-muted-foreground'
+              } ${!isHost ? 'cursor-default' : 'hover:border-amber-500/30'}`}
+            >
+              <Zap size={15} className={autoCombat ? 'text-amber-400' : 'text-muted-foreground'} />
+              <div className="text-left">
+                <div className="font-display font-bold text-sm">Auto-Combat {autoCombat ? 'ON' : 'OFF'}</div>
+                <div className="text-xs opacity-60 leading-snug">Your cards attack automatically each combat phase.</div>
+              </div>
+              <div className={`ml-auto w-8 h-4 rounded-full transition-colors ${autoCombat ? 'bg-amber-500' : 'bg-secondary border border-border'}`}>
+                <div className={`w-3.5 h-3.5 rounded-full bg-white mt-0.5 transition-all ${autoCombat ? 'ml-3.5' : 'ml-0.5'}`} />
+              </div>
+            </button>
           </div>
         </div>
 
