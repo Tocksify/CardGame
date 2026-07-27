@@ -34,7 +34,7 @@ export function loadChallengerSave(): ChallengerSave {
     const achIds = getAchievementUnlockedIds();
     let changed = false;
     for (const challenger of CHALLENGERS.filter(c => c.unlockedByAchievement)) {
-      const shouldOwn = achIds.includes(challenger.unlockedByAchievement!);
+      const shouldOwn = achIds.includes(challenger.id);
       const owns = save.ownedIds.includes(challenger.id);
       if (shouldOwn && !owns) {
         save.ownedIds = [...save.ownedIds, challenger.id];
