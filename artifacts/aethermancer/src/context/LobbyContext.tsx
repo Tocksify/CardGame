@@ -83,9 +83,8 @@ export function LobbyProvider({ children }: { children: React.ReactNode }) {
     const makeCardInstance = (tpl: CardTemplate) => ({ ...tpl, instanceId: `card_${generateId()}` });
 
     // 8card: start with 6 cards (2 more arrive on first draw phase). Draft: empty hand (cards come via pre-game draft picks).
-    // AI players get an ai-safe pool (no curse cards, no legendaries).
-    const makeHand = (isHuman = false) =>
-      mode === '8card' ? drawFromPool(6, { aiSafe: !isHuman }).map(makeCardInstance) : [];
+    const makeHand = () =>
+      mode === '8card' ? drawFromPool(6).map(makeCardInstance) : [];
     const makeDeck = () => generateDeck().map(makeCardInstance);
 
     const startingGold = 10;
@@ -96,7 +95,7 @@ export function LobbyProvider({ children }: { children: React.ReactNode }) {
         hp: 30, maxHp: 30,
         aether: 3, maxAether: 3,
         deck: makeDeck(),
-        hand: makeHand(true),
+        hand: makeHand(),
         field: [], artifactSlot: null, artifactSlotTurns: 0,
         pendingSpells: [], cardsPlayedByType: {}, discardPile: [],
         gold: startingGold, inventory: [], goldPerTurn: 0,
@@ -111,7 +110,7 @@ export function LobbyProvider({ children }: { children: React.ReactNode }) {
         hp: aiHp, maxHp: aiHp,
         aether: 3, maxAether: 3,
         deck: makeDeck(),
-        hand: makeHand(false),
+        hand: makeHand(),
         field: [], artifactSlot: null, artifactSlotTurns: 0,
         pendingSpells: [], cardsPlayedByType: {}, discardPile: [],
         gold: startingGold, inventory: [], goldPerTurn: 0,

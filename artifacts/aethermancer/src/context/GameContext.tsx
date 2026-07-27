@@ -142,13 +142,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, [gameState.phase]);
 
   useEffect(() => {
-    const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-    if (gameState.phase === 'buy' && currentPlayer?.isHuman) {
+    if (gameState.phase === 'buy') {
       setBuyPhaseTimeLeft(BUY_PHASE_SECONDS);
     } else {
       setBuyPhaseTimeLeft(null);
     }
-    if (gameState.phase === 'main' && currentPlayer?.isHuman) {
+    if (gameState.phase === 'main') {
       setMainPhaseTimeLeft(MAIN_PHASE_SECONDS);
     } else {
       setMainPhaseTimeLeft(null);
@@ -1016,14 +1015,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     difficulty: AiDifficulty,
     players: typeof gameState.players,
   ) {
+    // Curse cards require a field target — only include them when a valid target exists
+    const hasEnemyFieldTargets = players.some(p => p.id !== cp.id && p.hp > 0 && p.field.length > 0);
     const affordable = cp.hand
       .filter(c =>
         c.cost <= cp.aether &&
         !cp.cardsPlayedByType[c.type] &&
         !(c.type === 'character' && cp.field.length >= 4) &&
         !(c.type === 'artifact' && cp.artifactSlot !== null) &&
-        c.type !== 'curse' &&        // AI never plays curse cards (also prevents the infinite-loop bug)
-        c.rarity !== 'legendary'     // AI doesn't play legendaries
+        !(c.type === 'curse' && !hasEnemyFieldTargets)
       );
 
     if (affordable.length === 0) return null;
@@ -1220,7 +1220,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         // Both modes: draw 2 cards per turn from pool
         const drawCount = 2 + (cp.perks.includes('perk_draw_1') ? 1 : 0) +
           (cp.artifactSlot?.effect === 'aura_draw_1' ? 1 : 0);
-        const drawn = drawFromPool(drawCount, { aiSafe: !cp.isHuman }).map(t => ({ ...t, instanceId: `card_${generateId()}` }));
+        const drawn = drawFromPool(drawCount).map(t => ({ ...t, instanceId: `card_${generateId()}` }));
         dispatchRef.current({ type: 'GIVE_CARDS', payload: { playerId: cp.id, cards: drawn } });
         sounds.play('draw');
       }, 600);
@@ -1660,6 +1660,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               dispatchRef.current({ type: 'ADVANCE_PHASE' });
               return;
             }
+          } else if (card.type === 'curse') {
+            // Curse cards must target an enemy field card — pick one based on difficulty
+            const opponents = state.players.filter(p => p.id !== cp.id && p.hp > 0 && p.field.length > 0);
+            if (opponents.length === 0) { dispatchRef.current({ type: 'ADVANCE_PHASE' }); return; }
+            const target = (() => {
+              const allField = opponents.flatMap(p => p.field);
+              if (diff === 'Hard' || diff === 'Expert' || diff === 'Nightmare') {
+                // Target the highest-DEF card (hardest to kill, most impactful to debuff)
+                return [...allField].sort((a, b) => b.currentDef - a.currentDef)[0];
+              }
+              return allField[Math.floor(Math.random() * allField.length)];
+            })();
+            setPlayedCardAnim({ card: { ...card }, key: Date.now() });
+            setTimeout(() => setPlayedCardAnim(null), 750);
+            dispatchRef.current({ type: 'PLAY_CARD', payload: { playerId: cp.id, cardInstanceId: card.instanceId, targetId: target.instanceId } });
           } else {
             setPlayedCardAnim({ card: { ...card }, key: Date.now() });
             setTimeout(() => setPlayedCardAnim(null), 750);
