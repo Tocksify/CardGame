@@ -174,7 +174,7 @@ const EvoProgress = ({ card }: { card: FieldCard }) => {
 
 // ── Field / Arena card ────────────────────────────────────────────────────
 const ArenaCardUI = ({
-  card, onClick, tapped = false, targetable = false, combatAnim = null, attackOffset = { x: 18, y: 0 }, size = 'md', onAbilityClick,
+  card, onClick, tapped = false, targetable = false, combatAnim = null, attackOffset = { x: 18, y: 0 }, size = 'md', onAbilityClick, compact = false,
 }: {
   card: CardInstance | FieldCard;
   onClick?: () => void;
@@ -184,6 +184,7 @@ const ArenaCardUI = ({
   attackOffset?: { x: number; y: number };
   size?: 'sm' | 'md';
   onAbilityClick?: (abilityIndex: number) => void;
+  compact?: boolean;
 }) => {
   const frame = TYPE_FRAME[card.type] || TYPE_FRAME.character;
   const fc = card as FieldCard;
@@ -193,15 +194,15 @@ const ArenaCardUI = ({
   const isHit = combatAnim?.targetId === (card as any).instanceId;
   const isAttacker = combatAnim?.attackerId === (card as any).instanceId;
   const borderCls = rarityBorder(card.rarity, isEvolved, card.artTheme);
-  const w = size === 'sm' ? 'w-[86px]' : 'w-[106px]';
-  const h = size === 'sm' ? 'h-[124px]' : 'h-[154px]';
+  // compact = mobile landscape: ~60% of 'sm'
+  const w = compact ? 'w-[58px]' : size === 'sm' ? 'w-[86px]' : 'w-[106px]';
+  const h = compact ? 'h-[84px]'  : size === 'sm' ? 'h-[124px]' : 'h-[154px]';
 
   return (
     <motion.div
       whileHover={{ scale: 1.12, y: -6, zIndex: 60 }}
       animate={isAttacker
         ? {
-            // trot to target → sway back → fast lunge → trot home
             x: [0, attackOffset.x * 3.5, attackOffset.x * 2.0, attackOffset.x * 4.5, 0],
             y: [0, attackOffset.y * 3.5, attackOffset.y * 2.0, attackOffset.y * 4.5, 0],
             rotate: [0, -4, 1, -6, 0],
@@ -223,11 +224,11 @@ const ArenaCardUI = ({
     >
       {/* Ability bar — character field cards only */}
       {card.type === 'character' && (fc.abilityCooldowns !== undefined) && (
-        <div className="flex flex-shrink-0 border-b relative" style={{ height: 18, background: fc.silenced ? 'rgba(40,40,40,0.95)' : '#060403', borderColor: 'rgba(40,25,0,0.7)' }}>
+        <div className="flex flex-shrink-0 border-b relative" style={{ height: compact ? 12 : 18, background: fc.silenced ? 'rgba(40,40,40,0.95)' : '#060403', borderColor: 'rgba(40,25,0,0.7)' }}>
           {fc.silenced && (
             <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none"
                  style={{ background: 'rgba(20,20,20,0.7)' }}>
-              <span style={{ fontSize: 7, fontWeight: 700, color: '#aaa', letterSpacing: '0.05em' }}>🔇 SILENCED</span>
+              <span style={{ fontSize: compact ? 5 : 7, fontWeight: 700, color: '#aaa' }}>🔇</span>
             </div>
           )}
           {getCardAbilities(card).map((ability, i) => {
@@ -247,7 +248,7 @@ const ArenaCardUI = ({
                 }}
                 onClick={(e) => { e.stopPropagation(); if (clickable) onAbilityClick!(i); }}
               >
-                <span style={{ fontSize: 7, fontWeight: 700, lineHeight: 1, color: fc.silenced ? '#555' : ready ? '#e8a030' : '#4a3010' }}>
+                <span style={{ fontSize: compact ? 5 : 7, fontWeight: 700, lineHeight: 1, color: fc.silenced ? '#555' : ready ? '#e8a030' : '#4a3010' }}>
                   {fc.silenced ? '—' : ready ? dmg : `${cd}t`}
                 </span>
               </button>
@@ -255,29 +256,30 @@ const ArenaCardUI = ({
           })}
         </div>
       )}
-      <div className="h-[19%] flex-shrink-0 flex items-center justify-between px-1 relative"
+      <div className="h-[19%] flex-shrink-0 flex items-center justify-between px-0.5 relative"
            style={{ background: `linear-gradient(90deg, ${frame.bar}dd, ${frame.bar}88)` }}>
-        <span className="text-[10px] font-display font-bold text-amber-100 leading-tight truncate pr-0.5">{card.name}</span>
-        <div className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 font-bold text-[10px] text-white"
+        <span className={`${compact ? 'text-[7px]' : 'text-[10px]'} font-display font-bold text-amber-100 leading-tight truncate pr-0.5`}>{card.name}</span>
+        <div className={`${compact ? 'w-3 h-3 text-[7px]' : 'w-4 h-4 text-[10px]'} rounded-full flex items-center justify-center shrink-0 font-bold text-white`}
              style={{ background: 'radial-gradient(circle, #2a1a00, #1a0d00)', border: '1px solid #c9a227', boxShadow: '0 0 4px rgba(201,162,39,0.6)' }}>
           {card.cost}
         </div>
       </div>
       <div className="h-[35%] flex-shrink-0 w-full"><CardArt templateId={card.templateId} type={card.type} /></div>
-      <div className="h-[7%] flex-shrink-0 w-full flex items-center px-1" style={{ background: `${frame.bar}99` }}>
-        <span className="text-[9px] text-amber-200/80 font-display uppercase tracking-widest truncate leading-none">{card.type}</span>
-      </div>
-      <div className="flex-1 min-h-0 px-1 py-0.5 text-[9px] leading-tight overflow-y-auto scrollbar-thin"
+      {!compact && (
+        <div className="h-[7%] flex-shrink-0 w-full flex items-center px-1" style={{ background: `${frame.bar}99` }}>
+          <span className="text-[9px] text-amber-200/80 font-display uppercase tracking-widest truncate leading-none">{card.type}</span>
+        </div>
+      )}
+      <div className={`flex-1 min-h-0 px-0.5 py-0.5 ${compact ? 'text-[7px]' : 'text-[9px]'} leading-tight overflow-y-auto scrollbar-thin`}
            style={{ background: 'linear-gradient(180deg, #1a1208 0%, #120e06 100%)', color: '#c8b888' }}>
-        {card.description}
+        {!compact && card.description}
         {isEvolved
-          ? <div className="inline-block mt-0.5 px-1 font-bold text-[8px] leading-tight rounded-sm" style={{ background: 'linear-gradient(90deg,#c9a227,#ffe066)', color: '#1a0d00' }}>Evo+</div>
-          : card.evolvesTo && <div className="inline-block mt-0.5 px-1 font-bold text-[8px] leading-tight rounded-sm" style={{ background: 'rgba(40,120,40,0.25)', color: '#7ac95a', border: '1px solid rgba(80,160,40,0.5)' }}>evoR</div>
+          ? <div className="inline-block px-0.5 font-bold text-[6px] leading-tight rounded-sm" style={{ background: 'linear-gradient(90deg,#c9a227,#ffe066)', color: '#1a0d00' }}>Evo+</div>
+          : card.evolvesTo && <div className="inline-block px-0.5 font-bold text-[6px] leading-tight rounded-sm" style={{ background: 'rgba(40,120,40,0.25)', color: '#7ac95a', border: '1px solid rgba(80,160,40,0.5)' }}>evoR</div>
         }
-        <EvoProgress card={fc} />
       </div>
-      {/* Keyword pills */}
-      {card.keywords && card.keywords.length > 0 && (
+      {/* Keyword pills — hidden in compact to save space */}
+      {!compact && card.keywords && card.keywords.length > 0 && (
         <div className="flex flex-wrap gap-0.5 px-0.5 py-0.5 flex-shrink-0" style={{ background: '#060403', borderTop: '1px solid rgba(60,40,0,0.25)' }}>
           {card.keywords.map(kw => <KeywordBadge key={kw} kw={kw} size="sm" />)}
         </div>
@@ -292,13 +294,13 @@ const ArenaCardUI = ({
           {(fc.tempArmorTurns ?? 0) > 0 && <StatusBadge type="armor" value={fc.tempArmorTurns!} />}
         </div>
       )}
-      <div className="h-[14%] flex-shrink-0 flex items-center justify-between px-1"
+      <div className="h-[14%] flex-shrink-0 flex items-center justify-between px-0.5"
            style={{ background: 'linear-gradient(180deg, #0e0a05, #080603)', borderTop: '1px solid rgba(74,48,0,0.5)' }}>
         {card.type === 'character' ? (
           <>
-            <div className="flex items-center gap-0.5 font-bold text-[13px]" style={{ color: '#e8a030' }}><Swords size={10} />{displayAtk}</div>
-            <div className="text-[9px]" style={{ color: 'rgba(201,162,39,0.4)' }}>◆</div>
-            <div className="flex items-center gap-0.5 font-bold text-[13px]" style={{ color: '#5db860' }}><ShieldAlert size={10} />{displayDef}<span style={{ color: 'rgba(93,184,96,0.45)', fontSize: '9px', fontWeight: 'normal' }}>/{card.def ?? displayDef}</span></div>
+            <div className={`flex items-center gap-0.5 font-bold ${compact ? 'text-[9px]' : 'text-[13px]'}`} style={{ color: '#e8a030' }}><Swords size={compact ? 7 : 10} />{displayAtk}</div>
+            {!compact && <div className="text-[9px]" style={{ color: 'rgba(201,162,39,0.4)' }}>◆</div>}
+            <div className={`flex items-center gap-0.5 font-bold ${compact ? 'text-[9px]' : 'text-[13px]'}`} style={{ color: '#5db860' }}><ShieldAlert size={compact ? 7 : 10} />{displayDef}{!compact && <span style={{ color: 'rgba(93,184,96,0.45)', fontSize: '9px', fontWeight: 'normal' }}>/{card.def ?? displayDef}</span>}</div>
           </>
         ) : (
           <div className="flex w-full justify-center" style={{ color: frame.bar }}>{frame.icon}</div>
@@ -542,7 +544,7 @@ function getPositions(count: number): PositionId[] {
 const PlayerZone = ({
   player, posId, isMe, isMyTurn, phase, targetingMode, onHeroClick, onCardClick,
   combatAnim, aether, maxAether, onSellArtifact, onSellCreature, onAbilityClick,
-  onRecallDragStart, onRecallDragEnd,
+  onRecallDragStart, onRecallDragEnd, compact = false,
 }: {
   player: Player;
   posId: PositionId;
@@ -560,6 +562,7 @@ const PlayerZone = ({
   onAbilityClick?: (cardInstanceId: string, abilityIndex: number) => void;
   onRecallDragStart?: (instanceId: string) => void;
   onRecallDragEnd?: () => void;
+  compact?: boolean;
 }) => {
   const cfg = POSITION_CFG[posId];
   const isHeroHit = combatAnim?.targetId === player.id.toString();
@@ -668,7 +671,7 @@ const PlayerZone = ({
 
         {/* Field cards area */}
         {player.field.length > 0 && (
-          <div className={`flex ${cfg.cardArea} overflow-hidden`} style={{ maxWidth: cfg.horizontal ? undefined : 120, maxHeight: cfg.horizontal ? undefined : 200 }}>
+          <div className={`flex ${cfg.cardArea} overflow-hidden`} style={{ maxWidth: cfg.horizontal ? undefined : (compact ? 80 : 120), maxHeight: cfg.horizontal ? undefined : (compact ? 140 : 200) }}>
             {player.field.map(card => {
               const isTargetable = targetingMode !== 'none' && !isMe;
               const canSellThis = isMe && isMyTurn && phase === 'main' && onSellCreature;
@@ -688,6 +691,7 @@ const PlayerZone = ({
                   <ArenaCardUI
                     card={card}
                     size="sm"
+                    compact={compact}
                     tapped={card.tapped}
                     targetable={isTargetable}
                     onClick={() => onCardClick(card)}
@@ -1313,6 +1317,7 @@ export default function GamePage() {
               } : undefined}
               onRecallDragStart={player.isHuman ? () => setRecallingField(true) : undefined}
               onRecallDragEnd={player.isHuman ? () => setRecallingField(false) : undefined}
+              compact={mobileLandscape}
             />
           );
         })}
