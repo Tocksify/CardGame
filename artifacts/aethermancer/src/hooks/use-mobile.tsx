@@ -19,3 +19,23 @@ export function useIsMobile() {
 
   return !!isMobile;
 }
+
+/** True when on a narrow mobile screen in landscape orientation. */
+export function useIsMobileLandscape() {
+  const [is, setIs] = React.useState(false);
+
+  React.useEffect(() => {
+    const check = () => {
+      setIs(window.innerWidth < 1024 && window.innerWidth > window.innerHeight);
+    };
+    check();
+    window.addEventListener('resize', check);
+    window.addEventListener('orientationchange', check);
+    return () => {
+      window.removeEventListener('resize', check);
+      window.removeEventListener('orientationchange', check);
+    };
+  }, []);
+
+  return is;
+}

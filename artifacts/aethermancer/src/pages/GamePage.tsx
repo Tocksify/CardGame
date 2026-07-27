@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useIsMobileLandscape } from '../hooks/use-mobile';
 import { useLocation } from 'wouter';
 import { useGame } from '../context/GameContext';
 import { useLobby } from '../context/LobbyContext';
@@ -418,22 +419,35 @@ const ArtifactSlotUI = ({
 
 // ── Hand card ─────────────────────────────────────────────────────────────
 const HandCardUI = ({
-  card, playable, staged, onClick,
+  card, playable, staged, onClick, compact = false,
 }: {
   card: CardInstance;
   playable?: boolean;
   staged?: boolean;
   onClick?: () => void;
+  compact?: boolean;
 }) => {
   const frame = TYPE_FRAME[card.type] || TYPE_FRAME.character;
   const borderCls = rarityBorder(card.rarity, false, card.artTheme);
 
+  // compact = mobile landscape: smaller card so more arena is visible
+  const dims   = compact ? 'w-[76px] h-[112px]' : 'w-36 h-56';
+  const nameFs = compact ? 'text-[9px]'  : 'text-[13px]';
+  const costDims = compact ? 'w-4 h-4 text-[9px]' : 'w-6 h-6 text-[13px]';
+  const typeFs = compact ? 'text-[7px]'  : 'text-[10px]';
+  const descFs = compact ? 'text-[8px]'  : 'text-[11px]';
+  const statFs = compact ? 'text-[10px]' : 'text-[15px]';
+  const statIcon = compact ? 8 : 12;
+  const hover   = compact
+    ? { scale: 1.18, y: -14, zIndex: 60 }
+    : { scale: 1.25, y: -24, zIndex: 60 };
+
   return (
     <motion.div
-      whileHover={{ scale: 1.25, y: -24, zIndex: 60 }}
+      whileHover={hover}
       onClick={onClick}
       onMouseEnter={() => playable && sounds.play('cardHover')}
-      className={`relative w-36 h-56 flex flex-col flex-shrink-0 border-[2px] cursor-pointer transition-all duration-200 overflow-hidden
+      className={`relative ${dims} flex flex-col flex-shrink-0 border-[2px] cursor-pointer transition-all duration-200 overflow-hidden
         ${playable
           ? 'border-amber-400 shadow-[0_0_18px_rgba(201,162,39,0.8),0_0_6px_rgba(201,162,39,0.4)]'
           : staged
@@ -448,36 +462,36 @@ const HandCardUI = ({
           <span className="text-[8px] font-display font-bold uppercase tracking-wider text-red-200">⚡ Staged</span>
         </div>
       )}
-      <div className="h-[18%] flex-shrink-0 flex items-center justify-between px-1.5"
+      <div className="h-[18%] flex-shrink-0 flex items-center justify-between px-1"
            style={{ background: `linear-gradient(90deg, ${frame.bar}ff, ${frame.bar}99)` }}>
-        <span className="text-[13px] font-display font-bold text-amber-100 leading-tight truncate">{card.name}</span>
-        <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 font-display font-black text-[13px] text-amber-100"
+        <span className={`${nameFs} font-display font-bold text-amber-100 leading-tight truncate`}>{card.name}</span>
+        <div className={`${costDims} rounded-full flex items-center justify-center shrink-0 font-display font-black text-amber-100`}
              style={{ background: 'radial-gradient(circle, #2a1a00, #120d00)', border: '1px solid #c9a227', boxShadow: '0 0 5px rgba(201,162,39,0.7)' }}>
           {card.cost}
         </div>
       </div>
       <div className="h-[33%] flex-shrink-0 w-full"><CardArt templateId={card.templateId} type={card.type} /></div>
-      <div className="h-[7%] flex-shrink-0 flex items-center px-1.5" style={{ background: `${frame.bar}bb` }}>
-        <span className="text-[10px] text-amber-100/80 font-display uppercase tracking-widest">{card.type}</span>
+      <div className="h-[7%] flex-shrink-0 flex items-center px-1" style={{ background: `${frame.bar}bb` }}>
+        <span className={`${typeFs} text-amber-100/80 font-display uppercase tracking-widest`}>{card.type}</span>
       </div>
-      <div className="flex-1 min-h-0 p-1.5 text-[11px] leading-snug overflow-y-auto scrollbar-thin"
+      <div className={`flex-1 min-h-0 p-1 ${descFs} leading-snug overflow-y-auto scrollbar-thin`}
            style={{ background: 'linear-gradient(180deg, #1c1508 0%, #120e06 100%)', color: '#cbb888' }}>
         {card.description}
         {card.evolvesTo && (
           <div className="inline-block mt-1 px-1 font-bold text-[9px] leading-tight rounded-sm" style={{ background: 'rgba(40,120,40,0.25)', color: '#7ac95a', border: '1px solid rgba(80,160,40,0.5)' }}>evoR</div>
         )}
       </div>
-      {card.keywords && card.keywords.length > 0 && (
+      {!compact && card.keywords && card.keywords.length > 0 && (
         <div className="flex flex-wrap gap-1 px-1.5 py-1 flex-shrink-0" style={{ background: '#0a0804', borderTop: '1px solid rgba(74,48,0,0.3)' }}>
           {card.keywords.map(kw => <KeywordBadge key={kw} kw={kw} size="md" />)}
         </div>
       )}
-      <div className="h-[12%] flex-shrink-0 flex items-center justify-between px-1.5"
+      <div className="h-[12%] flex-shrink-0 flex items-center justify-between px-1"
            style={{ background: 'linear-gradient(180deg, #0e0a05, #070503)', borderTop: '1px solid rgba(74,48,0,0.5)' }}>
         {card.type === 'character' ? (
           <>
-            <div className="flex items-center gap-0.5 font-display font-bold text-[15px]" style={{ color: '#e8a030' }}><Swords size={12} />{card.atk}</div>
-            <div className="flex items-center gap-0.5 font-display font-bold text-[15px]" style={{ color: '#5db860' }}><ShieldAlert size={12} />{card.def}</div>
+            <div className={`flex items-center gap-0.5 font-display font-bold ${statFs}`} style={{ color: '#e8a030' }}><Swords size={statIcon} />{card.atk}</div>
+            <div className={`flex items-center gap-0.5 font-display font-bold ${statFs}`} style={{ color: '#5db860' }}><ShieldAlert size={statIcon} />{card.def}</div>
           </>
         ) : (
           <div className="flex w-full justify-center" style={{ color: frame.bar }}>{frame.icon}</div>
@@ -970,6 +984,7 @@ export default function GamePage() {
   } = useGame();
   const { animatedBattlefield, autoCombat } = useLobby();
   const { equippedChallenger } = useChallenger();
+  const mobileLandscape = useIsMobileLandscape();
 
   const [countdown, setCountdown] = useState<number | null>(3);
   const [shopTab, setShopTab] = useState<'items' | 'perks' | 'artifacts' | 'cards'>('items');
@@ -1382,7 +1397,7 @@ export default function GamePage() {
       {/* ── Action + Hand Bar ──────────────────────────────────────────── */}
       <div className="shrink-0 z-20 relative flex flex-col"
            style={{
-             height: 320,
+             height: mobileLandscape ? 168 : 320,
              background: 'linear-gradient(0deg, #080504 0%, #0d0906 100%)',
              borderTop: '2px solid #3a2800',
              boxShadow: '0 -4px 24px rgba(0,0,0,0.7), 0 -1px 0 rgba(201,162,39,0.12)',
@@ -1502,7 +1517,7 @@ export default function GamePage() {
 
             return (
               <div className="flex flex-col items-center justify-center shrink-0 px-2 gap-1"
-                   style={{ width: 100, borderRight: '1px solid rgba(74,48,0,0.3)' }}>
+                   style={{ width: mobileLandscape ? 72 : 100, borderRight: '1px solid rgba(74,48,0,0.3)' }}>
                 <div className="text-[7px] font-display uppercase tracking-wider"
                      style={{ color: 'rgba(200,140,60,0.65)' }}>Artifact Slot</div>
 
@@ -1629,6 +1644,7 @@ export default function GamePage() {
                       playable={playable}
                       staged={isStaged}
                       onClick={() => handleCardClick(card)}
+                      compact={mobileLandscape}
                     />
                     {isDraggableArtifact && (
                       <div className="absolute bottom-0 inset-x-0 flex items-center justify-center pb-0.5 pointer-events-none"
