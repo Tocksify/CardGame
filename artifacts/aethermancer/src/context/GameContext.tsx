@@ -173,7 +173,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (mainPhaseTimeLeft === null) return;
     if (mainPhaseTimeLeft <= 0) {
-      dispatchRef.current({ type: 'ADVANCE_PHASE' });
+      // Timer expired — skip straight to end phase so evolutions still trigger, then END_TURN fires
+      dispatchRef.current({ type: 'SET_PHASE', payload: 'end' });
       setMainPhaseTimeLeft(null);
       return;
     }
@@ -1020,7 +1021,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         c.cost <= cp.aether &&
         !cp.cardsPlayedByType[c.type] &&
         !(c.type === 'character' && cp.field.length >= 4) &&
-        !(c.type === 'artifact' && cp.artifactSlot !== null)
+        !(c.type === 'artifact' && cp.artifactSlot !== null) &&
+        c.type !== 'curse' &&        // AI never plays curse cards (also prevents the infinite-loop bug)
+        c.rarity !== 'legendary'     // AI doesn't play legendaries
       );
 
     if (affordable.length === 0) return null;
@@ -1217,7 +1220,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         // Both modes: draw 2 cards per turn from pool
         const drawCount = 2 + (cp.perks.includes('perk_draw_1') ? 1 : 0) +
           (cp.artifactSlot?.effect === 'aura_draw_1' ? 1 : 0);
-        const drawn = drawFromPool(drawCount).map(t => ({ ...t, instanceId: `card_${generateId()}` }));
+        const drawn = drawFromPool(drawCount, { aiSafe: !cp.isHuman }).map(t => ({ ...t, instanceId: `card_${generateId()}` }));
         dispatchRef.current({ type: 'GIVE_CARDS', payload: { playerId: cp.id, cards: drawn } });
         sounds.play('draw');
       }, 600);

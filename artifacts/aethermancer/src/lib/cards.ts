@@ -83,10 +83,10 @@ export interface ShopItemTemplate {
 // Base rates: secrets and legendaries are meaningfully common.
 // Boost levels override these for privileged accounts.
 export const RARITY_WEIGHTS: Record<CardRarity, number> = {
-  common: 25,
-  rare: 30,
-  legendary: 30,
-  secret: 15,
+  common: 60,
+  rare: 25,
+  legendary: 10,
+  secret: 5,
 };
 
 // Module-level rarity boost — set by AccountContext when user logs in/out.
@@ -1090,22 +1090,31 @@ export const DRAWABLE_POOL = CARD_TEMPLATES.filter(
 
 /** Draw `amount` cards from the pool weighted by rarity.
  *  Uses the active rarity boost from the logged-in account automatically.
+ *  Pass `aiSafe: true` to exclude curse cards and legendaries (for AI decks).
  */
-export function drawFromPool(amount: number): CardTemplate[] {
+export function drawFromPool(amount: number, opts?: { aiSafe?: boolean }): CardTemplate[] {
   const weights = getRarityWeights();
-  const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
+  // AI-safe pool: no curses, no legendaries (they should earn their power through play)
+  const basePool = opts?.aiSafe
+    ? DRAWABLE_POOL.filter(c => c.type !== 'curse' && c.rarity !== 'legendary')
+    : DRAWABLE_POOL;
+  // AI also uses base weights regardless of active boost
+  const activeWeights = opts?.aiSafe ? { ...RARITY_WEIGHTS } : weights;
+  // Remove legendary weight from AI draw so the roll can't land there
+  if (opts?.aiSafe) { activeWeights.legendary = 0; activeWeights.secret = 0; }
+  const totalWeight = Object.values(activeWeights).reduce((a, b) => a + b, 0);
   const drawn: CardTemplate[] = [];
 
   for (let i = 0; i < amount; i++) {
     let roll = Math.random() * totalWeight;
     let targetRarity: CardRarity = 'common';
-    for (const [rarity, weight] of Object.entries(weights)) {
+    for (const [rarity, weight] of Object.entries(activeWeights)) {
       roll -= weight;
       if (roll <= 0) { targetRarity = rarity as CardRarity; break; }
     }
-    const pool = DRAWABLE_POOL.filter(c => c.rarity === targetRarity);
+    const pool = basePool.filter(c => c.rarity === targetRarity);
     // Fallback to common if nothing in that rarity
-    const finalPool = pool.length > 0 ? pool : DRAWABLE_POOL.filter(c => c.rarity === 'common');
+    const finalPool = pool.length > 0 ? pool : basePool.filter(c => c.rarity === 'common');
     if (finalPool.length > 0) {
       drawn.push(finalPool[Math.floor(Math.random() * finalPool.length)]);
     }
