@@ -66,7 +66,7 @@ function ChallengerModal({ challenger, owned, equipped, canAfford, onBuy, onEqui
         {/* Ability */}
         <div className={`border ${rarityColor.split(' ')[0]} p-4 ${rarityBg}`}>
           <p className={`text-xs font-bold uppercase tracking-widest mb-1 ${rarityColor.split(' ')[1]}`}>
-            ⚡ {challenger.abilityName}
+            {challenger.abilityName}
           </p>
           <p className="text-sm text-foreground leading-relaxed">{challenger.abilityDescription}</p>
         </div>
@@ -256,10 +256,9 @@ export default function ChallengersPage() {
       {/* Equipped banner */}
       {equippedChallenger && (
         <div className="mx-5 mt-4 flex items-center gap-3 bg-green-950/40 border border-green-500/40 p-3">
-          <span className="text-2xl">{equippedChallenger.icon}</span>
           <div className="flex-1 min-w-0">
             <p className="text-sm text-green-300 font-bold">{equippedChallenger.name} <span className="font-normal text-green-500">{equippedChallenger.title}</span></p>
-            <p className="text-xs text-muted-foreground truncate">⚡ {equippedChallenger.abilityName}: {equippedChallenger.abilityDescription.split('.')[0]}.</p>
+            <p className="text-xs text-muted-foreground truncate">{equippedChallenger.abilityName}: {equippedChallenger.abilityDescription.split('.')[0]}.</p>
           </div>
           <span className="text-xs text-green-400 font-bold border border-green-500 px-2 py-0.5 shrink-0">ACTIVE</span>
         </div>

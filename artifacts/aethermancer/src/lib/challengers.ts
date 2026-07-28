@@ -394,7 +394,7 @@ export const RARITY_LABEL: Record<ChallengerRarity, string> = {
   epic: 'Epic',
   legendary: 'Legendary',
   mythic: 'MYTHIC',
-  chromatic: '✦ CHROMATIC ✦',
+  chromatic: 'CHROMATIC',
 };
 
 export function getChallengerById(id: string): Challenger | undefined {
