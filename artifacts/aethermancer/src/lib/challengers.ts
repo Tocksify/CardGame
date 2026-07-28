@@ -310,7 +310,7 @@ export const CHALLENGERS: Challenger[] = [
     title: 'the Dev Sovereign',
     rarity: 'chromatic',
     cost: 0,
-    icon: '🌈',
+    icon: '✦',
     isGiftOnly: true,
     description: 'Beyond the veil of the arcane, there exists one who shaped the very rules of battle.',
     abilityName: 'Absolute Omnipotence',

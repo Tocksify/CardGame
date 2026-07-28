@@ -1,9 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'wouter';
-import { ArrowLeft, Search, Shield, Coins, Zap, Trophy, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Search, Shield, Coins, Zap, Trophy, ChevronDown, ChevronUp, BookOpen } from 'lucide-react';
 import { useAccount } from '../context/AccountContext';
 import { sounds } from '../lib/sounds';
 import { DEFAULT_ACHIEVEMENTS } from '../store/achievements';
+import { CARD_TEMPLATES, CardRarity } from '../lib/cards';
+
+const CODEX_CARDS = CARD_TEMPLATES.filter(c => !c.templateId.startsWith('ev_'));
+const RARITY_ORDER: CardRarity[] = ['common', 'rare', 'legendary', 'secret'];
 
 interface AdminUser {
   id: number;
@@ -13,6 +17,7 @@ interface AdminUser {
   rarityBoost: number;
   unlockedAchievementIds: string | string[];
   giftedChallengerIds: string | string[];
+  discoveredCardIds: string | string[];
   createdAt: string;
 }
 
@@ -33,6 +38,7 @@ export default function AdminPanelPage() {
   const [shardsInput, setShardsInput] = useState<Record<number, string>>({});
   const [feedback, setFeedback] = useState<Record<number, string>>({});
   const [expandedAch, setExpandedAch] = useState<Record<number, boolean>>({});
+  const [expandedCodex, setExpandedCodex] = useState<Record<number, boolean>>({});
 
   // Redirect if not admin
   useEffect(() => {
@@ -115,6 +121,27 @@ export default function AdminPanelPage() {
     if (updated) flash(userId, '✓ Achievements cleared');
   };
 
+  const toggleCard = async (userId: number, templateId: string, currentIds: string[]) => {
+    sounds.play('uiClick');
+    const hasIt = currentIds.includes(templateId);
+    const newIds = hasIt ? currentIds.filter(id => id !== templateId) : [...currentIds, templateId];
+    const updated = await patchUser(userId, { discoveredCardIds: newIds });
+    if (updated) flash(userId, hasIt ? `Removed ${templateId}` : `Unlocked ${templateId}`);
+  };
+
+  const unlockAllCards = async (userId: number) => {
+    sounds.play('uiClick');
+    const allIds = CODEX_CARDS.map(c => c.templateId);
+    const updated = await patchUser(userId, { discoveredCardIds: allIds });
+    if (updated) flash(userId, '✓ All codex cards unlocked');
+  };
+
+  const clearAllCards = async (userId: number) => {
+    sounds.play('uiClick');
+    const updated = await patchUser(userId, { discoveredCardIds: [] });
+    if (updated) flash(userId, '✓ Codex cleared');
+  };
+
   const toggleMorthus = async (userId: number, currentGifted: string[]) => {
     sounds.play('uiClick');
     const hasMorthus = currentGifted.includes('morthus');
@@ -165,7 +192,9 @@ export default function AdminPanelPage() {
         <div className="flex flex-col gap-3">
           {users.map(user => {
             const achIds = parseIds(user.unlockedAchievementIds);
+            const cardIds = parseIds(user.discoveredCardIds);
             const achExpanded = expandedAch[user.id] ?? false;
+            const codexExpanded = expandedCodex[user.id] ?? false;
 
             return (
               <div key={user.id} className="bg-card border border-border p-4">
@@ -317,6 +346,76 @@ export default function AdminPanelPage() {
                           );
                         })}
                       </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Card Codex section */}
+                <div className="border-t border-border pt-3 mt-3">
+                  <button
+                    onClick={() => setExpandedCodex(prev => ({ ...prev, [user.id]: !codexExpanded }))}
+                    className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors uppercase tracking-wider w-full"
+                  >
+                    <BookOpen size={11} className="text-cyan-400" />
+                    Card Codex ({cardIds.length}/{CODEX_CARDS.length})
+                    {codexExpanded ? <ChevronUp size={12} className="ml-auto" /> : <ChevronDown size={12} className="ml-auto" />}
+                  </button>
+
+                  {codexExpanded && (
+                    <div className="mt-3">
+                      <div className="flex gap-2 mb-3">
+                        <button
+                          onClick={() => unlockAllCards(user.id)}
+                          className="px-3 py-1 text-xs bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 hover:bg-cyan-500/30 transition-colors"
+                        >
+                          Unlock All
+                        </button>
+                        <button
+                          onClick={() => clearAllCards(user.id)}
+                          className="px-3 py-1 text-xs bg-destructive/10 border border-destructive/30 text-destructive/70 hover:bg-destructive/20 transition-colors"
+                        >
+                          Clear All
+                        </button>
+                      </div>
+                      {RARITY_ORDER.map(rarity => {
+                        const rarityCards = CODEX_CARDS.filter(c => (c.rarity ?? 'common') === rarity);
+                        if (!rarityCards.length) return null;
+                        const rarityColors: Record<string, string> = {
+                          common: 'text-gray-400', rare: 'text-purple-400',
+                          legendary: 'text-amber-400', secret: 'text-red-400',
+                        };
+                        return (
+                          <div key={rarity} className="mb-3">
+                            <p className={`text-[10px] uppercase tracking-widest font-bold mb-1.5 ${rarityColors[rarity]}`}>
+                              {rarity} ({rarityCards.filter(c => cardIds.includes(c.templateId)).length}/{rarityCards.length})
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                              {rarityCards.map(card => {
+                                const discovered = cardIds.includes(card.templateId);
+                                return (
+                                  <button
+                                    key={card.templateId}
+                                    onClick={() => toggleCard(user.id, card.templateId, cardIds)}
+                                    className={`flex items-start gap-2 p-2 border text-left transition-colors ${
+                                      discovered
+                                        ? 'border-cyan-500/50 bg-cyan-500/10 text-foreground'
+                                        : 'border-border bg-background text-muted-foreground hover:border-cyan-500/30'
+                                    }`}
+                                  >
+                                    <span className={`mt-0.5 text-sm font-bold leading-none ${discovered ? 'text-cyan-400' : 'text-muted-foreground/50'}`}>
+                                      {discovered ? '✓' : '○'}
+                                    </span>
+                                    <div className="min-w-0">
+                                      <div className="text-xs font-bold leading-tight">{card.name}</div>
+                                      <div className="text-[10px] text-muted-foreground leading-tight mt-0.5">{card.type} · {card.templateId}</div>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

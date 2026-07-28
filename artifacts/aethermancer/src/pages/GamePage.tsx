@@ -206,7 +206,6 @@ const ArenaCardUI = ({
 
   return (
     <motion.div
-      whileHover={{ scale: 1.12, y: -6, zIndex: 60 }}
       animate={isAttacker
         ? {
             x: [0, attackOffset.x * 3.5, attackOffset.x * 2.0, attackOffset.x * 4.5, 0],
@@ -1358,7 +1357,7 @@ export default function GamePage() {
               onCardClick={(card) => handleFieldClick(player, card)}
               combatAnim={combatAnim}
               aether={player.isHuman ? me.aether : undefined}
-              maxAether={player.isHuman ? me.maxAether : undefined}
+              maxAether={player.isHuman ? me.maxAether + me.aetherBonus : undefined}
               onSellArtifact={player.isHuman ? sellArtifact : undefined}
               onSellCreature={player.isHuman ? sellCreature : undefined}
               onAbilityClick={player.isHuman && !autoCombat ? (cardInstanceId, abilityIndex) => {

@@ -56,11 +56,11 @@ export default function AchievementsPage() {
                       <div className="flex-1 h-1.5 bg-background overflow-hidden border border-border">
                         <div 
                           className="h-full bg-primary transition-all" 
-                          style={{ width: `${Math.min(100, ((a.progress || 0) / a.target) * 100)}%` }}
+                          style={{ width: `${a.unlocked ? 100 : Math.min(100, ((a.progress || 0) / a.target) * 100)}%` }}
                         />
                       </div>
                       <span className="text-xs font-bold text-muted-foreground min-w-[3ch] text-right">
-                        {Math.min(a.progress || 0, a.target)}/{a.target}
+                        {a.unlocked ? a.target : Math.min(a.progress || 0, a.target)}/{a.target}
                       </span>
                     </div>
                   )}

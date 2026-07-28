@@ -32,6 +32,7 @@ const ADMIN_USER_FIELDS = {
   rarityBoost: usersTable.rarityBoost,
   unlockedAchievementIds: usersTable.unlockedAchievementIds,
   giftedChallengerIds: usersTable.giftedChallengerIds,
+  discoveredCardIds: usersTable.discoveredCardIds,
   createdAt: usersTable.createdAt,
 };
 
@@ -53,11 +54,12 @@ router.patch("/users/:id", async (req, res) => {
     res.status(400).json({ error: "Invalid user id" });
     return;
   }
-  const { arcaneShards, rarityBoost, unlockedAchievementIds, giftedChallengerIds } = req.body as {
+  const { arcaneShards, rarityBoost, unlockedAchievementIds, giftedChallengerIds, discoveredCardIds } = req.body as {
     arcaneShards?: number;
     rarityBoost?: number;
     unlockedAchievementIds?: string[];
     giftedChallengerIds?: string[];
+    discoveredCardIds?: string[];
   };
   const update: Record<string, unknown> = {};
   if (typeof arcaneShards === "number" && !isNaN(arcaneShards)) {
@@ -84,6 +86,11 @@ router.patch("/users/:id", async (req, res) => {
     }
     update.giftedChallengerIds = JSON.stringify(
       giftedChallengerIds.filter((cid) => typeof cid === "string")
+    );
+  }
+  if (Array.isArray(discoveredCardIds)) {
+    update.discoveredCardIds = JSON.stringify(
+      discoveredCardIds.filter((id) => typeof id === "string")
     );
   }
   if (Object.keys(update).length === 0) {

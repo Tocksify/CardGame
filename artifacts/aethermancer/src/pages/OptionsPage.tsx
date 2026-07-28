@@ -100,19 +100,6 @@ export default function OptionsPage() {
           
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-semibold">Music</h3>
-              <p className="text-sm text-muted-foreground">Placeholder for future music</p>
-            </div>
-            <button 
-              onClick={() => toggle('music')}
-              className={`w-16 h-8 flex items-center p-1 border transition-colors ${settings.music ? 'bg-primary border-primary justify-end' : 'bg-secondary border-border justify-start'}`}
-            >
-              <div className="w-6 h-6 bg-white shadow-sm" />
-            </button>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
               <h3 className="text-lg font-semibold">UI Sounds</h3>
               <p className="text-sm text-muted-foreground">Button clicks and menu navigation</p>
             </div>
@@ -172,7 +159,7 @@ export default function OptionsPage() {
         </div>
         
         <p className="text-center text-muted-foreground text-sm mt-8">
-          Music coming soon. UI and card sounds are active.
+          UI and card sounds are active.
           {account?.isAdmin && (
             <span className="block text-purple-400/50 text-xs mt-1">Admin mode active</span>
           )}

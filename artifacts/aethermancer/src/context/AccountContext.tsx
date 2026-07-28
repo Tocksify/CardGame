@@ -14,6 +14,8 @@ export interface Account {
   giftedChallengerIds: string[];
   /** Map of achievement ID → progress value for in-progress achievements */
   achievementProgress: Record<string, number>;
+  /** Card template IDs unlocked in the Card Codex by an admin */
+  discoveredCardIds: string[];
 }
 
 interface AccountContextType {
@@ -92,6 +94,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       purchasedChallengerIds: parseAchievementIds(raw.purchasedChallengerIds),
       giftedChallengerIds: parseAchievementIds(raw.giftedChallengerIds),
       achievementProgress: parseAchievementProgress(raw.achievementProgress),
+      discoveredCardIds: parseAchievementIds(raw.discoveredCardIds),
     };
     setAccount(acc);
     setRarityBoost(acc.rarityBoost);

@@ -15,6 +15,8 @@ export const usersTable = pgTable("users", {
   giftedChallengerIds: text("gifted_challenger_ids").notNull().default("[]"),
   // JSON map of achievement progress values, e.g. '{"win_10_games":4,"kill_50_creatures":12}'
   achievementProgress: text("achievement_progress").notNull().default("{}"),
+  // JSON array of card template IDs discovered in the Card Codex, e.g. '["fire_sprite","stone_golem"]'
+  discoveredCardIds: text("discovered_card_ids").notNull().default("[]"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

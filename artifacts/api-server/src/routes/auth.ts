@@ -16,6 +16,7 @@ const USER_FIELDS = {
   purchasedChallengerIds: usersTable.purchasedChallengerIds,
   giftedChallengerIds: usersTable.giftedChallengerIds,
   achievementProgress: usersTable.achievementProgress,
+  discoveredCardIds: usersTable.discoveredCardIds,
 };
 
 // GET /auth/me
@@ -116,6 +117,7 @@ router.post("/login", async (req, res) => {
     purchasedChallengerIds: user.purchasedChallengerIds,
     giftedChallengerIds: user.giftedChallengerIds,
     achievementProgress: user.achievementProgress,
+    discoveredCardIds: user.discoveredCardIds,
   });
 });
 
