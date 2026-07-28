@@ -825,7 +825,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'BUY_SHOP_ITEM', payload: { playerId: player.id, itemTemplateId: item.id, cost: effectiveCost, itemType: item.type, name: item.name, description: item.description, effectKey: item.effectKey } });
     }
 
-    sounds.play('gold');
+    sounds.play('coinPurchase');
     dispatch({ type: 'ADD_LOG', payload: { msg: `${player.name} bought ${item.name}.`, type: 'gold' } });
     if (player.isHuman) triggerAchievement('buy_5_shop', 1);
   };

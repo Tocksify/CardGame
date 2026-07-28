@@ -4,7 +4,7 @@ import app from './app';
 import { logger } from './lib/logger';
 import { handleWsConnection } from './ws-handler';
 import { cleanStaleRooms } from './rooms';
-import { seedAdminUser } from './lib/seed';
+import { seedAdminUser, ensureSessionTable } from './lib/seed';
 
 const rawPort = process.env['PORT'];
 
@@ -44,5 +44,6 @@ httpServer.listen(port, async (err?: Error) => {
     process.exit(1);
   }
   logger.info({ port }, 'Server listening');
+  await ensureSessionTable();
   await seedAdminUser();
 });

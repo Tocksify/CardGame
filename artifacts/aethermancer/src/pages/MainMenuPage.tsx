@@ -56,6 +56,7 @@ export default function MainMenuPage() {
           <button
             data-testid="btn-single-player"
             onClick={() => { sounds.play('uiClick'); setLocation('/lobby'); }}
+            onMouseEnter={() => sounds.play('uiHover')}
             className="w-full py-4 px-6 bg-primary/90 hover:bg-primary text-primary-foreground font-semibold text-lg transition-colors border border-primary/50 hover:border-white shadow-[0_0_10px_rgba(30,144,255,0.3)] hover:shadow-[0_0_20px_rgba(30,144,255,0.6)]"
           >
             SINGLE PLAYER
@@ -63,6 +64,7 @@ export default function MainMenuPage() {
 
           <button
             onClick={() => { sounds.play('uiClick'); setLocation('/multiplayer'); }}
+            onMouseEnter={() => sounds.play('uiHover')}
             className="w-full py-4 px-6 bg-secondary hover:bg-secondary/80 text-secondary-foreground font-semibold text-lg transition-colors border border-border hover:border-primary/50"
           >
             MULTIPLAYER
@@ -70,6 +72,7 @@ export default function MainMenuPage() {
 
           <button
             onClick={() => { sounds.play('uiClick'); setLocation('/options'); }}
+            onMouseEnter={() => sounds.play('uiHover')}
             className="w-full py-4 px-6 bg-secondary/60 hover:bg-secondary/80 text-secondary-foreground font-semibold text-lg transition-colors border border-border hover:border-primary/50"
           >
             OPTIONS
@@ -77,6 +80,7 @@ export default function MainMenuPage() {
 
           <button
             onClick={() => { sounds.play('uiClick'); setLocation('/challengers'); }}
+            onMouseEnter={() => sounds.play('uiHover')}
             className="w-full py-4 px-6 bg-secondary/60 hover:bg-secondary/80 text-secondary-foreground font-semibold text-lg transition-colors border border-border hover:border-amber-500/50"
           >
             CHALLENGERS
@@ -84,6 +88,7 @@ export default function MainMenuPage() {
 
           <button
             onClick={() => { sounds.play('uiClick'); setLocation('/codex'); }}
+            onMouseEnter={() => sounds.play('uiHover')}
             className="w-full py-4 px-6 bg-secondary/60 hover:bg-secondary/80 text-secondary-foreground font-semibold text-lg transition-colors border border-border hover:border-cyan-500/50"
           >
             CARD CODEX
@@ -91,6 +96,7 @@ export default function MainMenuPage() {
 
           <button
             onClick={() => { sounds.play('uiClick'); setLocation('/achievements'); }}
+            onMouseEnter={() => sounds.play('uiHover')}
             className="w-full py-4 px-6 bg-card hover:bg-secondary text-muted-foreground font-semibold text-lg transition-colors border border-border"
           >
             ACHIEVEMENTS
@@ -98,6 +104,7 @@ export default function MainMenuPage() {
 
           <button
             onClick={() => { sounds.play('uiClick'); alert('Goodbye, Aethermancer.'); }}
+            onMouseEnter={() => sounds.play('uiHover')}
             className="w-full py-4 px-6 bg-card hover:bg-destructive/80 text-muted-foreground hover:text-destructive-foreground font-semibold text-lg transition-colors border border-border"
           >
             QUIT
