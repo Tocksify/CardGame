@@ -87,9 +87,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       arcaneShards: raw.arcaneShards as number,
       rarityBoost: raw.rarityBoost as number,
       unlockedAchievementIds: parseAchievementIds(raw.unlockedAchievementIds),
-      purchasedChallengerIds: Array.isArray(raw.purchasedChallengerIds)
-        ? (raw.purchasedChallengerIds as string[])
-        : [],
+      purchasedChallengerIds: parseAchievementIds(raw.purchasedChallengerIds),
       achievementProgress: parseAchievementProgress(raw.achievementProgress),
     };
     setAccount(acc);
