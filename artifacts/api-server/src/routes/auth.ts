@@ -14,6 +14,7 @@ const USER_FIELDS = {
   rarityBoost: usersTable.rarityBoost,
   unlockedAchievementIds: usersTable.unlockedAchievementIds,
   purchasedChallengerIds: usersTable.purchasedChallengerIds,
+  giftedChallengerIds: usersTable.giftedChallengerIds,
   achievementProgress: usersTable.achievementProgress,
 };
 
@@ -113,6 +114,7 @@ router.post("/login", async (req, res) => {
     rarityBoost: user.rarityBoost,
     unlockedAchievementIds: user.unlockedAchievementIds,
     purchasedChallengerIds: user.purchasedChallengerIds,
+    giftedChallengerIds: user.giftedChallengerIds,
     achievementProgress: user.achievementProgress,
   });
 });

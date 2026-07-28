@@ -50,23 +50,24 @@ export function ChallengerProvider({ children }: { children: React.ReactNode }) 
   }, [account]);
 
   // The server account is authoritative for signed-in users.
-  // Restore both shard balance AND purchased challenger IDs from the server.
+  // Restore shard balance and purchased challenger IDs from the server.
+  // NOTE: gifted IDs are intentionally NOT merged into ownedIds — they are
+  // checked live from account.giftedChallengerIds in isOwned() so that admin
+  // grants AND revocations take effect immediately without stale localStorage data.
   useEffect(() => {
     if (!account) return;
     const synced = loadChallengerSave();
 
-    // Merge server-purchased and server-gifted IDs into the local owned list
     const serverPurchased: string[] = account.purchasedChallengerIds ?? [];
-    const serverGifted: string[] = account.giftedChallengerIds ?? [];
-    const merged = [...new Set([...synced.ownedIds, ...serverPurchased, ...serverGifted])];
+    // Only merge purchased (not gifted) so removals of gifted IDs are respected
+    const merged = [...new Set([...synced.ownedIds, ...serverPurchased])];
 
     const updated = { ...synced, arcaneShards: account.arcaneShards, ownedIds: merged };
     saveChallengerSave(updated);
     setSave(updated);
-  // Re-run whenever the account id or gifted/purchased lists change so that
-  // admin-gifted challengers (e.g. Morthus) appear immediately after being granted.
+  // Re-run when account id or purchased list changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [account?.id, account?.giftedChallengerIds?.join(','), account?.purchasedChallengerIds?.join(',')]); 
+  }, [account?.id, account?.purchasedChallengerIds?.join(',')]); 
 
   // Keep shards in sync whenever the server balance changes (e.g. after a win)
   useEffect(() => {
@@ -86,7 +87,14 @@ export function ChallengerProvider({ children }: { children: React.ReactNode }) 
     setSave(updated);
   }, [account?.unlockedAchievementIds]);
 
-  const isOwned = useCallback((id: string) => save.ownedIds.includes(id), [save]);
+  // Gift-only challengers (e.g. Morthus) are checked live against the server
+  // account so that admin grants and revocations reflect immediately.
+  const isOwned = useCallback(
+    (id: string) =>
+      save.ownedIds.includes(id) ||
+      (account?.giftedChallengerIds?.includes(id) ?? false),
+    [save, account?.giftedChallengerIds],
+  );
   const isEquipped = useCallback((id: string) => save.equippedId === id, [save]);
 
   const equippedChallenger = save.equippedId ? (getChallengerById(save.equippedId) ?? null) : null;
