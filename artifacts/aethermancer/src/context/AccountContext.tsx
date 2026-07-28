@@ -152,6 +152,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     try {
       await fetch(`${API}/auth/logout`, { method: 'POST', credentials: 'include' });
     } catch { /* ignore */ }
+    // Wipe all account-linked localStorage so the guest state is truly empty
+    localStorage.removeItem('aethermancer_challengers');
+    localStorage.removeItem('aethermancer_achievements');
+    localStorage.removeItem('aethermancer_account');
     applyAccount(null);
   }, [applyAccount]);
 

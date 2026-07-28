@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import {
   ChallengerSave,
   loadChallengerSave,
@@ -36,6 +36,18 @@ export function ChallengerProvider({ children }: { children: React.ReactNode }) 
     const synced = loadChallengerSave();
     setSave(synced);
   }, []);
+
+  // Reset to guest defaults when the user logs out (account becomes null after having been set)
+  const prevAccountId = useRef<number | null | undefined>(undefined);
+  useEffect(() => {
+    const prev = prevAccountId.current;
+    prevAccountId.current = account?.id ?? null;
+    // Only reset if transitioning from logged-in → logged-out, not on first mount
+    if (prev !== undefined && prev !== null && !account) {
+      const fresh = loadChallengerSave(); // localStorage was already wiped by logout, so this returns defaults
+      setSave(fresh);
+    }
+  }, [account]);
 
   // The server account is authoritative for signed-in users.
   // Restore both shard balance AND purchased challenger IDs from the server.
