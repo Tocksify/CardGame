@@ -124,12 +124,17 @@ export function ChallengerProvider({ children }: { children: React.ReactNode }) 
           const ch = CHALLENGERS.find(c => c.id === ownedId);
           return ch && !ch.isFreeStarter && !ch.unlockedByAchievement;
         });
-        void fetch(`${API}/account/challengers`, {
+        const challRes = await fetch(`${API}/account/challengers`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({ purchasedChallengerIds: purchased }),
         });
+        if (!challRes.ok) {
+          // Roll back shards locally if challenger save fails
+          saveChallengerSave(base);
+          return false;
+        }
 
         const updated = { ...result, arcaneShards: shardsData.arcaneShards };
         saveChallengerSave(updated);

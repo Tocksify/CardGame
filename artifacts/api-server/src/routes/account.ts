@@ -14,12 +14,18 @@ router.use((req, res, next) => {
   next();
 });
 
-// GET /account — shards + purchased challengers + last 20 matches
+// GET /account — full user fields + last 20 matches
 router.get("/", async (req, res) => {
   const userId = req.session.userId!;
   const [userRows, matches] = await Promise.all([
     db
-      .select({ arcaneShards: usersTable.arcaneShards, purchasedChallengerIds: usersTable.purchasedChallengerIds })
+      .select({
+        arcaneShards: usersTable.arcaneShards,
+        rarityBoost: usersTable.rarityBoost,
+        purchasedChallengerIds: usersTable.purchasedChallengerIds,
+        unlockedAchievementIds: usersTable.unlockedAchievementIds,
+        achievementProgress: usersTable.achievementProgress,
+      })
       .from(usersTable)
       .where(eq(usersTable.id, userId))
       .limit(1),
@@ -36,8 +42,19 @@ router.get("/", async (req, res) => {
   }
   const row = userRows[0];
   let purchasedChallengerIds: string[] = [];
+  let unlockedAchievementIds: string[] = [];
+  let achievementProgress: Record<string, number> = {};
   try { purchasedChallengerIds = JSON.parse(row.purchasedChallengerIds); } catch { /* ignore */ }
-  res.json({ arcaneShards: row.arcaneShards, purchasedChallengerIds, matches });
+  try { unlockedAchievementIds = JSON.parse(row.unlockedAchievementIds); } catch { /* ignore */ }
+  try { achievementProgress = JSON.parse(row.achievementProgress); } catch { /* ignore */ }
+  res.json({
+    arcaneShards: row.arcaneShards,
+    rarityBoost: row.rarityBoost,
+    purchasedChallengerIds,
+    unlockedAchievementIds,
+    achievementProgress,
+    matches,
+  });
 });
 
 // PATCH /account/shards — add (or subtract) shards

@@ -212,14 +212,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ result, opponentName, gameMode, shardsEarned }),
       });
       if (res.ok) {
-        const accRes = await fetch(`${API}/account`, { credentials: 'include' });
-        if (accRes.ok) {
-          const accData = await accRes.json();
-          setAccount(prev => prev ? { ...prev, arcaneShards: accData.arcaneShards } : prev);
-        }
+        // Refresh the full account so shards, achievements, and progress are all in sync
+        await fetchMe();
       }
     } catch { /* ignore */ }
-  }, [account]);
+  }, [account, fetchMe]);
 
   return (
     <AccountContext.Provider value={{
