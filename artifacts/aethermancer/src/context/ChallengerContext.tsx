@@ -55,9 +55,10 @@ export function ChallengerProvider({ children }: { children: React.ReactNode }) 
     if (!account) return;
     const synced = loadChallengerSave();
 
-    // Merge server-purchased IDs into the local owned list (don't strip free starters or achievement ones)
+    // Merge server-purchased and server-gifted IDs into the local owned list
     const serverPurchased: string[] = account.purchasedChallengerIds ?? [];
-    const merged = [...new Set([...synced.ownedIds, ...serverPurchased])];
+    const serverGifted: string[] = account.giftedChallengerIds ?? [];
+    const merged = [...new Set([...synced.ownedIds, ...serverPurchased, ...serverGifted])];
 
     const updated = { ...synced, arcaneShards: account.arcaneShards, ownedIds: merged };
     saveChallengerSave(updated);

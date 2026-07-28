@@ -23,6 +23,7 @@ router.get("/", async (req, res) => {
         arcaneShards: usersTable.arcaneShards,
         rarityBoost: usersTable.rarityBoost,
         purchasedChallengerIds: usersTable.purchasedChallengerIds,
+        giftedChallengerIds: usersTable.giftedChallengerIds,
         unlockedAchievementIds: usersTable.unlockedAchievementIds,
         achievementProgress: usersTable.achievementProgress,
       })
@@ -42,15 +43,18 @@ router.get("/", async (req, res) => {
   }
   const row = userRows[0];
   let purchasedChallengerIds: string[] = [];
+  let giftedChallengerIds: string[] = [];
   let unlockedAchievementIds: string[] = [];
   let achievementProgress: Record<string, number> = {};
   try { purchasedChallengerIds = JSON.parse(row.purchasedChallengerIds); } catch { /* ignore */ }
+  try { giftedChallengerIds = JSON.parse(row.giftedChallengerIds); } catch { /* ignore */ }
   try { unlockedAchievementIds = JSON.parse(row.unlockedAchievementIds); } catch { /* ignore */ }
   try { achievementProgress = JSON.parse(row.achievementProgress); } catch { /* ignore */ }
   res.json({
     arcaneShards: row.arcaneShards,
     rarityBoost: row.rarityBoost,
     purchasedChallengerIds,
+    giftedChallengerIds,
     unlockedAchievementIds,
     achievementProgress,
     matches,

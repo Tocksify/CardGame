@@ -11,6 +11,8 @@ export const usersTable = pgTable("users", {
   unlockedAchievementIds: text("unlocked_achievement_ids").notNull().default("[]"),
   // JSON array of challenger IDs purchased with Arcane Shards, e.g. '["ch_02","ch_07"]'
   purchasedChallengerIds: text("purchased_challenger_ids").notNull().default("[]"),
+  // JSON array of challenger IDs gifted by an admin (e.g. secret/chromatic challengers), e.g. '["morthus"]'
+  giftedChallengerIds: text("gifted_challenger_ids").notNull().default("[]"),
   // JSON map of achievement progress values, e.g. '{"win_10_games":4,"kill_50_creatures":12}'
   achievementProgress: text("achievement_progress").notNull().default("{}"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

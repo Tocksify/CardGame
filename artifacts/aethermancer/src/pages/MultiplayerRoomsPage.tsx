@@ -152,6 +152,7 @@ export default function MultiplayerRoomsPage() {
       if (effects.includes('bonus_hp_10')) { humanPlayer.maxHp += 10; humanPlayer.hp += 10; }
       if (effects.includes('bonus_aether_3')) { humanPlayer.aetherBonus += 3; humanPlayer.aether += 3; }
       if (effects.includes('bonus_aether_4')) { humanPlayer.aetherBonus += 4; humanPlayer.aether += 4; }
+      if (effects.includes('bonus_aether_15')) { humanPlayer.aetherBonus += 12; humanPlayer.aether += 12; }
 
       const perksToAdd: string[] = [];
       if (effects.includes('perk_poison_immune')) perksToAdd.push('perk_poison_immune');

@@ -51,6 +51,7 @@ export default function LobbyPage() {
         if (effects.includes('bonus_hp_10')) { modified.maxHp += 10; modified.hp += 10; }
         if (effects.includes('bonus_aether_3')) { modified.aetherBonus += 3; modified.aether += 3; }
         if (effects.includes('bonus_aether_4')) { modified.aetherBonus += 4; modified.aether += 4; }
+        if (effects.includes('bonus_aether_15')) { modified.aetherBonus += 12; modified.aether += 12; }
 
         // Perk-based effects applied at start
         const perksToAdd: string[] = [];

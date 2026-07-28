@@ -31,6 +31,7 @@ const ADMIN_USER_FIELDS = {
   arcaneShards: usersTable.arcaneShards,
   rarityBoost: usersTable.rarityBoost,
   unlockedAchievementIds: usersTable.unlockedAchievementIds,
+  giftedChallengerIds: usersTable.giftedChallengerIds,
   createdAt: usersTable.createdAt,
 };
 
@@ -45,17 +46,18 @@ router.get("/users", async (req, res) => {
   res.json(rows);
 });
 
-// PATCH /admin/users/:id — update arcaneShards, rarityBoost, and/or unlockedAchievementIds
+// PATCH /admin/users/:id — update arcaneShards, rarityBoost, unlockedAchievementIds, and/or giftedChallengerIds
 router.patch("/users/:id", async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid user id" });
     return;
   }
-  const { arcaneShards, rarityBoost, unlockedAchievementIds } = req.body as {
+  const { arcaneShards, rarityBoost, unlockedAchievementIds, giftedChallengerIds } = req.body as {
     arcaneShards?: number;
     rarityBoost?: number;
     unlockedAchievementIds?: string[];
+    giftedChallengerIds?: string[];
   };
   const update: Record<string, unknown> = {};
   if (typeof arcaneShards === "number" && !isNaN(arcaneShards)) {
@@ -67,6 +69,21 @@ router.patch("/users/:id", async (req, res) => {
   if (Array.isArray(unlockedAchievementIds)) {
     update.unlockedAchievementIds = JSON.stringify(
       unlockedAchievementIds.filter((id) => typeof id === "string")
+    );
+  }
+  if (Array.isArray(giftedChallengerIds)) {
+    // Only the 'glo' admin account may gift secret challengers
+    const requestorRows = await db
+      .select({ username: usersTable.username })
+      .from(usersTable)
+      .where(eq(usersTable.id, req.session.userId!))
+      .limit(1);
+    if (requestorRows[0]?.username !== "glo") {
+      res.status(403).json({ error: "Only glo can gift secret challengers" });
+      return;
+    }
+    update.giftedChallengerIds = JSON.stringify(
+      giftedChallengerIds.filter((cid) => typeof cid === "string")
     );
   }
   if (Object.keys(update).length === 0) {

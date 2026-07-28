@@ -10,6 +10,8 @@ export interface Account {
   rarityBoost: number;
   unlockedAchievementIds: string[];
   purchasedChallengerIds: string[];
+  /** Challenger IDs gifted by an admin (e.g. secret/chromatic challengers) */
+  giftedChallengerIds: string[];
   /** Map of achievement ID → progress value for in-progress achievements */
   achievementProgress: Record<string, number>;
 }
@@ -88,6 +90,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       rarityBoost: raw.rarityBoost as number,
       unlockedAchievementIds: parseAchievementIds(raw.unlockedAchievementIds),
       purchasedChallengerIds: parseAchievementIds(raw.purchasedChallengerIds),
+      giftedChallengerIds: parseAchievementIds(raw.giftedChallengerIds),
       achievementProgress: parseAchievementProgress(raw.achievementProgress),
     };
     setAccount(acc);

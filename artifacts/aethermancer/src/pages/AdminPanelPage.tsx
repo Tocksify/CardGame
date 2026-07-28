@@ -12,6 +12,7 @@ interface AdminUser {
   arcaneShards: number;
   rarityBoost: number;
   unlockedAchievementIds: string | string[];
+  giftedChallengerIds: string | string[];
   createdAt: string;
 }
 
@@ -112,6 +113,16 @@ export default function AdminPanelPage() {
     sounds.play('uiClick');
     const updated = await patchUser(userId, { unlockedAchievementIds: [] });
     if (updated) flash(userId, '✓ Achievements cleared');
+  };
+
+  const toggleMorthus = async (userId: number, currentGifted: string[]) => {
+    sounds.play('uiClick');
+    const hasMorthus = currentGifted.includes('morthus');
+    const newIds = hasMorthus
+      ? currentGifted.filter(id => id !== 'morthus')
+      : [...currentGifted, 'morthus'];
+    const updated = await patchUser(userId, { giftedChallengerIds: newIds });
+    if (updated) flash(userId, hasMorthus ? '✗ Morthus revoked' : '✦ Morthus gifted');
   };
 
   return (
@@ -226,6 +237,31 @@ export default function AdminPanelPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Morthus gift — only visible to glo */}
+                {account?.username === 'glo' && (() => {
+                  const giftedIds = parseIds(user.giftedChallengerIds);
+                  const hasMorthus = giftedIds.includes('morthus');
+                  return (
+                    <div className="border-t border-fuchsia-500/20 pt-3 mb-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-fuchsia-300/80 flex items-center gap-1.5 uppercase tracking-wider">
+                          <span>✦</span> Chromatic Challenger — Morthus
+                        </span>
+                        <button
+                          onClick={() => toggleMorthus(user.id, giftedIds)}
+                          className={`px-3 py-1 text-xs border font-bold transition-colors ${
+                            hasMorthus
+                              ? 'bg-fuchsia-500/20 border-fuchsia-400 text-fuchsia-300 hover:bg-fuchsia-500/30'
+                              : 'bg-secondary border-border text-muted-foreground hover:border-fuchsia-400/50 hover:text-fuchsia-300'
+                          }`}
+                        >
+                          {hasMorthus ? '✦ GIFTED — Revoke' : 'Gift Morthus'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Achievements section */}
                 <div className="border-t border-border pt-3">

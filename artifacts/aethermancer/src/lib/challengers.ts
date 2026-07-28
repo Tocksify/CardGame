@@ -1,4 +1,4 @@
-export type ChallengerRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'mythic';
+export type ChallengerRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'mythic' | 'chromatic';
 
 export interface Challenger {
   id: string;
@@ -13,6 +13,8 @@ export interface Challenger {
   effectKeys: string[]; // effect keys applied in-game
   unlockedByAchievement?: string; // achievement ID that unlocks this for free
   isFreeStarter?: boolean;
+  /** If true, this challenger is completely hidden unless the player has been gifted it by an admin */
+  isGiftOnly?: boolean;
 }
 
 export const CHALLENGERS: Challenger[] = [
@@ -301,6 +303,42 @@ export const CHALLENGERS: Challenger[] = [
     abilityDescription: 'Start with +4 maximum Aether (7 total on turn 1). Draw 1 extra card per turn. Kill gold is doubled (100g per kill). The complete package.',
     effectKeys: ['bonus_aether_4', 'perk_draw_1', 'double_kill_gold'],
   },
+  // ─── CHROMATIC (dev-only, gift-only, invisible unless granted) ───────────
+  {
+    id: 'morthus',
+    name: 'Morthus',
+    title: 'the Dev Sovereign',
+    rarity: 'chromatic',
+    cost: 0,
+    icon: '🌈',
+    isGiftOnly: true,
+    description: 'Beyond the veil of the arcane, there exists one who shaped the very rules of battle.',
+    abilityName: 'Absolute Omnipotence',
+    abilityDescription:
+      'Begin every game with 15 Aether, +10 HP, 300 bonus gold, an extra card draw per turn, ' +
+      'a random Legendary in hand, double kill gold, +2 spell damage, +1 ATK/DEF on all deploys, ' +
+      'heal 2 HP per kill, 1 HP per turn, steal 5% gold per kill, one free revival, survive death once, ' +
+      'poison immunity, stun immunity, and a 15% shop discount. The complete totality of power.',
+    effectKeys: [
+      'bonus_aether_15',
+      'bonus_hp_10',
+      'bonus_gold_start_300',
+      'perk_draw_1',
+      'start_legendary',
+      'double_kill_gold',
+      'spell_power_2',
+      'perk_deploy_bonus',
+      'heal_on_kill_2',
+      'heal_per_turn_1',
+      'steal_pct_on_kill',
+      'revive_first_death',
+      'perk_undying',
+      'perk_poison_immune',
+      'perk_stun_immune',
+      'discount_shop_15',
+    ],
+  },
+
   // ─── MYTHIC (one — extremely hard to unlock) ──────────────────────────────
   {
     id: 'aeondris',
@@ -317,7 +355,7 @@ export const CHALLENGERS: Challenger[] = [
   },
 ];
 
-export const CHALLENGER_RARITY_ORDER: ChallengerRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'];
+export const CHALLENGER_RARITY_ORDER: ChallengerRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic', 'chromatic'];
 
 export const RARITY_COLORS: Record<ChallengerRarity, string> = {
   common: 'border-slate-500 text-slate-300',
@@ -326,6 +364,7 @@ export const RARITY_COLORS: Record<ChallengerRarity, string> = {
   epic: 'border-purple-500 text-purple-300',
   legendary: 'border-yellow-500 text-yellow-300',
   mythic: 'border-rose-400 text-rose-300',
+  chromatic: 'border-fuchsia-300 text-fuchsia-200',
 };
 
 export const RARITY_GLOW: Record<ChallengerRarity, string> = {
@@ -335,6 +374,7 @@ export const RARITY_GLOW: Record<ChallengerRarity, string> = {
   epic: 'shadow-[0_0_15px_rgba(168,85,247,0.5)]',
   legendary: 'shadow-[0_0_20px_rgba(234,179,8,0.6)]',
   mythic: 'shadow-[0_0_28px_rgba(244,63,94,0.8)]',
+  chromatic: 'shadow-[0_0_35px_rgba(240,171,252,0.9)]',
 };
 
 export const RARITY_BG: Record<ChallengerRarity, string> = {
@@ -344,6 +384,7 @@ export const RARITY_BG: Record<ChallengerRarity, string> = {
   epic: 'bg-purple-950/40',
   legendary: 'bg-yellow-950/30',
   mythic: 'bg-rose-950/50',
+  chromatic: 'bg-fuchsia-950/60',
 };
 
 export const RARITY_LABEL: Record<ChallengerRarity, string> = {
@@ -353,6 +394,7 @@ export const RARITY_LABEL: Record<ChallengerRarity, string> = {
   epic: 'Epic',
   legendary: 'Legendary',
   mythic: 'MYTHIC',
+  chromatic: '✦ CHROMATIC ✦',
 };
 
 export function getChallengerById(id: string): Challenger | undefined {

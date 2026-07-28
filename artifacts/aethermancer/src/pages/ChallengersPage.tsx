@@ -189,7 +189,10 @@ export default function ChallengersPage() {
     showToast(isNowEquipped ? `${challenger.name} unequipped` : `${challenger.name} equipped!`);
   };
 
-  const sortedChallengers = [...CHALLENGERS].sort((a, b) => {
+  // Hide gift-only (secret) challengers entirely unless the player owns them
+  const visibleChallengers = CHALLENGERS.filter(c => !c.isGiftOnly || isOwned(c.id));
+
+  const sortedChallengers = [...visibleChallengers].sort((a, b) => {
     const ra = CHALLENGER_RARITY_ORDER.indexOf(a.rarity);
     const rb = CHALLENGER_RARITY_ORDER.indexOf(b.rarity);
     if (ra !== rb) return ra - rb;
