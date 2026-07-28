@@ -63,8 +63,10 @@ export function ChallengerProvider({ children }: { children: React.ReactNode }) 
     const updated = { ...synced, arcaneShards: account.arcaneShards, ownedIds: merged };
     saveChallengerSave(updated);
     setSave(updated);
+  // Re-run whenever the account id or gifted/purchased lists change so that
+  // admin-gifted challengers (e.g. Morthus) appear immediately after being granted.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [account?.id]); // run once when account first loads (login)
+  }, [account?.id, account?.giftedChallengerIds?.join(','), account?.purchasedChallengerIds?.join(',')]); 
 
   // Keep shards in sync whenever the server balance changes (e.g. after a win)
   useEffect(() => {

@@ -86,6 +86,27 @@ function playFile(key: string) {
   audio.play().catch(() => {/* autoplay policy — silently ignore */});
 }
 
+/** Like playFile but stops any currently-playing instance of this sound first.
+ *  Used for card hover sounds to prevent overlapping when the cursor moves
+ *  quickly between cards. */
+function playFileExclusive(key: string) {
+  const entry = filePools[key];
+  if (!entry) return;
+  // Stop every pooled instance that is still playing
+  for (const a of entry.pool) {
+    if (!a.paused) {
+      a.pause();
+      a.currentTime = 0;
+    }
+  }
+  const settings = getSettings();
+  const audio = entry.pool[entry.idx % entry.pool.length];
+  entry.idx++;
+  audio.currentTime = 0;
+  audio.volume = Math.min(1, (settings.masterVolume / 100) * entry.baseVolume);
+  audio.play().catch(() => {/* autoplay policy — silently ignore */});
+}
+
 // Resolve paths relative to Vite's BASE_URL so it works at any subpath
 const base = import.meta.env.BASE_URL ?? '/';
 
@@ -103,7 +124,7 @@ const soundMap = {
   // ── File-based ────────────────────────────────────────────────────────────
   uiClick:    () => playFile('uiClick'),
   uiHover:    () => playFile('uiHover'),
-  cardHover:  () => playFile('cardHover'),
+  cardHover:  () => playFileExclusive('cardHover'),
   gold:       () => playFile('coinGain'),
   coinPurchase: () => playFile('coinPurchase'),
   draw:       () => playFile('draw'),

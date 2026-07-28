@@ -41,7 +41,7 @@ function ChallengerModal({ challenger, owned, equipped, canAfford, onBuy, onEqui
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div
-        className={`relative max-w-sm w-full border-2 ${rarityColor.split(' ')[0]} ${rarityBg} ${rarityGlow} p-6 flex flex-col gap-4`}
+        className={`relative max-w-sm w-full border-2 ${rarityColor.split(' ')[0]} ${rarityBg} ${rarityGlow} p-6 flex flex-col gap-4 ${challenger.rarity === 'chromatic' ? 'chromatic-border' : ''}`}
         onClick={e => e.stopPropagation()}
       >
         <button onClick={onClose} className="absolute top-3 right-3 text-muted-foreground hover:text-foreground p-1">
@@ -50,7 +50,7 @@ function ChallengerModal({ challenger, owned, equipped, canAfford, onBuy, onEqui
 
         {/* Sprite + Name */}
         <div className="text-center">
-          <div className={`w-36 mx-auto mb-3 overflow-hidden border-2 ${rarityColor.split(' ')[0]} ${rarityGlow}`}>
+          <div className={`w-36 mx-auto mb-3 overflow-hidden border-2 ${rarityColor.split(' ')[0]} ${rarityGlow} ${challenger.rarity === 'chromatic' ? 'chromatic-border' : ''}`}>
             <ChallengerSprite challengerId={challenger.id} mode="full" className="w-full" />
           </div>
           <h2 className="text-2xl font-display text-foreground">{challenger.name}</h2>
@@ -129,7 +129,7 @@ function ChallengerCard({ challenger, owned, equipped, onClick }: ChallengerCard
       className={`relative flex flex-col items-center border-2 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] overflow-hidden ${
         equipped
           ? 'border-green-400 bg-green-950/40 shadow-[0_0_15px_rgba(74,222,128,0.4)]'
-          : `${rarityColor.split(' ')[0]} ${rarityBg} ${owned ? rarityGlow : ''}`
+          : `${rarityColor.split(' ')[0]} ${rarityBg} ${owned ? rarityGlow : ''} ${challenger.rarity === 'chromatic' && !equipped ? 'chromatic-border' : ''}`
       }`}
     >
       {/* Status badge */}
