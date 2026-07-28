@@ -14,6 +14,11 @@ if (!process.env["SESSION_SECRET"]) {
 
 const app: Express = express();
 
+// Trust the first proxy hop (Replit's HTTPS reverse proxy in production,
+// and Render/Railway etc. when self-hosted). Required for secure cookies to
+// work behind any HTTPS terminator.
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,
